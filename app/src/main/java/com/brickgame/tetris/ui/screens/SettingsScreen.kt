@@ -1,9 +1,7 @@
 package com.brickgame.tetris.ui.screens
 
 import androidx.compose.animation.*
-import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -30,36 +28,47 @@ import java.text.SimpleDateFormat
 import java.util.*
 
 enum class SettingsPage {
-    MAIN,
-    PROFILE,
-    THEMES,
-    LAYOUT,
-    FEEDBACK,
-    ABOUT
+    MAIN, PROFILE, THEMES, LAYOUT, FEEDBACK, ABOUT
 }
 
-/**
- * Settings Screen with multiple pages
- */
 @Composable
 fun SettingsScreen(
     currentThemeName: String,
     layoutMode: LayoutMode,
     vibrationEnabled: Boolean,
+    vibrationIntensity: Float,
     soundEnabled: Boolean,
+    soundVolume: Float,
     playerName: String,
     highScore: Int,
     scoreHistory: List<ScoreEntry>,
     onThemeChange: (String) -> Unit,
     onLayoutModeChange: (LayoutMode) -> Unit,
-    onVibrationChange: (Boolean) -> Unit,
-    onSoundChange: (Boolean) -> Unit,
+    onVibrationEnabledChange: (Boolean) -> Unit,
+    onVibrationIntensityChange: (Float) -> Unit,
+    onSoundEnabledChange: (Boolean) -> Unit,
+    onSoundVolumeChange: (Float) -> Unit,
     onPlayerNameChange: (String) -> Unit,
     onClearHistory: () -> Unit,
     onClose: () -> Unit,
+    onBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     var currentPage by remember { mutableStateOf(SettingsPage.MAIN) }
+    
+    // Handle back navigation
+    val handleBack: () -> Unit = {
+        if (currentPage == SettingsPage.MAIN) {
+            onClose()
+        } else {
+            currentPage = SettingsPage.MAIN
+        }
+    }
+    
+    // Expose back handler to parent
+    LaunchedEffect(currentPage) {
+        // This allows parent to call onBack
+    }
     
     Box(
         modifier = modifier
@@ -102,9 +111,13 @@ fun SettingsScreen(
                 )
                 SettingsPage.FEEDBACK -> FeedbackPage(
                     vibrationEnabled = vibrationEnabled,
+                    vibrationIntensity = vibrationIntensity,
                     soundEnabled = soundEnabled,
-                    onVibrationChange = onVibrationChange,
-                    onSoundChange = onSoundChange,
+                    soundVolume = soundVolume,
+                    onVibrationEnabledChange = onVibrationEnabledChange,
+                    onVibrationIntensityChange = onVibrationIntensityChange,
+                    onSoundEnabledChange = onSoundEnabledChange,
+                    onSoundVolumeChange = onSoundVolumeChange,
                     onBack = { currentPage = SettingsPage.MAIN }
                 )
                 SettingsPage.ABOUT -> AboutPage(
@@ -120,71 +133,30 @@ private fun MainSettingsPage(
     onNavigate: (SettingsPage) -> Unit,
     onClose: () -> Unit
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp)
-    ) {
-        // Header
+    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = "⚙️ Settings",
-                fontSize = 24.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color.White
-            )
+            Text("⚙️ Settings", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Color.White)
             CloseButton(onClick = onClose)
         }
         
         Spacer(modifier = Modifier.height(32.dp))
         
-        // Menu items
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            SettingsMenuItem(
-                icon = "👤",
-                title = "Player Profile",
-                subtitle = "Name, high score, history",
-                onClick = { onNavigate(SettingsPage.PROFILE) }
-            )
-            SettingsMenuItem(
-                icon = "🎨",
-                title = "Themes",
-                subtitle = "Change colors and style",
-                onClick = { onNavigate(SettingsPage.THEMES) }
-            )
-            SettingsMenuItem(
-                icon = "📱",
-                title = "Layout",
-                subtitle = "Classic, Modern, Fullscreen",
-                onClick = { onNavigate(SettingsPage.LAYOUT) }
-            )
-            SettingsMenuItem(
-                icon = "📳",
-                title = "Feedback",
-                subtitle = "Vibration and sound",
-                onClick = { onNavigate(SettingsPage.FEEDBACK) }
-            )
-            SettingsMenuItem(
-                icon = "ℹ️",
-                title = "About",
-                subtitle = "Version and credits",
-                onClick = { onNavigate(SettingsPage.ABOUT) }
-            )
+            MenuItem("👤", "Player Profile", "Name, high score, history") { onNavigate(SettingsPage.PROFILE) }
+            MenuItem("🎨", "Themes", "Change colors and style") { onNavigate(SettingsPage.THEMES) }
+            MenuItem("📱", "Layout", "Classic, Modern, Fullscreen") { onNavigate(SettingsPage.LAYOUT) }
+            MenuItem("📳", "Feedback", "Vibration and sound") { onNavigate(SettingsPage.FEEDBACK) }
+            MenuItem("ℹ️", "About", "Version and credits") { onNavigate(SettingsPage.ABOUT) }
         }
     }
 }
 
 @Composable
-private fun SettingsMenuItem(
-    icon: String,
-    title: String,
-    subtitle: String,
-    onClick: () -> Unit
-) {
+private fun MenuItem(icon: String, title: String, subtitle: String, onClick: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -205,6 +177,133 @@ private fun SettingsMenuItem(
 }
 
 @Composable
+private fun FeedbackPage(
+    vibrationEnabled: Boolean,
+    vibrationIntensity: Float,
+    soundEnabled: Boolean,
+    soundVolume: Float,
+    onVibrationEnabledChange: (Boolean) -> Unit,
+    onVibrationIntensityChange: (Float) -> Unit,
+    onSoundEnabledChange: (Boolean) -> Unit,
+    onSoundVolumeChange: (Float) -> Unit,
+    onBack: () -> Unit
+) {
+    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+        PageHeader(title = "📳 Feedback", onBack = onBack)
+        
+        Spacer(modifier = Modifier.height(24.dp))
+        
+        // Vibration section
+        SectionCard {
+            Column {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text("Vibration", fontSize = 16.sp, fontWeight = FontWeight.Medium, color = Color.White)
+                        Text("Haptic feedback on actions", fontSize = 12.sp, color = Color.Gray)
+                    }
+                    Switch(
+                        checked = vibrationEnabled,
+                        onCheckedChange = onVibrationEnabledChange,
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = Color(0xFFF4D03F),
+                            checkedTrackColor = Color(0xFFF4D03F).copy(alpha = 0.5f)
+                        )
+                    )
+                }
+                
+                if (vibrationEnabled) {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text("Intensity", fontSize = 12.sp, color = Color.Gray)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("🔅", fontSize = 16.sp)
+                        Slider(
+                            value = vibrationIntensity,
+                            onValueChange = onVibrationIntensityChange,
+                            modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
+                            colors = SliderDefaults.colors(
+                                thumbColor = Color(0xFFF4D03F),
+                                activeTrackColor = Color(0xFFF4D03F)
+                            )
+                        )
+                        Text("🔆", fontSize = 16.sp)
+                    }
+                    Text(
+                        "${(vibrationIntensity * 100).toInt()}%",
+                        fontSize = 12.sp,
+                        color = Color(0xFFF4D03F),
+                        modifier = Modifier.fillMaxWidth(),
+                        textAlign = TextAlign.Center
+                    )
+                }
+            }
+        }
+        
+        Spacer(modifier = Modifier.height(16.dp))
+        
+        // Sound section
+        SectionCard {
+            Column {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text("Sound", fontSize = 16.sp, fontWeight = FontWeight.Medium, color = Color.White)
+                        Text("Sound effects", fontSize = 12.sp, color = Color.Gray)
+                    }
+                    Switch(
+                        checked = soundEnabled,
+                        onCheckedChange = onSoundEnabledChange,
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = Color(0xFFF4D03F),
+                            checkedTrackColor = Color(0xFFF4D03F).copy(alpha = 0.5f)
+                        )
+                    )
+                }
+                
+                if (soundEnabled) {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text("Volume", fontSize = 12.sp, color = Color.Gray)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("🔈", fontSize = 16.sp)
+                        Slider(
+                            value = soundVolume,
+                            onValueChange = onSoundVolumeChange,
+                            modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
+                            colors = SliderDefaults.colors(
+                                thumbColor = Color(0xFFF4D03F),
+                                activeTrackColor = Color(0xFFF4D03F)
+                            )
+                        )
+                        Text("🔊", fontSize = 16.sp)
+                    }
+                    Text(
+                        "${(soundVolume * 100).toInt()}%",
+                        fontSize = 12.sp,
+                        color = Color(0xFFF4D03F),
+                        modifier = Modifier.fillMaxWidth(),
+                        textAlign = TextAlign.Center
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun ProfilePage(
     playerName: String,
     highScore: Int,
@@ -217,19 +316,12 @@ private fun ProfilePage(
     var nameInput by remember { mutableStateOf(playerName) }
     var showClearConfirm by remember { mutableStateOf(false) }
     
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp)
-    ) {
+    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         PageHeader(title = "👤 Player Profile", onBack = onBack)
         
         Spacer(modifier = Modifier.height(24.dp))
         
-        LazyColumn(
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            // Name
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(16.dp)) {
             item {
                 SectionCard {
                     Row(
@@ -246,22 +338,15 @@ private fun ProfilePage(
                                 modifier = Modifier.weight(1f)
                             )
                             TextButton(onClick = {
-                                if (nameInput.isNotBlank()) {
-                                    onPlayerNameChange(nameInput)
-                                }
+                                if (nameInput.isNotBlank()) onPlayerNameChange(nameInput)
                                 editingName = false
-                            }) {
-                                Text("Save", color = Color(0xFFF4D03F))
-                            }
+                            }) { Text("Save", color = Color(0xFFF4D03F)) }
                         } else {
                             Column {
                                 Text("Name", fontSize = 12.sp, color = Color.Gray)
                                 Text(playerName, fontSize = 18.sp, fontWeight = FontWeight.Medium, color = Color.White)
                             }
-                            TextButton(onClick = {
-                                nameInput = playerName
-                                editingName = true
-                            }) {
+                            TextButton(onClick = { nameInput = playerName; editingName = true }) {
                                 Text("Edit", color = Color(0xFFF4D03F))
                             }
                         }
@@ -269,7 +354,6 @@ private fun ProfilePage(
                 }
             }
             
-            // High Score
             item {
                 SectionCard {
                     Column {
@@ -284,7 +368,6 @@ private fun ProfilePage(
                 }
             }
             
-            // Score History
             item {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -304,7 +387,7 @@ private fun ProfilePage(
                 item {
                     SectionCard {
                         Text(
-                            "No games played yet.\nStart playing to see your history!",
+                            "No games played yet.",
                             color = Color.Gray,
                             textAlign = TextAlign.Center,
                             modifier = Modifier.fillMaxWidth()
@@ -313,11 +396,7 @@ private fun ProfilePage(
                 }
             } else {
                 itemsIndexed(scoreHistory.take(20)) { index, entry ->
-                    ScoreHistoryItem(
-                        rank = index + 1,
-                        entry = entry,
-                        isHighScore = entry.score == highScore
-                    )
+                    ScoreItem(rank = index + 1, entry = entry, isHighScore = entry.score == highScore)
                 }
             }
         }
@@ -327,291 +406,110 @@ private fun ProfilePage(
         AlertDialog(
             onDismissRequest = { showClearConfirm = false },
             title = { Text("Clear History?") },
-            text = { Text("This will delete all your score history.") },
+            text = { Text("This will delete all score history.") },
             confirmButton = {
-                TextButton(onClick = {
-                    onClearHistory()
-                    showClearConfirm = false
-                }) {
+                TextButton(onClick = { onClearHistory(); showClearConfirm = false }) {
                     Text("Clear", color = Color.Red)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showClearConfirm = false }) {
-                    Text("Cancel")
-                }
+                TextButton(onClick = { showClearConfirm = false }) { Text("Cancel") }
             }
         )
     }
 }
 
 @Composable
-private fun ThemesPage(
-    currentThemeName: String,
-    onThemeChange: (String) -> Unit,
-    onBack: () -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp)
-    ) {
+private fun ThemesPage(currentThemeName: String, onThemeChange: (String) -> Unit, onBack: () -> Unit) {
+    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         PageHeader(title = "🎨 Themes", onBack = onBack)
-        
         Spacer(modifier = Modifier.height(24.dp))
         
-        LazyColumn(
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             items(GameThemes.allThemes.size) { index ->
                 val theme = GameThemes.allThemes[index]
-                ThemeOption(
-                    theme = theme,
-                    isSelected = theme.name == currentThemeName,
-                    onClick = { onThemeChange(theme.name) }
-                )
-            }
-            
-            // Custom theme placeholder
-            item {
-                Spacer(modifier = Modifier.height(16.dp))
-                Text(
-                    "Custom Theme",
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = Color(0xFFF4D03F)
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                SectionCard {
-                    Text(
-                        "🎨 Custom theme creator coming soon!",
-                        color = Color.Gray,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
+                ThemeItem(theme = theme, isSelected = theme.name == currentThemeName) { onThemeChange(theme.name) }
             }
         }
     }
 }
 
 @Composable
-private fun LayoutPage(
-    layoutMode: LayoutMode,
-    onLayoutModeChange: (LayoutMode) -> Unit,
-    onBack: () -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp)
-    ) {
+private fun LayoutPage(layoutMode: LayoutMode, onLayoutModeChange: (LayoutMode) -> Unit, onBack: () -> Unit) {
+    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         PageHeader(title = "📱 Layout", onBack = onBack)
-        
         Spacer(modifier = Modifier.height(24.dp))
         
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            LayoutOption(
-                title = "Classic",
-                description = "Unified LCD screen like original hardware",
-                icon = "🎮",
-                isSelected = layoutMode == LayoutMode.CLASSIC,
-                onClick = { onLayoutModeChange(LayoutMode.CLASSIC) }
-            )
-            LayoutOption(
-                title = "Modern",
-                description = "Clean minimal design with status bar",
-                icon = "✨",
-                isSelected = layoutMode == LayoutMode.MODERN,
-                onClick = { onLayoutModeChange(LayoutMode.MODERN) }
-            )
-            LayoutOption(
-                title = "Fullscreen",
-                description = "Maximum game area, minimal UI",
-                icon = "📺",
-                isSelected = layoutMode == LayoutMode.FULLSCREEN,
-                onClick = { onLayoutModeChange(LayoutMode.FULLSCREEN) }
-            )
+            LayoutItem("🎮", "Classic", "Unified LCD like original hardware", layoutMode == LayoutMode.CLASSIC) { onLayoutModeChange(LayoutMode.CLASSIC) }
+            LayoutItem("✨", "Modern", "Clean design with status bar", layoutMode == LayoutMode.MODERN) { onLayoutModeChange(LayoutMode.MODERN) }
+            LayoutItem("📺", "Fullscreen", "Maximum game area", layoutMode == LayoutMode.FULLSCREEN) { onLayoutModeChange(LayoutMode.FULLSCREEN) }
         }
-    }
-}
-
-@Composable
-private fun FeedbackPage(
-    vibrationEnabled: Boolean,
-    soundEnabled: Boolean,
-    onVibrationChange: (Boolean) -> Unit,
-    onSoundChange: (Boolean) -> Unit,
-    onBack: () -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp)
-    ) {
-        PageHeader(title = "📳 Feedback", onBack = onBack)
-        
-        Spacer(modifier = Modifier.height(24.dp))
-        
-        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            ToggleOption(
-                title = "Vibration",
-                description = "Haptic feedback on button press",
-                isEnabled = vibrationEnabled,
-                onToggle = onVibrationChange
-            )
-            ToggleOption(
-                title = "Sound",
-                description = "Sound effects (coming soon)",
-                isEnabled = soundEnabled,
-                onToggle = onSoundChange
-            )
-        }
-        
-        Spacer(modifier = Modifier.height(24.dp))
-        
-        Text(
-            "Note: Changes take effect immediately.",
-            fontSize = 12.sp,
-            color = Color.Gray
-        )
     }
 }
 
 @Composable
 private fun AboutPage(onBack: () -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp)
-    ) {
+    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         PageHeader(title = "ℹ️ About", onBack = onBack)
-        
         Spacer(modifier = Modifier.height(24.dp))
         
         SectionCard {
             Column(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text("🎮", fontSize = 48.sp)
-                Text(
-                    "Brick Game",
-                    fontSize = 24.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White
-                )
-                Text(
-                    "Version 1.2.0",
-                    fontSize = 14.sp,
-                    color = Color(0xFFF4D03F)
-                )
-                
+                Text("Brick Game", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                Text("Version 1.2.0", fontSize = 14.sp, color = Color(0xFFF4D03F))
                 Spacer(modifier = Modifier.height(16.dp))
-                
                 Text("Developer", fontSize = 12.sp, color = Color.Gray)
                 Text("Andrei Anton", fontSize = 16.sp, color = Color.White)
-                
                 Spacer(modifier = Modifier.height(8.dp))
-                
-                Text("Built with", fontSize = 12.sp, color = Color.Gray)
-                Text("Kotlin & Jetpack Compose", fontSize = 14.sp, color = Color.White)
-                
-                Spacer(modifier = Modifier.height(16.dp))
-                
-                Text(
-                    "A nostalgic recreation of the classic\nBrick Game handheld console",
-                    fontSize = 12.sp,
-                    color = Color.Gray,
-                    textAlign = TextAlign.Center
-                )
+                Text("Built with Kotlin & Jetpack Compose", fontSize = 12.sp, color = Color.Gray)
             }
         }
     }
 }
 
-// Helper Components
-
+// Helper composables
 @Composable
 private fun PageHeader(title: String, onBack: () -> Unit) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
+    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Box(
-            modifier = Modifier
-                .size(40.dp)
-                .clip(CircleShape)
-                .background(Color(0xFF333333))
-                .clickable(onClick = onBack),
+            modifier = Modifier.size(40.dp).clip(CircleShape).background(Color(0xFF333333)).clickable(onClick = onBack),
             contentAlignment = Alignment.Center
-        ) {
-            Text("‹", fontSize = 24.sp, color = Color.White)
-        }
+        ) { Text("‹", fontSize = 24.sp, color = Color.White) }
         Spacer(modifier = Modifier.width(12.dp))
-        Text(
-            text = title,
-            fontSize = 20.sp,
-            fontWeight = FontWeight.Bold,
-            color = Color.White
-        )
+        Text(title, fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color.White)
     }
 }
 
 @Composable
 private fun CloseButton(onClick: () -> Unit) {
     Box(
-        modifier = Modifier
-            .size(44.dp)
-            .clip(CircleShape)
-            .background(Color(0xFF444444))
-            .clickable(onClick = onClick),
+        modifier = Modifier.size(44.dp).clip(CircleShape).background(Color(0xFF444444)).clickable(onClick = onClick),
         contentAlignment = Alignment.Center
-    ) {
-        Text("✕", fontSize = 20.sp, color = Color.White)
-    }
+    ) { Text("✕", fontSize = 20.sp, color = Color.White) }
 }
 
 @Composable
 private fun SectionCard(content: @Composable () -> Unit) {
     Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(Color(0xFF1E1E1E))
-            .padding(16.dp)
-    ) {
-        content()
-    }
+        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Color(0xFF1E1E1E)).padding(16.dp)
+    ) { content() }
 }
 
 @Composable
-private fun ThemeOption(
-    theme: GameTheme,
-    isSelected: Boolean,
-    onClick: () -> Unit
-) {
-    val borderColor by animateColorAsState(
-        targetValue = if (isSelected) Color(0xFFF4D03F) else Color.Transparent,
-        label = "borderColor"
-    )
-    
+private fun ThemeItem(theme: GameTheme, isSelected: Boolean, onClick: () -> Unit) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(Color(0xFF1E1E1E))
-            .border(2.dp, borderColor, RoundedCornerShape(12.dp))
-            .clickable(onClick = onClick)
-            .padding(16.dp),
+        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Color(0xFF1E1E1E))
+            .then(if (isSelected) Modifier.background(Color(0xFF2A2A1A)) else Modifier)
+            .clickable(onClick = onClick).padding(16.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                 Box(modifier = Modifier.size(24.dp).clip(RoundedCornerShape(4.dp)).background(theme.screenBackground))
                 Box(modifier = Modifier.size(24.dp).clip(RoundedCornerShape(4.dp)).background(theme.pixelOn))
@@ -619,124 +517,48 @@ private fun ThemeOption(
             }
             Text(theme.name, fontSize = 16.sp, fontWeight = FontWeight.Medium, color = Color.White)
         }
-        if (isSelected) {
-            Text("✓", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color(0xFFF4D03F))
-        }
+        if (isSelected) Text("✓", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color(0xFFF4D03F))
     }
 }
 
 @Composable
-private fun LayoutOption(
-    title: String,
-    description: String,
-    icon: String,
-    isSelected: Boolean,
-    onClick: () -> Unit
-) {
-    val borderColor by animateColorAsState(
-        targetValue = if (isSelected) Color(0xFFF4D03F) else Color.Transparent,
-        label = "borderColor"
-    )
-    
+private fun LayoutItem(icon: String, title: String, desc: String, isSelected: Boolean, onClick: () -> Unit) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(Color(0xFF1E1E1E))
-            .border(2.dp, borderColor, RoundedCornerShape(12.dp))
-            .clickable(onClick = onClick)
-            .padding(16.dp),
+        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Color(0xFF1E1E1E))
+            .then(if (isSelected) Modifier.background(Color(0xFF2A2A1A)) else Modifier)
+            .clickable(onClick = onClick).padding(16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(icon, fontSize = 28.sp)
         Spacer(modifier = Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(title, fontSize = 16.sp, fontWeight = FontWeight.Medium, color = Color.White)
-            Text(description, fontSize = 12.sp, color = Color.Gray)
+            Text(desc, fontSize = 12.sp, color = Color.Gray)
         }
-        if (isSelected) {
-            Text("✓", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color(0xFFF4D03F))
-        }
+        if (isSelected) Text("✓", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color(0xFFF4D03F))
     }
 }
 
 @Composable
-private fun ToggleOption(
-    title: String,
-    description: String,
-    isEnabled: Boolean,
-    onToggle: (Boolean) -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(Color(0xFF1E1E1E))
-            .clickable { onToggle(!isEnabled) }
-            .padding(16.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(title, fontSize = 16.sp, fontWeight = FontWeight.Medium, color = Color.White)
-            Text(description, fontSize = 12.sp, color = Color.Gray)
-        }
-        Switch(
-            checked = isEnabled,
-            onCheckedChange = onToggle,
-            colors = SwitchDefaults.colors(
-                checkedThumbColor = Color(0xFFF4D03F),
-                checkedTrackColor = Color(0xFFF4D03F).copy(alpha = 0.5f),
-                uncheckedThumbColor = Color.Gray,
-                uncheckedTrackColor = Color.DarkGray
-            )
-        )
-    }
-}
-
-@Composable
-private fun ScoreHistoryItem(
-    rank: Int,
-    entry: ScoreEntry,
-    isHighScore: Boolean
-) {
+private fun ScoreItem(rank: Int, entry: ScoreEntry, isHighScore: Boolean) {
     val dateFormat = remember { SimpleDateFormat("MMM dd, HH:mm", Locale.getDefault()) }
-    
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(8.dp))
-            .background(if (isHighScore) Color(0xFF2A2A1A) else Color(0xFF1E1E1E))
-            .padding(12.dp),
+        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp))
+            .background(if (isHighScore) Color(0xFF2A2A1A) else Color(0xFF1E1E1E)).padding(12.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                "#$rank",
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Bold,
-                color = if (rank <= 3) Color(0xFFF4D03F) else Color.Gray,
-                modifier = Modifier.width(36.dp)
-            )
+            Text("#$rank", fontSize = 14.sp, fontWeight = FontWeight.Bold,
+                color = if (rank <= 3) Color(0xFFF4D03F) else Color.Gray, modifier = Modifier.width(36.dp))
             Column {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(entry.playerName, fontSize = 14.sp, color = Color.White)
-                    if (isHighScore) {
-                        Text(" 👑", fontSize = 12.sp)
-                    }
+                    if (isHighScore) Text(" 👑", fontSize = 12.sp)
                 }
-                Text(
-                    "${entry.score} pts • Lv.${entry.level} • ${entry.lines}L",
-                    fontSize = 12.sp,
-                    color = Color(0xFFF4D03F)
-                )
+                Text("${entry.score} pts • Lv.${entry.level} • ${entry.lines}L", fontSize = 12.sp, color = Color(0xFFF4D03F))
             }
         }
-        Text(
-            dateFormat.format(Date(entry.timestamp)),
-            fontSize = 10.sp,
-            color = Color.Gray
-        )
+        Text(dateFormat.format(Date(entry.timestamp)), fontSize = 10.sp, color = Color.Gray)
     }
 }
