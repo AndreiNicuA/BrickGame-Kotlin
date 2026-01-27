@@ -40,8 +40,8 @@ fun BrickGameTheme(
 ) {
     val colorScheme = DarkColorScheme.copy(
         primary = gameTheme.accentColor,
-        secondary = gameTheme.decoColor1,
-        tertiary = gameTheme.decoColor2,
+        secondary = gameTheme.buttonPrimary,
+        tertiary = gameTheme.buttonSecondary,
         background = gameTheme.backgroundColor,
         surface = gameTheme.deviceColor
     )
