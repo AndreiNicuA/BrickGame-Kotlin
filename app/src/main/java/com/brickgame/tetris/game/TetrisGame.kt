@@ -92,8 +92,14 @@ class TetrisGame {
         if (isPaused) resumeGame() else pauseGame()
     }
     
+    // Check if game is currently paused
+    fun isPaused(): Boolean = isPaused
+    
+    // Check if game is running (not menu or game over)
+    fun isGameActive(): Boolean = isRunning && _state.value.status != GameStatus.MENU && _state.value.status != GameStatus.GAME_OVER
+    
     private fun generateRandomPiece(): Tetromino {
-        val type = TetrominoType.values().random()
+        val type = TetrominoType.entries.toTypedArray().random()
         val shape = TETROMINOS[type]!!.map { it.copyOf() }.toTypedArray()
         return Tetromino(type, shape)
     }
@@ -239,8 +245,8 @@ class TetrisGame {
             }
         }
         
-        // Check for completed lines
-        val clearedLines = clearLines()
+        // Check for completed lines - FIXED ALGORITHM
+        val clearedLines = findAndClearLines()
         
         if (clearedLines.isNotEmpty()) {
             val linesCleared = clearedLines.size
@@ -255,7 +261,8 @@ class TetrisGame {
                     lines = newLines,
                     level = newLevel.coerceAtMost(20),
                     clearedRows = clearedLines,
-                    lastEvent = GameEvent.LINES_CLEARED
+                    lastEvent = GameEvent.LINES_CLEARED,
+                    board = board.map { row -> row.toList() }
                 )
             }
         } else {
@@ -266,21 +273,44 @@ class TetrisGame {
         spawnPiece()
     }
     
-    private fun clearLines(): List<Int> {
+    /**
+     * FIXED line clearing algorithm
+     * Properly detects and removes completed lines
+     */
+    private fun findAndClearLines(): List<Int> {
         val clearedRows = mutableListOf<Int>()
         
-        for (y in 0 until BOARD_HEIGHT) {
-            if (board[y].all { it != 0 }) {
+        // Find all complete rows (check from bottom to top)
+        for (y in BOARD_HEIGHT - 1 downTo 0) {
+            var isComplete = true
+            for (x in 0 until BOARD_WIDTH) {
+                if (board[y][x] == 0) {
+                    isComplete = false
+                    break
+                }
+            }
+            if (isComplete) {
                 clearedRows.add(y)
             }
         }
         
-        // Remove cleared lines
-        for (row in clearedRows.sortedDescending()) {
-            for (y in row downTo 1) {
-                board[y] = board[y - 1].copyOf()
+        if (clearedRows.isEmpty()) return emptyList()
+        
+        // Sort rows in descending order (bottom to top)
+        val sortedRows = clearedRows.sortedDescending()
+        
+        // Remove each cleared row and shift everything down
+        for (clearedRow in sortedRows) {
+            // Shift all rows above the cleared row down by one
+            for (y in clearedRow downTo 1) {
+                for (x in 0 until BOARD_WIDTH) {
+                    board[y][x] = board[y - 1][x]
+                }
             }
-            board[0] = IntArray(BOARD_WIDTH)
+            // Clear the top row
+            for (x in 0 until BOARD_WIDTH) {
+                board[0][x] = 0
+            }
         }
         
         return clearedRows
