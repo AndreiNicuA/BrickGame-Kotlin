@@ -84,8 +84,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             val playerName = playerRepository.playerName.first()
             val layoutModeStr = settingsRepository.layoutMode.first()
             val layoutMode = try { LayoutMode.valueOf(layoutModeStr) } catch (e: Exception) { LayoutMode.CLASSIC }
+            val ghostPieceEnabled = settingsRepository.ghostPieceEnabled.first()
             
-            // Apply settings to managers
             vibrationManager.setEnabled(vibrationEnabled)
             vibrationManager.setIntensity(vibrationIntensity)
             vibrationManager.setVibrationStyle(vibrationStyle)
@@ -104,10 +104,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 stylePreset = stylePreset,
                 highScore = highScore,
                 playerName = playerName,
-                layoutMode = layoutMode
+                layoutMode = layoutMode,
+                ghostPieceEnabled = ghostPieceEnabled
             )
-            
-            Log.d(TAG, "Settings loaded: vib=${vibrationStyle}, sound=${soundStyle}, anim=${animationStyle}")
         }
     }
     
@@ -120,11 +119,17 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private fun observeGameState() {
         viewModelScope.launch {
             game.state.collect { state ->
-                // Level up detection
+                // Level up
                 if (state.level > lastLevel && state.status == GameStatus.PLAYING) {
                     vibrationManager.vibrateLevelUp()
                     soundManager.playLevelUp()
                     lastLevel = state.level
+                }
+                
+                // Lines cleared
+                if (state.linesCleared > 0) {
+                    vibrationManager.vibrateClear(state.linesCleared)
+                    soundManager.playClear()
                 }
                 
                 // Game over
@@ -184,7 +189,6 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         gameLoopJob = null
     }
     
-    // Movement with feedback
     fun moveLeft() {
         if (game.state.value.status == GameStatus.PLAYING && game.moveLeft()) {
             vibrationManager.vibrateMove()
@@ -245,11 +249,6 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             vibrationManager.vibrateRotate()
             soundManager.playRotate()
         }
-    }
-    
-    fun onLinesClear(lineCount: Int) {
-        vibrationManager.vibrateClear(lineCount)
-        soundManager.playClear()
     }
     
     private fun stopAllRepeats() {
@@ -362,7 +361,6 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             settingsRepository.setSoundStyle(preset.soundStyle.name)
         }
         
-        // Test feedback
         if (preset.vibrationStyle != VibrationStyle.NONE) vibrationManager.testVibration()
         if (preset.soundStyle != SoundStyle.NONE) soundManager.playMove()
     }
@@ -370,6 +368,12 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     fun setLayoutMode(mode: LayoutMode) {
         _uiState.update { it.copy(layoutMode = mode) }
         viewModelScope.launch { settingsRepository.setLayoutMode(mode.name) }
+    }
+    
+    // Ghost piece
+    fun setGhostPieceEnabled(enabled: Boolean) {
+        _uiState.update { it.copy(ghostPieceEnabled = enabled) }
+        viewModelScope.launch { settingsRepository.setGhostPieceEnabled(enabled) }
     }
     
     override fun onCleared() {
@@ -392,5 +396,6 @@ data class UiState(
     val stylePreset: StylePreset = StylePreset.CUSTOM,
     val highScore: Int = 0,
     val playerName: String = "Player",
-    val layoutMode: LayoutMode = LayoutMode.CLASSIC
+    val layoutMode: LayoutMode = LayoutMode.CLASSIC,
+    val ghostPieceEnabled: Boolean = true
 )
