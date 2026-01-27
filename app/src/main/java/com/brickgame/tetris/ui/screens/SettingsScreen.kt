@@ -657,3 +657,12 @@ private fun ScoreRow(rank: Int, entry: ScoreEntry, isHighScore: Boolean) {
         Text(dateFormat.format(Date(entry.timestamp)), fontSize = 11.sp, color = TextTertiary)
     }
 }
+.dp))
+            Column {
+                Text(entry.playerName, fontSize = LabelSize, color = TextPrimary)
+                Text("${entry.score} • Lv.${entry.level}", fontSize = SmallSize, color = TextTertiary)
+            }
+        }
+        Text(dateFormat.format(Date(entry.timestamp)), fontSize = SmallSize, color = TextTertiary)
+    }
+}
