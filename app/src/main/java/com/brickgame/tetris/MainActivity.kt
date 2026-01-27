@@ -45,11 +45,10 @@ class MainActivity : ComponentActivity() {
             val currentTheme by viewModel.currentTheme.collectAsState()
             val scoreHistory by viewModel.scoreHistory.collectAsState()
             
-            // Handle back button
             BackHandler(enabled = true) {
                 when {
                     uiState.showSettings -> viewModel.hideSettings()
-                    else -> { /* Don't exit */ }
+                    else -> { }
                 }
             }
             
@@ -59,6 +58,7 @@ class MainActivity : ComponentActivity() {
                         gameState = gameState.copy(highScore = uiState.highScore),
                         lineClearAnimation = lineClearAnimation,
                         vibrationEnabled = uiState.vibrationEnabled,
+                        ghostPieceEnabled = uiState.ghostPieceEnabled,
                         layoutMode = uiState.layoutMode,
                         onStartGame = viewModel::startGame,
                         onTogglePause = viewModel::togglePauseResume,
@@ -92,6 +92,7 @@ class MainActivity : ComponentActivity() {
                             soundStyle = uiState.soundStyle,
                             animationStyle = uiState.animationStyle,
                             stylePreset = uiState.stylePreset,
+                            ghostPieceEnabled = uiState.ghostPieceEnabled,
                             playerName = uiState.playerName,
                             highScore = uiState.highScore,
                             scoreHistory = scoreHistory,
@@ -105,6 +106,7 @@ class MainActivity : ComponentActivity() {
                             onSoundStyleChange = viewModel::setSoundStyle,
                             onAnimationStyleChange = viewModel::setAnimationStyle,
                             onStylePresetChange = viewModel::applyStylePreset,
+                            onGhostPieceChange = viewModel::setGhostPieceEnabled,
                             onPlayerNameChange = viewModel::setPlayerName,
                             onClearHistory = viewModel::clearScoreHistory,
                             onClose = viewModel::hideSettings
