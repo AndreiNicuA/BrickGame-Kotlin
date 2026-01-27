@@ -20,6 +20,7 @@ import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.brickgame.tetris.ui.screens.GameScreen
 import com.brickgame.tetris.ui.screens.GameViewModel
+import com.brickgame.tetris.ui.screens.ProfileScreen
 import com.brickgame.tetris.ui.screens.SettingsScreen
 import com.brickgame.tetris.ui.theme.BrickGameTheme
 
@@ -44,6 +45,7 @@ class MainActivity : ComponentActivity() {
             val uiState by viewModel.uiState.collectAsState()
             val lineClearAnimation by viewModel.lineClearAnimation.collectAsState()
             val currentTheme by viewModel.currentTheme.collectAsState()
+            val scoreHistory by viewModel.scoreHistory.collectAsState()
             
             BrickGameTheme(gameTheme = currentTheme) {
                 Box(modifier = Modifier.fillMaxSize()) {
@@ -52,8 +54,10 @@ class MainActivity : ComponentActivity() {
                         gameState = gameState.copy(highScore = uiState.highScore),
                         lineClearAnimation = lineClearAnimation,
                         vibrationEnabled = uiState.vibrationEnabled,
+                        layoutMode = uiState.layoutMode,
+                        playerName = uiState.playerName,
                         onStartGame = viewModel::startGame,
-                        onPauseGame = viewModel::pauseGame,
+                        onTogglePause = viewModel::togglePauseResume,
                         onResetGame = viewModel::resetGame,
                         onToggleSound = viewModel::toggleSound,
                         onMoveLeft = viewModel::moveLeft,
@@ -65,6 +69,7 @@ class MainActivity : ComponentActivity() {
                         onHardDrop = viewModel::hardDrop,
                         onRotate = viewModel::rotate,
                         onOpenSettings = viewModel::showSettings,
+                        onOpenProfile = viewModel::showProfile,
                         modifier = Modifier.fillMaxSize()
                     )
                     
@@ -76,12 +81,30 @@ class MainActivity : ComponentActivity() {
                     ) {
                         SettingsScreen(
                             currentThemeName = currentTheme.name,
+                            currentLayoutMode = uiState.layoutMode,
                             vibrationEnabled = uiState.vibrationEnabled,
                             soundEnabled = uiState.soundEnabled,
                             onThemeChange = viewModel::setTheme,
+                            onLayoutChange = viewModel::setLayoutMode,
                             onVibrationChange = viewModel::setVibration,
                             onSoundChange = viewModel::setSound,
                             onClose = viewModel::hideSettings
+                        )
+                    }
+                    
+                    // Profile overlay
+                    AnimatedVisibility(
+                        visible = uiState.showProfile,
+                        enter = fadeIn() + slideInVertically { it },
+                        exit = fadeOut() + slideOutVertically { it }
+                    ) {
+                        ProfileScreen(
+                            playerName = uiState.playerName,
+                            highScore = uiState.highScore,
+                            scoreHistory = scoreHistory,
+                            onNameChange = viewModel::setPlayerName,
+                            onClearHistory = viewModel::clearScoreHistory,
+                            onClose = viewModel::hideProfile
                         )
                     }
                 }
