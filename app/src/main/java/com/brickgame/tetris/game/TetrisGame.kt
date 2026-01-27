@@ -208,10 +208,22 @@ class TetrisGame {
         return false
     }
     
+    /**
+     * Calculate where the ghost piece should appear (where piece will land)
+     */
+    private fun calculateGhostY(): Int {
+        val piece = currentPiece ?: return currentPosition.y
+        
+        var ghostY = currentPosition.y
+        while (!checkCollision(piece.shape, Position(currentPosition.x, ghostY + 1))) {
+            ghostY++
+        }
+        return ghostY
+    }
+    
     private fun lockPiece() {
         val piece = currentPiece ?: return
         
-        // Place piece on board
         for (y in piece.shape.indices) {
             for (x in piece.shape[y].indices) {
                 if (piece.shape[y][x] != 0) {
@@ -224,7 +236,6 @@ class TetrisGame {
             }
         }
         
-        // IMMEDIATELY check and clear lines
         val clearedCount = clearCompleteLines()
         
         if (clearedCount > 0) {
@@ -233,36 +244,28 @@ class TetrisGame {
             val newLevel = (newLines / 10) + 1
             val points = SCORE_TABLE[clearedCount.coerceAtMost(4)] * currentState.level
             
-            Log.d(TAG, "Cleared $clearedCount lines! Score: +$points")
-            
             _state.update { 
                 it.copy(
                     score = it.score + points,
                     lines = newLines,
                     level = newLevel.coerceAtMost(20),
+                    linesCleared = clearedCount,
                     board = board.map { row -> row.toList() }
                 )
             }
         }
         
-        // Spawn next piece
         spawnPiece()
     }
     
-    /**
-     * Clear complete lines and return count
-     * This modifies the board directly
-     */
     private fun clearCompleteLines(): Int {
         var linesCleared = 0
         var y = BOARD_HEIGHT - 1
         
         while (y >= 0) {
             if (isRowComplete(y)) {
-                Log.d(TAG, "Row $y is complete, clearing...")
                 removeRow(y)
                 linesCleared++
-                // Don't decrement y - check same position again since rows shifted down
             } else {
                 y--
             }
@@ -273,21 +276,17 @@ class TetrisGame {
     
     private fun isRowComplete(row: Int): Boolean {
         for (x in 0 until BOARD_WIDTH) {
-            if (board[row][x] == 0) {
-                return false
-            }
+            if (board[row][x] == 0) return false
         }
         return true
     }
     
     private fun removeRow(row: Int) {
-        // Shift all rows above down by one
         for (y in row downTo 1) {
             for (x in 0 until BOARD_WIDTH) {
                 board[y][x] = board[y - 1][x]
             }
         }
-        // Clear top row
         for (x in 0 until BOARD_WIDTH) {
             board[0][x] = 0
         }
@@ -298,7 +297,6 @@ class TetrisGame {
         _state.update { 
             it.copy(
                 status = GameStatus.GAME_OVER,
-                lastEvent = GameEvent.GAME_OVER,
                 board = board.map { row -> row.toList() }
             )
         }
@@ -310,6 +308,7 @@ class TetrisGame {
     
     private fun updateState() {
         val displayBoard = getDisplayBoard()
+        val ghostY = calculateGhostY()
         
         _state.update { state ->
             state.copy(
@@ -320,7 +319,8 @@ class TetrisGame {
                 nextPiece = nextPiece?.let {
                     PieceState(it.type, Position(0, 0), it.shape.map { row -> row.toList() })
                 },
-                clearedRows = emptyList()
+                ghostY = ghostY,
+                linesCleared = 0
             )
         }
     }
@@ -351,7 +351,7 @@ class TetrisGame {
     }
     
     fun clearEvent() {
-        _state.update { it.copy(clearedRows = emptyList(), lastEvent = GameEvent.NONE) }
+        _state.update { it.copy(linesCleared = 0) }
     }
 }
 
@@ -370,9 +370,7 @@ data class Tetromino(
         return type == other.type && shape.contentDeepEquals(other.shape)
     }
     
-    override fun hashCode(): Int {
-        return 31 * type.hashCode() + shape.contentDeepHashCode()
-    }
+    override fun hashCode(): Int = 31 * type.hashCode() + shape.contentDeepHashCode()
 }
 
 data class Position(val x: Int, val y: Int)
@@ -380,8 +378,6 @@ data class Position(val x: Int, val y: Int)
 enum class MoveResult { MOVED, LOCKED, BLOCKED }
 
 enum class GameStatus { MENU, PLAYING, PAUSED, GAME_OVER }
-
-enum class GameEvent { NONE, PIECE_LOCKED, LINES_CLEARED, GAME_OVER }
 
 data class PieceState(
     val type: TetrominoType,
@@ -398,7 +394,6 @@ data class GameState(
     val currentPiece: PieceState? = null,
     val nextPiece: PieceState? = null,
     val ghostY: Int = 0,
-    val clearedRows: List<Int> = emptyList(),
-    val lastEvent: GameEvent = GameEvent.NONE,
+    val linesCleared: Int = 0,
     val highScore: Int = 0
 )
