@@ -27,10 +27,8 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
-        // Enable edge-to-edge display
         enableEdgeToEdge()
         
-        // Hide system bars for immersive experience
         WindowCompat.setDecorFitsSystemWindows(window, false)
         WindowInsetsControllerCompat(window, window.decorView).let { controller ->
             controller.hide(WindowInsetsCompat.Type.systemBars())
@@ -53,14 +51,14 @@ class MainActivity : ComponentActivity() {
                         gameState = gameState.copy(highScore = uiState.highScore),
                         lineClearAnimation = lineClearAnimation,
                         vibrationEnabled = uiState.vibrationEnabled,
-                        isFullscreen = uiState.isFullscreen,
+                        layoutMode = uiState.layoutMode,
                         onStartGame = viewModel::startGame,
                         onTogglePause = viewModel::togglePauseResume,
                         onResetGame = viewModel::resetGame,
                         onToggleSound = viewModel::toggleSound,
-                        onMoveLeft = viewModel::moveLeft,
+                        onMoveLeft = viewModel::startLeftRepeat,
                         onMoveLeftRelease = viewModel::stopLeftRepeat,
-                        onMoveRight = viewModel::moveRight,
+                        onMoveRight = viewModel::startRightRepeat,
                         onMoveRightRelease = viewModel::stopRightRepeat,
                         onMoveDown = viewModel::startDownRepeat,
                         onMoveDownRelease = viewModel::stopDownRepeat,
@@ -70,7 +68,7 @@ class MainActivity : ComponentActivity() {
                         modifier = Modifier.fillMaxSize()
                     )
                     
-                    // Settings overlay (includes Profile and History)
+                    // Settings overlay
                     AnimatedVisibility(
                         visible = uiState.showSettings,
                         enter = fadeIn() + slideInVertically { it },
@@ -78,14 +76,14 @@ class MainActivity : ComponentActivity() {
                     ) {
                         SettingsScreen(
                             currentThemeName = currentTheme.name,
-                            isFullscreen = uiState.isFullscreen,
+                            layoutMode = uiState.layoutMode,
                             vibrationEnabled = uiState.vibrationEnabled,
                             soundEnabled = uiState.soundEnabled,
                             playerName = uiState.playerName,
                             highScore = uiState.highScore,
                             scoreHistory = scoreHistory,
                             onThemeChange = viewModel::setTheme,
-                            onFullscreenChange = viewModel::setFullscreen,
+                            onLayoutModeChange = viewModel::setLayoutMode,
                             onVibrationChange = viewModel::setVibration,
                             onSoundChange = viewModel::setSound,
                             onPlayerNameChange = viewModel::setPlayerName,
