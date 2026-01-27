@@ -18,101 +18,51 @@ class SettingsRepository(private val context: Context) {
         private val VIBRATION_ENABLED = booleanPreferencesKey("vibration_enabled")
         private val SOUND_ENABLED = booleanPreferencesKey("sound_enabled")
         private val HIGH_SCORE = intPreferencesKey("high_score")
-        private val LAYOUT_MODE = stringPreferencesKey("layout_mode")
+        private val IS_FULLSCREEN = booleanPreferencesKey("is_fullscreen")
     }
     
     // Theme
     val themeName: Flow<String> = context.dataStore.data
-        .catch { exception ->
-            if (exception is IOException) {
-                emit(emptyPreferences())
-            } else {
-                throw exception
-            }
-        }
-        .map { preferences ->
-            preferences[THEME_NAME] ?: "Classic"
-        }
+        .catch { if (it is IOException) emit(emptyPreferences()) else throw it }
+        .map { it[THEME_NAME] ?: "Classic" }
     
     suspend fun setThemeName(name: String) {
-        context.dataStore.edit { preferences ->
-            preferences[THEME_NAME] = name
-        }
+        context.dataStore.edit { it[THEME_NAME] = name }
     }
     
     // Vibration
     val vibrationEnabled: Flow<Boolean> = context.dataStore.data
-        .catch { exception ->
-            if (exception is IOException) {
-                emit(emptyPreferences())
-            } else {
-                throw exception
-            }
-        }
-        .map { preferences ->
-            preferences[VIBRATION_ENABLED] ?: true
-        }
+        .catch { if (it is IOException) emit(emptyPreferences()) else throw it }
+        .map { it[VIBRATION_ENABLED] ?: true }
     
     suspend fun setVibrationEnabled(enabled: Boolean) {
-        context.dataStore.edit { preferences ->
-            preferences[VIBRATION_ENABLED] = enabled
-        }
+        context.dataStore.edit { it[VIBRATION_ENABLED] = enabled }
     }
     
     // Sound
     val soundEnabled: Flow<Boolean> = context.dataStore.data
-        .catch { exception ->
-            if (exception is IOException) {
-                emit(emptyPreferences())
-            } else {
-                throw exception
-            }
-        }
-        .map { preferences ->
-            preferences[SOUND_ENABLED] ?: true
-        }
+        .catch { if (it is IOException) emit(emptyPreferences()) else throw it }
+        .map { it[SOUND_ENABLED] ?: true }
     
     suspend fun setSoundEnabled(enabled: Boolean) {
-        context.dataStore.edit { preferences ->
-            preferences[SOUND_ENABLED] = enabled
-        }
+        context.dataStore.edit { it[SOUND_ENABLED] = enabled }
     }
     
     // High Score
     val highScore: Flow<Int> = context.dataStore.data
-        .catch { exception ->
-            if (exception is IOException) {
-                emit(emptyPreferences())
-            } else {
-                throw exception
-            }
-        }
-        .map { preferences ->
-            preferences[HIGH_SCORE] ?: 0
-        }
+        .catch { if (it is IOException) emit(emptyPreferences()) else throw it }
+        .map { it[HIGH_SCORE] ?: 0 }
     
     suspend fun setHighScore(score: Int) {
-        context.dataStore.edit { preferences ->
-            preferences[HIGH_SCORE] = score
-        }
+        context.dataStore.edit { it[HIGH_SCORE] = score }
     }
     
-    // Layout Mode
-    val layoutMode: Flow<String> = context.dataStore.data
-        .catch { exception ->
-            if (exception is IOException) {
-                emit(emptyPreferences())
-            } else {
-                throw exception
-            }
-        }
-        .map { preferences ->
-            preferences[LAYOUT_MODE] ?: "CLASSIC"
-        }
+    // Fullscreen mode
+    val isFullscreen: Flow<Boolean> = context.dataStore.data
+        .catch { if (it is IOException) emit(emptyPreferences()) else throw it }
+        .map { it[IS_FULLSCREEN] ?: false }
     
-    suspend fun setLayoutMode(mode: String) {
-        context.dataStore.edit { preferences ->
-            preferences[LAYOUT_MODE] = mode
-        }
+    suspend fun setFullscreen(enabled: Boolean) {
+        context.dataStore.edit { it[IS_FULLSCREEN] = enabled }
     }
 }
