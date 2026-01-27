@@ -27,7 +27,9 @@ import com.brickgame.tetris.ui.theme.BrickGameTheme
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        
         enableEdgeToEdge()
+        
         WindowCompat.setDecorFitsSystemWindows(window, false)
         WindowInsetsControllerCompat(window, window.decorView).let { controller ->
             controller.hide(WindowInsetsCompat.Type.systemBars())
@@ -36,20 +38,30 @@ class MainActivity : ComponentActivity() {
         
         setContent {
             val viewModel: GameViewModel = viewModel()
+            
             val gameState by viewModel.gameState.collectAsState()
             val uiState by viewModel.uiState.collectAsState()
             val currentTheme by viewModel.currentTheme.collectAsState()
             val scoreHistory by viewModel.scoreHistory.collectAsState()
+            val clearingLines by viewModel.clearingLines.collectAsState()
             
-            BackHandler(enabled = true) { if (uiState.showSettings) viewModel.hideSettings() }
+            BackHandler(enabled = true) {
+                when {
+                    uiState.showSettings -> viewModel.hideSettings()
+                    else -> { }
+                }
+            }
             
             BrickGameTheme(gameTheme = currentTheme) {
                 Box(modifier = Modifier.fillMaxSize()) {
                     GameScreen(
                         gameState = gameState.copy(highScore = uiState.highScore),
+                        clearingLines = clearingLines,
                         vibrationEnabled = uiState.vibrationEnabled,
                         ghostPieceEnabled = uiState.ghostPieceEnabled,
+                        animationEnabled = uiState.animationEnabled,
                         animationStyle = uiState.animationStyle,
+                        animationDuration = uiState.animationDuration,
                         layoutMode = uiState.layoutMode,
                         onStartGame = viewModel::startGame,
                         onTogglePause = viewModel::togglePauseResume,
@@ -67,7 +79,11 @@ class MainActivity : ComponentActivity() {
                         modifier = Modifier.fillMaxSize()
                     )
                     
-                    AnimatedVisibility(visible = uiState.showSettings, enter = fadeIn() + slideInVertically { it }, exit = fadeOut() + slideOutVertically { it }) {
+                    AnimatedVisibility(
+                        visible = uiState.showSettings,
+                        enter = fadeIn() + slideInVertically { it },
+                        exit = fadeOut() + slideOutVertically { it }
+                    ) {
                         SettingsScreen(
                             currentThemeName = currentTheme.name,
                             layoutMode = uiState.layoutMode,
@@ -77,7 +93,9 @@ class MainActivity : ComponentActivity() {
                             soundEnabled = uiState.soundEnabled,
                             soundVolume = uiState.soundVolume,
                             soundStyle = uiState.soundStyle,
+                            animationEnabled = uiState.animationEnabled,
                             animationStyle = uiState.animationStyle,
+                            animationDuration = uiState.animationDuration,
                             stylePreset = uiState.stylePreset,
                             ghostPieceEnabled = uiState.ghostPieceEnabled,
                             difficulty = uiState.difficulty,
@@ -92,7 +110,9 @@ class MainActivity : ComponentActivity() {
                             onSoundEnabledChange = viewModel::setSoundEnabled,
                             onSoundVolumeChange = viewModel::setSoundVolume,
                             onSoundStyleChange = viewModel::setSoundStyle,
+                            onAnimationEnabledChange = viewModel::setAnimationEnabled,
                             onAnimationStyleChange = viewModel::setAnimationStyle,
+                            onAnimationDurationChange = viewModel::setAnimationDuration,
                             onStylePresetChange = viewModel::applyStylePreset,
                             onGhostPieceChange = viewModel::setGhostPieceEnabled,
                             onDifficultyChange = viewModel::setDifficulty,
