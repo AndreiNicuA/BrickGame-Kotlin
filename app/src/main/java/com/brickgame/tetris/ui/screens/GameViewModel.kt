@@ -1,15 +1,11 @@
 package com.brickgame.tetris.ui.screens
 
 import android.app.Application
-import android.content.Context
-import android.os.Build
-import android.os.VibrationEffect
-import android.os.Vibrator
-import android.os.VibratorManager
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.brickgame.tetris.audio.SoundManager
+import com.brickgame.tetris.audio.VibrationManager
 import com.brickgame.tetris.data.PlayerRepository
 import com.brickgame.tetris.data.SettingsRepository
 import com.brickgame.tetris.data.ScoreEntry
@@ -18,6 +14,10 @@ import com.brickgame.tetris.game.GameStatus
 import com.brickgame.tetris.game.TetrisGame
 import com.brickgame.tetris.ui.animations.LineClearAnimationState
 import com.brickgame.tetris.ui.animations.LineClearPhase
+import com.brickgame.tetris.ui.styles.AnimationStyle
+import com.brickgame.tetris.ui.styles.SoundStyle
+import com.brickgame.tetris.ui.styles.StylePreset
+import com.brickgame.tetris.ui.styles.VibrationStyle
 import com.brickgame.tetris.ui.theme.GameTheme
 import com.brickgame.tetris.ui.theme.GameThemes
 import kotlinx.coroutines.Job
@@ -39,19 +39,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private val playerRepository = PlayerRepository(application)
     private val game = TetrisGame()
     private val soundManager = SoundManager(application)
-    
-    // Vibrator
-    private val vibrator: Vibrator? = try {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            (application.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager)?.defaultVibrator
-        } else {
-            @Suppress("DEPRECATION")
-            application.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
-        }
-    } catch (e: Exception) {
-        Log.e(TAG, "Failed to get vibrator", e)
-        null
-    }
+    private val vibrationManager = VibrationManager(application)
     
     val gameState: StateFlow<GameState> = game.state
     
@@ -71,48 +59,77 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private var leftRepeatJob: Job? = null
     private var rightRepeatJob: Job? = null
     private var downRepeatJob: Job? = null
+    private var lastLevel = 1
     
     init {
-        // Load settings
+        loadSettings()
+        observeScoreHistory()
+        observeGameState()
+    }
+    
+    private fun loadSettings() {
         viewModelScope.launch {
             val themeName = settingsRepository.themeName.first()
             _currentTheme.value = GameThemes.getThemeByName(themeName)
             
             val vibrationEnabled = settingsRepository.vibrationEnabled.first()
             val vibrationIntensity = settingsRepository.vibrationIntensity.first()
+            val vibrationStyle = try { VibrationStyle.valueOf(settingsRepository.vibrationStyle.first()) } catch (e: Exception) { VibrationStyle.CLASSIC }
             val soundEnabled = settingsRepository.soundEnabled.first()
             val soundVolume = settingsRepository.soundVolume.first()
+            val soundStyle = try { SoundStyle.valueOf(settingsRepository.soundStyle.first()) } catch (e: Exception) { SoundStyle.RETRO_BEEP }
+            val animationStyle = try { AnimationStyle.valueOf(settingsRepository.animationStyle.first()) } catch (e: Exception) { AnimationStyle.MODERN }
+            val stylePreset = try { StylePreset.valueOf(settingsRepository.stylePreset.first()) } catch (e: Exception) { StylePreset.CUSTOM }
             val highScore = settingsRepository.highScore.first()
             val playerName = playerRepository.playerName.first()
             val layoutModeStr = settingsRepository.layoutMode.first()
             val layoutMode = try { LayoutMode.valueOf(layoutModeStr) } catch (e: Exception) { LayoutMode.CLASSIC }
             
+            // Apply settings to managers
+            vibrationManager.setEnabled(vibrationEnabled)
+            vibrationManager.setIntensity(vibrationIntensity)
+            vibrationManager.setVibrationStyle(vibrationStyle)
             soundManager.setEnabled(soundEnabled)
             soundManager.setVolume(soundVolume)
+            soundManager.setSoundStyle(soundStyle)
             
             _uiState.value = UiState(
                 vibrationEnabled = vibrationEnabled,
                 vibrationIntensity = vibrationIntensity,
+                vibrationStyle = vibrationStyle,
                 soundEnabled = soundEnabled,
                 soundVolume = soundVolume,
+                soundStyle = soundStyle,
+                animationStyle = animationStyle,
+                stylePreset = stylePreset,
                 highScore = highScore,
                 playerName = playerName,
                 layoutMode = layoutMode
             )
             
-            Log.d(TAG, "Settings loaded: vibration=$vibrationEnabled($vibrationIntensity), sound=$soundEnabled($soundVolume)")
+            Log.d(TAG, "Settings loaded: vib=${vibrationStyle}, sound=${soundStyle}, anim=${animationStyle}")
         }
-        
-        // Collect score history
+    }
+    
+    private fun observeScoreHistory() {
         viewModelScope.launch {
             playerRepository.scoreHistory.collect { _scoreHistory.value = it }
         }
-        
-        // Watch game state
+    }
+    
+    private fun observeGameState() {
         viewModelScope.launch {
             game.state.collect { state ->
+                // Level up detection
+                if (state.level > lastLevel && state.status == GameStatus.PLAYING) {
+                    vibrationManager.vibrateLevelUp()
+                    soundManager.playLevelUp()
+                    lastLevel = state.level
+                }
+                
                 // Game over
                 if (state.status == GameStatus.GAME_OVER && state.score > 0) {
+                    vibrationManager.vibrateGameOver()
                     soundManager.playGameOver()
                     
                     val playerName = _uiState.value.playerName
@@ -127,30 +144,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
     
-    // VIBRATION with intensity
-    private fun vibrate(baseDurationMs: Long) {
-        if (!_uiState.value.vibrationEnabled) return
-        
-        val intensity = _uiState.value.vibrationIntensity
-        val duration = (baseDurationMs * intensity).toLong().coerceAtLeast(5)
-        
-        vibrator?.let { vib ->
-            try {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    val amplitude = (255 * intensity).toInt().coerceIn(1, 255)
-                    vib.vibrate(VibrationEffect.createOneShot(duration, amplitude))
-                } else {
-                    @Suppress("DEPRECATION")
-                    vib.vibrate(duration)
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Vibration error", e)
-            }
-        }
-    }
-    
     // Game controls
     fun startGame() {
+        lastLevel = 1
         game.startGame()
         startGameLoop()
     }
@@ -166,6 +162,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     fun resetGame() {
         stopGameLoop()
         stopAllRepeats()
+        lastLevel = 1
         game.startGame()
         game.pauseGame()
     }
@@ -190,7 +187,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     // Movement with feedback
     fun moveLeft() {
         if (game.state.value.status == GameStatus.PLAYING && game.moveLeft()) {
-            vibrate(10)
+            vibrationManager.vibrateMove()
             soundManager.playMove()
         }
     }
@@ -208,7 +205,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     
     fun moveRight() {
         if (game.state.value.status == GameStatus.PLAYING && game.moveRight()) {
-            vibrate(10)
+            vibrationManager.vibrateMove()
             soundManager.playMove()
         }
     }
@@ -238,21 +235,20 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     
     fun hardDrop() {
         if (game.state.value.status == GameStatus.PLAYING && game.hardDrop() > 0) {
-            vibrate(30)
+            vibrationManager.vibrateDrop()
             soundManager.playDrop()
         }
     }
     
     fun rotate() {
         if (game.state.value.status == GameStatus.PLAYING && game.rotate()) {
-            vibrate(15)
+            vibrationManager.vibrateRotate()
             soundManager.playRotate()
         }
     }
     
-    // Called when lines are cleared
-    fun onLinesClear() {
-        vibrate(50)
+    fun onLinesClear(lineCount: Int) {
+        vibrationManager.vibrateClear(lineCount)
         soundManager.playClear()
     }
     
@@ -291,14 +287,25 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     // Vibration settings
     fun setVibrationEnabled(enabled: Boolean) {
         _uiState.update { it.copy(vibrationEnabled = enabled) }
+        vibrationManager.setEnabled(enabled)
         viewModelScope.launch { settingsRepository.setVibrationEnabled(enabled) }
-        if (enabled) vibrate(100)
+        if (enabled) vibrationManager.testVibration()
     }
     
     fun setVibrationIntensity(intensity: Float) {
         _uiState.update { it.copy(vibrationIntensity = intensity) }
+        vibrationManager.setIntensity(intensity)
         viewModelScope.launch { settingsRepository.setVibrationIntensity(intensity) }
-        vibrate(50) // Test vibration
+    }
+    
+    fun setVibrationStyle(style: VibrationStyle) {
+        _uiState.update { it.copy(vibrationStyle = style, stylePreset = StylePreset.CUSTOM) }
+        vibrationManager.setVibrationStyle(style)
+        viewModelScope.launch { 
+            settingsRepository.setVibrationStyle(style.name)
+            settingsRepository.setStylePreset(StylePreset.CUSTOM.name)
+        }
+        vibrationManager.testVibration()
     }
     
     // Sound settings
@@ -306,14 +313,58 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.update { it.copy(soundEnabled = enabled) }
         soundManager.setEnabled(enabled)
         viewModelScope.launch { settingsRepository.setSoundEnabled(enabled) }
-        if (enabled) soundManager.playMove() // Test sound
+        if (enabled) soundManager.playMove()
     }
     
     fun setSoundVolume(volume: Float) {
         _uiState.update { it.copy(soundVolume = volume) }
         soundManager.setVolume(volume)
         viewModelScope.launch { settingsRepository.setSoundVolume(volume) }
-        soundManager.playMove() // Test sound
+    }
+    
+    fun setSoundStyle(style: SoundStyle) {
+        _uiState.update { it.copy(soundStyle = style, stylePreset = StylePreset.CUSTOM) }
+        soundManager.setSoundStyle(style)
+        viewModelScope.launch { 
+            settingsRepository.setSoundStyle(style.name)
+            settingsRepository.setStylePreset(StylePreset.CUSTOM.name)
+        }
+        soundManager.playMove()
+    }
+    
+    // Animation settings
+    fun setAnimationStyle(style: AnimationStyle) {
+        _uiState.update { it.copy(animationStyle = style, stylePreset = StylePreset.CUSTOM) }
+        viewModelScope.launch { 
+            settingsRepository.setAnimationStyle(style.name)
+            settingsRepository.setStylePreset(StylePreset.CUSTOM.name)
+        }
+    }
+    
+    // Style presets
+    fun applyStylePreset(preset: StylePreset) {
+        _uiState.update { 
+            it.copy(
+                stylePreset = preset,
+                animationStyle = preset.animationStyle,
+                vibrationStyle = preset.vibrationStyle,
+                soundStyle = preset.soundStyle
+            )
+        }
+        
+        vibrationManager.setVibrationStyle(preset.vibrationStyle)
+        soundManager.setSoundStyle(preset.soundStyle)
+        
+        viewModelScope.launch {
+            settingsRepository.setStylePreset(preset.name)
+            settingsRepository.setAnimationStyle(preset.animationStyle.name)
+            settingsRepository.setVibrationStyle(preset.vibrationStyle.name)
+            settingsRepository.setSoundStyle(preset.soundStyle.name)
+        }
+        
+        // Test feedback
+        if (preset.vibrationStyle != VibrationStyle.NONE) vibrationManager.testVibration()
+        if (preset.soundStyle != SoundStyle.NONE) soundManager.playMove()
     }
     
     fun setLayoutMode(mode: LayoutMode) {
@@ -333,8 +384,12 @@ data class UiState(
     val showSettings: Boolean = false,
     val vibrationEnabled: Boolean = true,
     val vibrationIntensity: Float = 0.7f,
+    val vibrationStyle: VibrationStyle = VibrationStyle.CLASSIC,
     val soundEnabled: Boolean = true,
     val soundVolume: Float = 0.7f,
+    val soundStyle: SoundStyle = SoundStyle.RETRO_BEEP,
+    val animationStyle: AnimationStyle = AnimationStyle.MODERN,
+    val stylePreset: StylePreset = StylePreset.CUSTOM,
     val highScore: Int = 0,
     val playerName: String = "Player",
     val layoutMode: LayoutMode = LayoutMode.CLASSIC
