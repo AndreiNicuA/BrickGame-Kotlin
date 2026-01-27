@@ -3,19 +3,14 @@ package com.brickgame.tetris.ui.screens
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -27,16 +22,14 @@ import com.brickgame.tetris.ui.components.*
 import com.brickgame.tetris.ui.theme.LocalGameTheme
 
 /**
- * Main Game Screen
- * Supports multiple layout modes: Classic, Compact, Fullscreen
+ * Main Game Screen - Classic Layout (restored from v1.0)
  */
 @Composable
 fun GameScreen(
     gameState: GameState,
     lineClearAnimation: LineClearAnimationState,
     vibrationEnabled: Boolean,
-    layoutMode: LayoutMode,
-    playerName: String,
+    isFullscreen: Boolean,
     onStartGame: () -> Unit,
     onTogglePause: () -> Unit,
     onResetGame: () -> Unit,
@@ -50,7 +43,6 @@ fun GameScreen(
     onHardDrop: () -> Unit,
     onRotate: () -> Unit,
     onOpenSettings: () -> Unit,
-    onOpenProfile: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val theme = LocalGameTheme.current
@@ -61,11 +53,10 @@ fun GameScreen(
             .background(theme.backgroundColor),
         contentAlignment = Alignment.Center
     ) {
-        when (layoutMode) {
-            LayoutMode.CLASSIC -> ClassicLayout(
+        if (isFullscreen) {
+            FullscreenLayout(
                 gameState = gameState,
                 lineClearAnimation = lineClearAnimation,
-                playerName = playerName,
                 onStartGame = onStartGame,
                 onTogglePause = onTogglePause,
                 onResetGame = onResetGame,
@@ -78,14 +69,12 @@ fun GameScreen(
                 onMoveDownRelease = onMoveDownRelease,
                 onHardDrop = onHardDrop,
                 onRotate = onRotate,
-                onOpenSettings = onOpenSettings,
-                onOpenProfile = onOpenProfile
+                onOpenSettings = onOpenSettings
             )
-            
-            LayoutMode.COMPACT -> CompactLayout(
+        } else {
+            ClassicLayout(
                 gameState = gameState,
                 lineClearAnimation = lineClearAnimation,
-                playerName = playerName,
                 onStartGame = onStartGame,
                 onTogglePause = onTogglePause,
                 onResetGame = onResetGame,
@@ -98,38 +87,30 @@ fun GameScreen(
                 onMoveDownRelease = onMoveDownRelease,
                 onHardDrop = onHardDrop,
                 onRotate = onRotate,
-                onOpenSettings = onOpenSettings,
-                onOpenProfile = onOpenProfile
+                onOpenSettings = onOpenSettings
             )
-            
-            LayoutMode.FULLSCREEN -> FullscreenLayout(
-                gameState = gameState,
-                lineClearAnimation = lineClearAnimation,
-                playerName = playerName,
-                onStartGame = onStartGame,
-                onTogglePause = onTogglePause,
-                onResetGame = onResetGame,
-                onToggleSound = onToggleSound,
-                onMoveLeft = onMoveLeft,
-                onMoveLeftRelease = onMoveLeftRelease,
-                onMoveRight = onMoveRight,
-                onMoveRightRelease = onMoveRightRelease,
-                onMoveDown = onMoveDown,
-                onMoveDownRelease = onMoveDownRelease,
-                onHardDrop = onHardDrop,
-                onRotate = onRotate,
-                onOpenSettings = onOpenSettings,
-                onOpenProfile = onOpenProfile
+        }
+        
+        // Game Over Overlay
+        if (gameState.status == GameStatus.GAME_OVER) {
+            GameOverOverlay(
+                score = gameState.score,
+                level = gameState.level,
+                lines = gameState.lines,
+                highScore = gameState.highScore,
+                onRestart = onStartGame
             )
         }
     }
 }
 
+/**
+ * Classic Layout - Original v1.0 design restored
+ */
 @Composable
 private fun ClassicLayout(
     gameState: GameState,
     lineClearAnimation: LineClearAnimationState,
-    playerName: String,
     onStartGame: () -> Unit,
     onTogglePause: () -> Unit,
     onResetGame: () -> Unit,
@@ -142,8 +123,7 @@ private fun ClassicLayout(
     onMoveDownRelease: () -> Unit,
     onHardDrop: () -> Unit,
     onRotate: () -> Unit,
-    onOpenSettings: () -> Unit,
-    onOpenProfile: () -> Unit
+    onOpenSettings: () -> Unit
 ) {
     val theme = LocalGameTheme.current
     
@@ -215,18 +195,17 @@ private fun ClassicLayout(
         // Bottom decoration row
         DecorationRow(modifier = Modifier.fillMaxWidth())
         
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(8.dp))
         
         // Pause indicator
         if (gameState.status == GameStatus.PAUSED) {
             PauseIndicator()
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(4.dp))
         }
         
-        // Small buttons row
+        // Small buttons row (ON/OFF, SOUND, START/RESUME, RESET)
         SmallButtonsRow(
             gameStatus = gameState.status,
-            onStartGame = onStartGame,
             onTogglePause = onTogglePause,
             onResetGame = onResetGame,
             onToggleSound = onToggleSound
@@ -234,7 +213,7 @@ private fun ClassicLayout(
         
         Spacer(modifier = Modifier.height(16.dp))
         
-        // Control buttons
+        // Control buttons (D-Pad + Rotate)
         ControlsSection(
             onMoveLeft = onMoveLeft,
             onMoveLeftRelease = onMoveLeftRelease,
@@ -265,168 +244,18 @@ private fun ClassicLayout(
         
         Spacer(modifier = Modifier.height(8.dp))
         
-        // Settings and Profile buttons
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            SmallIconButton(
-                text = "👤",
-                onClick = onOpenProfile,
-                modifier = Modifier.size(44.dp)
-            )
-            
-            SmallIconButton(
-                text = "⚙️",
-                onClick = onOpenSettings,
-                modifier = Modifier.size(44.dp)
-            )
-        }
+        // Settings button at bottom (original position)
+        SettingsButton(onClick = onOpenSettings)
     }
 }
 
-@Composable
-private fun CompactLayout(
-    gameState: GameState,
-    lineClearAnimation: LineClearAnimationState,
-    playerName: String,
-    onStartGame: () -> Unit,
-    onTogglePause: () -> Unit,
-    onResetGame: () -> Unit,
-    onToggleSound: () -> Unit,
-    onMoveLeft: () -> Unit,
-    onMoveLeftRelease: () -> Unit,
-    onMoveRight: () -> Unit,
-    onMoveRightRelease: () -> Unit,
-    onMoveDown: () -> Unit,
-    onMoveDownRelease: () -> Unit,
-    onHardDrop: () -> Unit,
-    onRotate: () -> Unit,
-    onOpenSettings: () -> Unit,
-    onOpenProfile: () -> Unit
-) {
-    val theme = LocalGameTheme.current
-    
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.SpaceBetween
-    ) {
-        // Top bar with info
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.Top
-        ) {
-            // Score info
-            Column {
-                Text(
-                    text = "SCORE",
-                    fontSize = 10.sp,
-                    color = theme.textSecondary
-                )
-                Text(
-                    text = gameState.score.toString().padStart(6, '0'),
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = theme.textPrimary
-                )
-            }
-            
-            // Level/Lines
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
-                    text = "LV.${gameState.level}",
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = theme.accentColor
-                )
-                Text(
-                    text = "${gameState.lines} lines",
-                    fontSize = 12.sp,
-                    color = theme.textSecondary
-                )
-            }
-            
-            // Buttons
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                SmallIconButton(text = "👤", onClick = onOpenProfile)
-                SmallIconButton(text = "⚙️", onClick = onOpenSettings)
-            }
-        }
-        
-        // Game board - larger in compact mode
-        Box(
-            modifier = Modifier
-                .weight(1f)
-                .padding(vertical = 8.dp)
-        ) {
-            GameBoard(
-                board = gameState.board,
-                lineClearAnimation = lineClearAnimation,
-                modifier = Modifier
-                    .fillMaxHeight()
-                    .aspectRatio(0.5f)
-                    .align(Alignment.Center)
-            )
-            
-            // Pause overlay
-            if (gameState.status == GameStatus.PAUSED) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(Color.Black.copy(alpha = 0.7f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "PAUSED\n\nTap START to resume",
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White,
-                        textAlign = TextAlign.Center
-                    )
-                }
-            }
-        }
-        
-        // Controls at bottom
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            // Action buttons
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                SmallFunctionButton(
-                    label = if (gameState.status == GameStatus.PAUSED) "RESUME" else "START",
-                    onClick = onTogglePause
-                )
-                SmallFunctionButton(label = "RESET", onClick = onResetGame)
-            }
-            
-            // D-Pad and Rotate
-            ControlsSection(
-                onMoveLeft = onMoveLeft,
-                onMoveLeftRelease = onMoveLeftRelease,
-                onMoveRight = onMoveRight,
-                onMoveRightRelease = onMoveRightRelease,
-                onMoveDown = onMoveDown,
-                onMoveDownRelease = onMoveDownRelease,
-                onHardDrop = onHardDrop,
-                onRotate = onRotate
-            )
-        }
-    }
-}
-
+/**
+ * Fullscreen Layout - Game only, minimal UI
+ */
 @Composable
 private fun FullscreenLayout(
     gameState: GameState,
     lineClearAnimation: LineClearAnimationState,
-    playerName: String,
     onStartGame: () -> Unit,
     onTogglePause: () -> Unit,
     onResetGame: () -> Unit,
@@ -439,8 +268,7 @@ private fun FullscreenLayout(
     onMoveDownRelease: () -> Unit,
     onHardDrop: () -> Unit,
     onRotate: () -> Unit,
-    onOpenSettings: () -> Unit,
-    onOpenProfile: () -> Unit
+    onOpenSettings: () -> Unit
 ) {
     val theme = LocalGameTheme.current
     
@@ -451,7 +279,7 @@ private fun FullscreenLayout(
             .padding(8.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Minimal top bar
+        // Top bar with score and settings
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -459,43 +287,47 @@ private fun FullscreenLayout(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = gameState.score.toString().padStart(6, '0'),
-                fontSize = 24.sp,
-                fontWeight = FontWeight.Bold,
-                color = theme.pixelOn
-            )
+            // Score
+            Column {
+                Text(
+                    text = "SCORE",
+                    fontSize = 10.sp,
+                    color = theme.pixelOn.copy(alpha = 0.6f)
+                )
+                Text(
+                    text = gameState.score.toString().padStart(6, '0'),
+                    fontSize = 24.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = theme.pixelOn
+                )
+            }
             
-            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            // Level and Lines
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
                     text = "LV.${gameState.level}",
-                    fontSize = 14.sp,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
                     color = theme.pixelOn
                 )
                 Text(
-                    text = "•",
-                    fontSize = 14.sp,
-                    color = theme.pixelOn.copy(alpha = 0.5f)
-                )
-                Text(
-                    text = "${gameState.lines}L",
-                    fontSize = 14.sp,
-                    color = theme.pixelOn
+                    text = "${gameState.lines} lines",
+                    fontSize = 12.sp,
+                    color = theme.pixelOn.copy(alpha = 0.7f)
                 )
             }
             
-            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                SmallIconButton(text = "👤", onClick = onOpenProfile, size = 36.dp)
-                SmallIconButton(text = "⚙️", onClick = onOpenSettings, size = 36.dp)
-            }
+            // Settings button
+            SettingsButton(onClick = onOpenSettings)
         }
         
-        // Game board takes most space
+        Spacer(modifier = Modifier.height(8.dp))
+        
+        // Game board - larger in fullscreen
         Box(
             modifier = Modifier
                 .weight(1f)
-                .fillMaxWidth()
-                .padding(vertical = 4.dp),
+                .fillMaxWidth(),
             contentAlignment = Alignment.Center
         ) {
             GameBoard(
@@ -511,19 +343,17 @@ private fun FullscreenLayout(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(Color.Black.copy(alpha = 0.8f)),
+                        .background(Color.Black.copy(alpha = 0.7f)),
                     contentAlignment = Alignment.Center
                 ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(16.dp)
-                    ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(
-                            text = "⏸️ PAUSED",
-                            fontSize = 28.sp,
+                            text = "⏸ PAUSED",
+                            fontSize = 24.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color.White
                         )
+                        Spacer(modifier = Modifier.height(8.dp))
                         Text(
                             text = "Tap START to resume",
                             fontSize = 14.sp,
@@ -534,13 +364,15 @@ private fun FullscreenLayout(
             }
         }
         
-        // Controls - more compact
+        Spacer(modifier = Modifier.height(8.dp))
+        
+        // Controls
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Left side - D-Pad
+            // D-Pad
             DPad(
                 onUpPress = onHardDrop,
                 onDownPress = onMoveDown,
@@ -552,22 +384,22 @@ private fun FullscreenLayout(
                 buttonSize = 48.dp
             )
             
-            // Center - Start/Reset
+            // Center buttons
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 SmallFunctionButton(
-                    label = if (gameState.status == GameStatus.PAUSED) "▶" else "⏸",
+                    label = if (gameState.status == GameStatus.PAUSED) "RESUME" else "START",
                     onClick = onTogglePause
                 )
                 SmallFunctionButton(
-                    label = "↺",
+                    label = "RESET",
                     onClick = onResetGame
                 )
             }
             
-            // Right side - Rotate
+            // Rotate button
             RotateButton(
                 onClick = onRotate,
                 size = 64.dp
@@ -575,6 +407,113 @@ private fun FullscreenLayout(
         }
         
         Spacer(modifier = Modifier.height(8.dp))
+    }
+}
+
+@Composable
+private fun GameOverOverlay(
+    score: Int,
+    level: Int,
+    lines: Int,
+    highScore: Int,
+    onRestart: () -> Unit
+) {
+    val infiniteTransition = rememberInfiniteTransition(label = "gameOver")
+    val alpha by infiniteTransition.animateFloat(
+        initialValue = 0.7f,
+        targetValue = 0.9f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1000),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "bgAlpha"
+    )
+    
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = alpha)),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Text(
+                text = "GAME OVER",
+                fontSize = 32.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color.Red,
+                letterSpacing = 4.sp
+            )
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            // Score display
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Color.DarkGray.copy(alpha = 0.8f))
+                    .padding(24.dp)
+            ) {
+                Text(
+                    text = "FINAL SCORE",
+                    fontSize = 14.sp,
+                    color = Color.Gray
+                )
+                Text(
+                    text = score.toString().padStart(6, '0'),
+                    fontSize = 36.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFFF4D03F),
+                    letterSpacing = 4.sp
+                )
+                
+                Spacer(modifier = Modifier.height(12.dp))
+                
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(24.dp)
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("LEVEL", fontSize = 10.sp, color = Color.Gray)
+                        Text(
+                            level.toString(),
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                    }
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("LINES", fontSize = 10.sp, color = Color.Gray)
+                        Text(
+                            lines.toString(),
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                    }
+                }
+                
+                if (score >= highScore && score > 0) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = "🏆 NEW HIGH SCORE! 🏆",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFFF4D03F)
+                    )
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            Text(
+                text = "Press START to play again",
+                fontSize = 14.sp,
+                color = Color.White.copy(alpha = 0.7f)
+            )
+        }
     }
 }
 
@@ -603,7 +542,6 @@ private fun PauseIndicator() {
 @Composable
 private fun SmallButtonsRow(
     gameStatus: GameStatus,
-    onStartGame: () -> Unit,
     onTogglePause: () -> Unit,
     onResetGame: () -> Unit,
     onToggleSound: () -> Unit
@@ -621,7 +559,11 @@ private fun SmallButtonsRow(
             onClick = onToggleSound
         )
         SmallFunctionButton(
-            label = if (gameStatus == GameStatus.PAUSED) "RESUME" else "START",
+            label = when (gameStatus) {
+                GameStatus.PAUSED -> "RESUME"
+                GameStatus.GAME_OVER -> "START"
+                else -> "START"
+            },
             onClick = onTogglePause
         )
         SmallFunctionButton(
@@ -659,41 +601,4 @@ private fun ControlsSection(
         
         RotateButton(onClick = onRotate)
     }
-}
-
-@Composable
-private fun SmallIconButton(
-    text: String,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    size: androidx.compose.ui.unit.Dp = 44.dp
-) {
-    val theme = LocalGameTheme.current
-    
-    Box(
-        modifier = modifier
-            .size(size)
-            .clip(CircleShape)
-            .background(theme.buttonSecondary)
-            .shadow(2.dp, CircleShape)
-            .then(
-                Modifier.clickableWithoutRipple { onClick() }
-            ),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            text = text,
-            fontSize = (size.value * 0.4f).sp
-        )
-    }
-}
-
-// Helper extension for clickable without ripple
-@Composable
-private fun Modifier.clickableWithoutRipple(onClick: () -> Unit): Modifier {
-    return this.then(
-        Modifier.pointerInput(Unit) {
-            detectTapGestures(onTap = { onClick() })
-        }
-    )
 }
