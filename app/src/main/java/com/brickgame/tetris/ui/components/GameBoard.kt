@@ -1,23 +1,24 @@
 package com.brickgame.tetris.ui.components
 
 import androidx.compose.animation.core.*
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.material3.Text
 import com.brickgame.tetris.game.TetrisGame
 import com.brickgame.tetris.ui.animations.LineClearAnimationState
 import com.brickgame.tetris.ui.animations.LineClearPhase
@@ -211,9 +212,9 @@ fun InfoPanel(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
-            androidx.compose.material3.Text(
+            Text(
                 text = "NEXT",
-                fontSize = androidx.compose.ui.unit.TextUnit(9f, androidx.compose.ui.unit.TextUnitType.Sp),
+                fontSize = 9.sp,
                 color = theme.textPrimary
             )
             NextPiecePreview(
@@ -235,9 +236,9 @@ private fun InfoItem(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(2.dp)
     ) {
-        androidx.compose.material3.Text(
+        Text(
             text = label,
-            fontSize = androidx.compose.ui.unit.TextUnit(9f, androidx.compose.ui.unit.TextUnitType.Sp),
+            fontSize = 9.sp,
             color = theme.textPrimary
         )
         
@@ -248,10 +249,10 @@ private fun InfoItem(
                 .padding(horizontal = 8.dp, vertical = 4.dp),
             contentAlignment = Alignment.Center
         ) {
-            androidx.compose.material3.Text(
+            Text(
                 text = value,
-                fontSize = androidx.compose.ui.unit.TextUnit(12f, androidx.compose.ui.unit.TextUnitType.Sp),
-                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
                 color = theme.textPrimary
             )
         }
