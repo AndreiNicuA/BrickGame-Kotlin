@@ -35,6 +35,11 @@ class TetrisGame {
     private var nextPiece: Tetromino? = null
     private var isRunning = false
     private var isPaused = false
+    private var difficulty = Difficulty.NORMAL
+    
+    fun setDifficulty(diff: Difficulty) {
+        this.difficulty = diff
+    }
     
     fun startGame() {
         board = Array(BOARD_HEIGHT) { IntArray(BOARD_WIDTH) }
@@ -45,11 +50,12 @@ class TetrisGame {
             GameState(
                 status = GameStatus.PLAYING,
                 score = 0,
-                level = 1,
+                level = difficulty.startLevel,
                 lines = 0,
                 board = board.map { it.toList() },
                 currentPiece = null,
-                nextPiece = null
+                nextPiece = null,
+                difficulty = difficulty
             )
         }
         
@@ -208,9 +214,6 @@ class TetrisGame {
         return false
     }
     
-    /**
-     * Calculate where the ghost piece should appear (where piece will land)
-     */
     private fun calculateGhostY(): Int {
         val piece = currentPiece ?: return currentPosition.y
         
@@ -236,13 +239,19 @@ class TetrisGame {
             }
         }
         
-        val clearedCount = clearCompleteLines()
+        val clearedLines = findCompletedLines()
+        val clearedCount = clearedLines.size
         
         if (clearedCount > 0) {
+            // Store which lines were cleared for animation
             val currentState = _state.value
+            val basePoints = SCORE_TABLE[clearedCount.coerceAtMost(4)] * currentState.level
+            val points = (basePoints * difficulty.scoreMultiplier).toInt()
             val newLines = currentState.lines + clearedCount
-            val newLevel = (newLines / 10) + 1
-            val points = SCORE_TABLE[clearedCount.coerceAtMost(4)] * currentState.level
+            val newLevel = maxOf(difficulty.startLevel, (newLines / 10) + 1)
+            
+            // Clear the lines
+            clearLines(clearedLines)
             
             _state.update { 
                 it.copy(
@@ -250,6 +259,7 @@ class TetrisGame {
                     lines = newLines,
                     level = newLevel.coerceAtMost(20),
                     linesCleared = clearedCount,
+                    clearedLineRows = clearedLines,
                     board = board.map { row -> row.toList() }
                 )
             }
@@ -258,20 +268,20 @@ class TetrisGame {
         spawnPiece()
     }
     
-    private fun clearCompleteLines(): Int {
-        var linesCleared = 0
-        var y = BOARD_HEIGHT - 1
-        
-        while (y >= 0) {
+    private fun findCompletedLines(): List<Int> {
+        val completed = mutableListOf<Int>()
+        for (y in 0 until BOARD_HEIGHT) {
             if (isRowComplete(y)) {
-                removeRow(y)
-                linesCleared++
-            } else {
-                y--
+                completed.add(y)
             }
         }
-        
-        return linesCleared
+        return completed
+    }
+    
+    private fun clearLines(lines: List<Int>) {
+        for (line in lines.sortedDescending()) {
+            removeRow(line)
+        }
     }
     
     private fun isRowComplete(row: Int): Boolean {
@@ -320,7 +330,8 @@ class TetrisGame {
                     PieceState(it.type, Position(0, 0), it.shape.map { row -> row.toList() })
                 },
                 ghostY = ghostY,
-                linesCleared = 0
+                linesCleared = 0,
+                clearedLineRows = emptyList()
             )
         }
     }
@@ -347,11 +358,12 @@ class TetrisGame {
     
     fun getDropSpeed(): Long {
         val level = _state.value.level
-        return (1000 - (level - 1) * 80).coerceAtLeast(100).toLong()
+        val baseSpeed = (1000 - (level - 1) * 80).coerceAtLeast(100).toLong()
+        return (baseSpeed * difficulty.speedMultiplier).toLong().coerceAtLeast(50)
     }
     
     fun clearEvent() {
-        _state.update { it.copy(linesCleared = 0) }
+        _state.update { it.copy(linesCleared = 0, clearedLineRows = emptyList()) }
     }
 }
 
@@ -395,5 +407,7 @@ data class GameState(
     val nextPiece: PieceState? = null,
     val ghostY: Int = 0,
     val linesCleared: Int = 0,
-    val highScore: Int = 0
+    val clearedLineRows: List<Int> = emptyList(),
+    val highScore: Int = 0,
+    val difficulty: Difficulty = Difficulty.NORMAL
 )
