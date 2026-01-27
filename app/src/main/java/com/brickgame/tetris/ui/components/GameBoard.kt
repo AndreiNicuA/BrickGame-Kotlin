@@ -34,41 +34,41 @@ fun GameBoard(
 ) {
     val theme = LocalGameTheme.current
     
-    // Animation progress for clearing lines
-    val infiniteTransition = rememberInfiniteTransition(label = "lineClear")
-    
     val durationMs = (animationDuration * 500).toInt().coerceAtLeast(100)
     
-    val animationProgress by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMs, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "progress"
-    )
+    // Blink animation for RETRO style
+    val infiniteTransition = rememberInfiniteTransition(label = "lineClear")
     
-    // Flash counter for retro blink effect
-    val flashState by infiniteTransition.animateFloat(
+    val blinkState by infiniteTransition.animateFloat(
         initialValue = 0f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(
-            animation = tween(100, easing = LinearEasing),
+            animation = tween(80, easing = LinearEasing),
             repeatMode = RepeatMode.Reverse
         ),
-        label = "flash"
+        label = "blink"
     )
     
-    // Rainbow offset for flashy mode
-    val rainbowOffset by infiniteTransition.animateFloat(
+    // Fade animation for MODERN style  
+    val fadeProgress by infiniteTransition.animateFloat(
         initialValue = 0f,
-        targetValue = 6f,
+        targetValue = 1f,
         animationSpec = infiniteRepeatable(
             animation = tween(durationMs, easing = LinearEasing),
             repeatMode = RepeatMode.Restart
         ),
-        label = "rainbow"
+        label = "fade"
+    )
+    
+    // Wave animation for FLASHY style (LCD-style wave across the line)
+    val waveOffset by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = TetrisGame.BOARD_WIDTH.toFloat(),
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMs, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "wave"
     )
     
     BoxWithConstraints(
@@ -101,7 +101,7 @@ fun GameBoard(
                     val offset = Offset(x * cellSize + gap, y * cellSize + gap)
                     val cellSizeWithGap = Size(cellSize - gap * 2, cellSize - gap * 2)
                     
-                    // Background
+                    // Background (LCD off state)
                     drawRoundRect(
                         color = theme.pixelOff,
                         topLeft = offset,
@@ -109,40 +109,50 @@ fun GameBoard(
                         cornerRadius = CornerRadius(cornerRadius, cornerRadius)
                     )
                     
-                    // Filled cell or clearing animation
+                    // Filled cell
                     if (cellValue > 0) {
+                        val shouldDraw: Boolean
+                        val cellColor: Color
+                        val scale: Float
+                        
                         if (isClearing && animationStyle != AnimationStyle.NONE) {
-                            // Animate clearing cells
-                            val color = when (animationStyle) {
-                                AnimationStyle.NONE -> theme.pixelOn
-                                AnimationStyle.RETRO -> if (flashState > 0.5f) Color.White else theme.pixelOn
+                            // LCD-style animations - same color, different effects
+                            when (animationStyle) {
+                                AnimationStyle.RETRO -> {
+                                    // Classic LCD blink - on/off
+                                    shouldDraw = blinkState > 0.5f
+                                    cellColor = theme.pixelOn
+                                    scale = 1f
+                                }
                                 AnimationStyle.MODERN -> {
-                                    val alpha = animationProgress
-                                    Color(
-                                        red = theme.pixelOn.red + (1f - theme.pixelOn.red) * alpha,
-                                        green = theme.pixelOn.green + (1f - theme.pixelOn.green) * alpha,
-                                        blue = theme.pixelOn.blue + (1f - theme.pixelOn.blue) * alpha,
-                                        alpha = 1f - (animationProgress * 0.3f)
-                                    )
+                                    // Fade out effect
+                                    shouldDraw = true
+                                    val alpha = 1f - (fadeProgress * 0.7f)
+                                    cellColor = theme.pixelOn.copy(alpha = alpha)
+                                    scale = 1f - (fadeProgress * 0.15f)
                                 }
                                 AnimationStyle.FLASHY -> {
-                                    val colors = listOf(
-                                        Color(0xFFFF0000), Color(0xFFFF7F00), Color(0xFFFFFF00),
-                                        Color(0xFF00FF00), Color(0xFF0000FF), Color(0xFF8B00FF)
-                                    )
-                                    val idx = ((x + rainbowOffset.toInt()) % colors.size)
-                                    colors[idx]
+                                    // Wave sweep across line (LCD style)
+                                    val wavePos = waveOffset
+                                    val distFromWave = kotlin.math.abs(x - wavePos)
+                                    shouldDraw = distFromWave > 1.5f
+                                    cellColor = theme.pixelOn
+                                    scale = if (distFromWave < 3f) 0.9f else 1f
+                                }
+                                else -> {
+                                    shouldDraw = true
+                                    cellColor = theme.pixelOn
+                                    scale = 1f
                                 }
                             }
-                            
-                            // Scale effect
-                            val scale = when (animationStyle) {
-                                AnimationStyle.RETRO -> 1f
-                                AnimationStyle.MODERN -> 1f - (animationProgress * 0.2f)
-                                AnimationStyle.FLASHY -> 1f + sin(animationProgress * 6.28f) * 0.1f
-                                else -> 1f
-                            }
-                            
+                        } else {
+                            // Normal cell
+                            shouldDraw = true
+                            cellColor = theme.pixelOn
+                            scale = 1f
+                        }
+                        
+                        if (shouldDraw) {
                             val scaledSize = Size(cellSizeWithGap.width * scale, cellSizeWithGap.height * scale)
                             val scaledOffset = Offset(
                                 offset.x + (cellSizeWithGap.width - scaledSize.width) / 2,
@@ -150,18 +160,10 @@ fun GameBoard(
                             )
                             
                             drawRoundRect(
-                                color = color,
+                                color = cellColor,
                                 topLeft = scaledOffset,
                                 size = scaledSize,
                                 cornerRadius = CornerRadius(cornerRadius * scale, cornerRadius * scale)
-                            )
-                        } else {
-                            // Normal cell
-                            drawRoundRect(
-                                color = theme.pixelOn,
-                                topLeft = offset,
-                                size = cellSizeWithGap,
-                                cornerRadius = CornerRadius(cornerRadius, cornerRadius)
                             )
                         }
                     }
@@ -184,8 +186,8 @@ private fun DrawScope.drawGhostPiece(
     cornerRadius: Float,
     baseColor: Color
 ) {
-    val ghostColor = baseColor.copy(alpha = 0.2f)
-    val outlineColor = baseColor.copy(alpha = 0.4f)
+    val ghostColor = baseColor.copy(alpha = 0.25f)
+    val outlineColor = baseColor.copy(alpha = 0.45f)
     
     for (py in piece.shape.indices) {
         for (px in piece.shape[py].indices) {
@@ -209,7 +211,7 @@ private fun DrawScope.drawGhostPiece(
                         topLeft = offset,
                         size = cellSizeWithGap,
                         cornerRadius = CornerRadius(cornerRadius, cornerRadius),
-                        style = Stroke(width = gap * 0.8f)
+                        style = Stroke(width = gap)
                     )
                 }
             }
