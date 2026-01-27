@@ -1,7 +1,6 @@
 package com.brickgame.tetris.ui.screens
 
 import android.app.Application
-import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.brickgame.tetris.audio.SoundManager
@@ -47,10 +46,15 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private val _scoreHistory = MutableStateFlow<List<ScoreEntry>>(emptyList())
     val scoreHistory: StateFlow<List<ScoreEntry>> = _scoreHistory.asStateFlow()
     
+    // Track lines being cleared for animation
+    private val _clearingLines = MutableStateFlow<List<Int>>(emptyList())
+    val clearingLines: StateFlow<List<Int>> = _clearingLines.asStateFlow()
+    
     private var gameLoopJob: Job? = null
     private var leftRepeatJob: Job? = null
     private var rightRepeatJob: Job? = null
     private var downRepeatJob: Job? = null
+    private var animationJob: Job? = null
     private var lastLevel = 1
     
     init {
@@ -70,11 +74,14 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             val soundEnabled = settingsRepository.soundEnabled.first()
             val soundVolume = settingsRepository.soundVolume.first()
             val soundStyle = try { SoundStyle.valueOf(settingsRepository.soundStyle.first()) } catch (e: Exception) { SoundStyle.RETRO_BEEP }
+            val animationEnabled = settingsRepository.animationEnabled.first()
             val animationStyle = try { AnimationStyle.valueOf(settingsRepository.animationStyle.first()) } catch (e: Exception) { AnimationStyle.MODERN }
+            val animationDuration = settingsRepository.animationDuration.first()
             val stylePreset = try { StylePreset.valueOf(settingsRepository.stylePreset.first()) } catch (e: Exception) { StylePreset.CUSTOM }
             val highScore = settingsRepository.highScore.first()
             val playerName = playerRepository.playerName.first()
-            val layoutMode = try { LayoutMode.valueOf(settingsRepository.layoutMode.first()) } catch (e: Exception) { LayoutMode.CLASSIC }
+            val layoutModeStr = settingsRepository.layoutMode.first()
+            val layoutMode = try { LayoutMode.valueOf(layoutModeStr) } catch (e: Exception) { LayoutMode.CLASSIC }
             val ghostPieceEnabled = settingsRepository.ghostPieceEnabled.first()
             val difficulty = try { Difficulty.valueOf(settingsRepository.difficulty.first()) } catch (e: Exception) { Difficulty.NORMAL }
             
@@ -93,7 +100,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 soundEnabled = soundEnabled,
                 soundVolume = soundVolume,
                 soundStyle = soundStyle,
+                animationEnabled = animationEnabled,
                 animationStyle = animationStyle,
+                animationDuration = animationDuration,
                 stylePreset = stylePreset,
                 highScore = highScore,
                 playerName = playerName,
@@ -105,7 +114,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     }
     
     private fun observeScoreHistory() {
-        viewModelScope.launch { playerRepository.scoreHistory.collect { _scoreHistory.value = it } }
+        viewModelScope.launch {
+            playerRepository.scoreHistory.collect { _scoreHistory.value = it }
+        }
     }
     
     private fun observeGameState() {
@@ -117,15 +128,32 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                     lastLevel = state.level
                 }
                 
-                if (state.linesCleared > 0) {
+                // Handle line clear animation
+                if (state.linesCleared > 0 && state.clearedLineRows.isNotEmpty()) {
                     vibrationManager.vibrateClear(state.linesCleared)
                     soundManager.playClear()
+                    
+                    if (_uiState.value.animationEnabled) {
+                        // Start animation
+                        _clearingLines.value = state.clearedLineRows
+                        
+                        // Clear after duration
+                        animationJob?.cancel()
+                        animationJob = viewModelScope.launch {
+                            val durationMs = (_uiState.value.animationDuration * 1000).toLong()
+                            delay(durationMs)
+                            _clearingLines.value = emptyList()
+                        }
+                    }
                 }
                 
                 if (state.status == GameStatus.GAME_OVER && state.score > 0) {
                     vibrationManager.vibrateGameOver()
                     soundManager.playGameOver()
-                    playerRepository.addScore(_uiState.value.playerName, state.score, state.level, state.lines)
+                    
+                    val playerName = _uiState.value.playerName
+                    playerRepository.addScore(playerName, state.score, state.level, state.lines)
+                    
                     if (state.score > _uiState.value.highScore) {
                         _uiState.update { it.copy(highScore = state.score) }
                         settingsRepository.setHighScore(state.score)
@@ -153,6 +181,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     fun resetGame() {
         stopGameLoop()
         stopAllRepeats()
+        _clearingLines.value = emptyList()
         lastLevel = _uiState.value.difficulty.startLevel
         game.setDifficulty(_uiState.value.difficulty)
         game.startGame()
@@ -192,7 +221,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     
     fun setPlayerName(name: String) { _uiState.update { it.copy(playerName = name) }; viewModelScope.launch { playerRepository.setPlayerName(name) } }
     fun clearScoreHistory() { viewModelScope.launch { playerRepository.clearHistory() } }
-    fun setTheme(name: String) { _currentTheme.value = GameThemes.getThemeByName(name); viewModelScope.launch { settingsRepository.setThemeName(name) } }
+    fun setTheme(themeName: String) { _currentTheme.value = GameThemes.getThemeByName(themeName); viewModelScope.launch { settingsRepository.setThemeName(themeName) } }
     
     fun setVibrationEnabled(enabled: Boolean) { _uiState.update { it.copy(vibrationEnabled = enabled) }; vibrationManager.setEnabled(enabled); viewModelScope.launch { settingsRepository.setVibrationEnabled(enabled) }; if (enabled) vibrationManager.testVibration() }
     fun setVibrationIntensity(intensity: Float) { _uiState.update { it.copy(vibrationIntensity = intensity) }; vibrationManager.setIntensity(intensity); viewModelScope.launch { settingsRepository.setVibrationIntensity(intensity) } }
@@ -202,7 +231,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     fun setSoundVolume(volume: Float) { _uiState.update { it.copy(soundVolume = volume) }; soundManager.setVolume(volume); viewModelScope.launch { settingsRepository.setSoundVolume(volume) } }
     fun setSoundStyle(style: SoundStyle) { _uiState.update { it.copy(soundStyle = style, stylePreset = StylePreset.CUSTOM) }; soundManager.setSoundStyle(style); viewModelScope.launch { settingsRepository.setSoundStyle(style.name); settingsRepository.setStylePreset(StylePreset.CUSTOM.name) }; soundManager.playMove() }
     
+    fun setAnimationEnabled(enabled: Boolean) { _uiState.update { it.copy(animationEnabled = enabled) }; viewModelScope.launch { settingsRepository.setAnimationEnabled(enabled) } }
     fun setAnimationStyle(style: AnimationStyle) { _uiState.update { it.copy(animationStyle = style, stylePreset = StylePreset.CUSTOM) }; viewModelScope.launch { settingsRepository.setAnimationStyle(style.name); settingsRepository.setStylePreset(StylePreset.CUSTOM.name) } }
+    fun setAnimationDuration(duration: Float) { _uiState.update { it.copy(animationDuration = duration) }; viewModelScope.launch { settingsRepository.setAnimationDuration(duration) } }
     
     fun applyStylePreset(preset: StylePreset) {
         _uiState.update { it.copy(stylePreset = preset, animationStyle = preset.animationStyle, vibrationStyle = preset.vibrationStyle, soundStyle = preset.soundStyle) }
@@ -215,9 +246,14 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     
     fun setLayoutMode(mode: LayoutMode) { _uiState.update { it.copy(layoutMode = mode) }; viewModelScope.launch { settingsRepository.setLayoutMode(mode.name) } }
     fun setGhostPieceEnabled(enabled: Boolean) { _uiState.update { it.copy(ghostPieceEnabled = enabled) }; viewModelScope.launch { settingsRepository.setGhostPieceEnabled(enabled) } }
-    fun setDifficulty(diff: Difficulty) { _uiState.update { it.copy(difficulty = diff) }; game.setDifficulty(diff); viewModelScope.launch { settingsRepository.setDifficulty(diff.name) } }
     
-    override fun onCleared() { super.onCleared(); stopGameLoop(); stopAllRepeats(); soundManager.release() }
+    fun setDifficulty(diff: Difficulty) {
+        _uiState.update { it.copy(difficulty = diff) }
+        game.setDifficulty(diff)
+        viewModelScope.launch { settingsRepository.setDifficulty(diff.name) }
+    }
+    
+    override fun onCleared() { super.onCleared(); stopGameLoop(); stopAllRepeats(); animationJob?.cancel(); soundManager.release() }
 }
 
 data class UiState(
@@ -228,7 +264,9 @@ data class UiState(
     val soundEnabled: Boolean = true,
     val soundVolume: Float = 0.7f,
     val soundStyle: SoundStyle = SoundStyle.RETRO_BEEP,
+    val animationEnabled: Boolean = true,
     val animationStyle: AnimationStyle = AnimationStyle.MODERN,
+    val animationDuration: Float = 0.5f,
     val stylePreset: StylePreset = StylePreset.CUSTOM,
     val highScore: Int = 0,
     val playerName: String = "Player",
