@@ -18,7 +18,7 @@ class SettingsRepository(private val context: Context) {
         private val VIBRATION_ENABLED = booleanPreferencesKey("vibration_enabled")
         private val SOUND_ENABLED = booleanPreferencesKey("sound_enabled")
         private val HIGH_SCORE = intPreferencesKey("high_score")
-        private val IS_FULLSCREEN = booleanPreferencesKey("is_fullscreen")
+        private val LAYOUT_MODE = stringPreferencesKey("layout_mode")
     }
     
     // Theme
@@ -30,7 +30,7 @@ class SettingsRepository(private val context: Context) {
         context.dataStore.edit { it[THEME_NAME] = name }
     }
     
-    // Vibration
+    // Vibration - default TRUE
     val vibrationEnabled: Flow<Boolean> = context.dataStore.data
         .catch { if (it is IOException) emit(emptyPreferences()) else throw it }
         .map { it[VIBRATION_ENABLED] ?: true }
@@ -39,7 +39,7 @@ class SettingsRepository(private val context: Context) {
         context.dataStore.edit { it[VIBRATION_ENABLED] = enabled }
     }
     
-    // Sound
+    // Sound - default TRUE
     val soundEnabled: Flow<Boolean> = context.dataStore.data
         .catch { if (it is IOException) emit(emptyPreferences()) else throw it }
         .map { it[SOUND_ENABLED] ?: true }
@@ -57,12 +57,12 @@ class SettingsRepository(private val context: Context) {
         context.dataStore.edit { it[HIGH_SCORE] = score }
     }
     
-    // Fullscreen mode
-    val isFullscreen: Flow<Boolean> = context.dataStore.data
+    // Layout mode: CLASSIC, MODERN, FULLSCREEN
+    val layoutMode: Flow<String> = context.dataStore.data
         .catch { if (it is IOException) emit(emptyPreferences()) else throw it }
-        .map { it[IS_FULLSCREEN] ?: false }
+        .map { it[LAYOUT_MODE] ?: "CLASSIC" }
     
-    suspend fun setFullscreen(enabled: Boolean) {
-        context.dataStore.edit { it[IS_FULLSCREEN] = enabled }
+    suspend fun setLayoutMode(mode: String) {
+        context.dataStore.edit { it[LAYOUT_MODE] = mode }
     }
 }
