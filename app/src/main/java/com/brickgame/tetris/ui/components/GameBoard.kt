@@ -20,11 +20,7 @@ import com.brickgame.tetris.game.TetrisGame
 import com.brickgame.tetris.ui.styles.AnimationStyle
 import com.brickgame.tetris.ui.theme.LocalGameTheme
 import kotlin.math.sin
-import kotlin.random.Random
 
-/**
- * Main game board with ghost piece and line clear animations
- */
 @Composable
 fun GameBoard(
     board: List<List<Int>>,
@@ -32,30 +28,48 @@ fun GameBoard(
     currentPiece: PieceState? = null,
     ghostY: Int = 0,
     showGhost: Boolean = true,
-    clearedLines: List<Int> = emptyList(),
-    animationStyle: AnimationStyle = AnimationStyle.MODERN
+    clearingLines: List<Int> = emptyList(),
+    animationStyle: AnimationStyle = AnimationStyle.MODERN,
+    animationDuration: Float = 0.5f
 ) {
     val theme = LocalGameTheme.current
     
-    // Animation for cleared lines
+    // Animation progress for clearing lines
     val infiniteTransition = rememberInfiniteTransition(label = "lineClear")
+    
+    val durationMs = (animationDuration * 500).toInt().coerceAtLeast(100)
+    
     val animationProgress by infiniteTransition.animateFloat(
         initialValue = 0f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(
-            animation = tween(300, easing = LinearEasing),
+            animation = tween(durationMs, easing = LinearEasing),
             repeatMode = RepeatMode.Restart
         ),
         label = "progress"
     )
     
-    // Flash animation
-    var flashPhase by remember { mutableStateOf(0) }
-    LaunchedEffect(clearedLines) {
-        if (clearedLines.isNotEmpty()) {
-            flashPhase = (flashPhase + 1) % 10
-        }
-    }
+    // Flash counter for retro blink effect
+    val flashState by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(100, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "flash"
+    )
+    
+    // Rainbow offset for flashy mode
+    val rainbowOffset by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 6f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMs, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "rainbow"
+    )
     
     BoxWithConstraints(
         modifier = modifier
@@ -82,7 +96,7 @@ fun GameBoard(
             for (y in 0 until TetrisGame.BOARD_HEIGHT) {
                 for (x in 0 until TetrisGame.BOARD_WIDTH) {
                     val cellValue = board[y][x]
-                    val isClearing = clearedLines.contains(y)
+                    val isClearing = clearingLines.contains(y)
                     
                     val offset = Offset(x * cellSize + gap, y * cellSize + gap)
                     val cellSizeWithGap = Size(cellSize - gap * 2, cellSize - gap * 2)
@@ -97,34 +111,59 @@ fun GameBoard(
                     
                     // Filled cell or clearing animation
                     if (cellValue > 0) {
-                        val color = if (isClearing) {
-                            getLineClearColor(animationStyle, animationProgress, x, flashPhase, theme.pixelOn)
-                        } else {
-                            theme.pixelOn
-                        }
-                        
-                        // Scale effect for clearing
-                        val scale = if (isClearing && animationStyle != AnimationStyle.NONE) {
-                            when (animationStyle) {
-                                AnimationStyle.RETRO -> if (animationProgress > 0.5f) 1f else 0f
-                                AnimationStyle.MODERN -> 1f - (animationProgress * 0.3f)
+                        if (isClearing && animationStyle != AnimationStyle.NONE) {
+                            // Animate clearing cells
+                            val color = when (animationStyle) {
+                                AnimationStyle.NONE -> theme.pixelOn
+                                AnimationStyle.RETRO -> if (flashState > 0.5f) Color.White else theme.pixelOn
+                                AnimationStyle.MODERN -> {
+                                    val alpha = animationProgress
+                                    Color(
+                                        red = theme.pixelOn.red + (1f - theme.pixelOn.red) * alpha,
+                                        green = theme.pixelOn.green + (1f - theme.pixelOn.green) * alpha,
+                                        blue = theme.pixelOn.blue + (1f - theme.pixelOn.blue) * alpha,
+                                        alpha = 1f - (animationProgress * 0.3f)
+                                    )
+                                }
+                                AnimationStyle.FLASHY -> {
+                                    val colors = listOf(
+                                        Color(0xFFFF0000), Color(0xFFFF7F00), Color(0xFFFFFF00),
+                                        Color(0xFF00FF00), Color(0xFF0000FF), Color(0xFF8B00FF)
+                                    )
+                                    val idx = ((x + rainbowOffset.toInt()) % colors.size)
+                                    colors[idx]
+                                }
+                            }
+                            
+                            // Scale effect
+                            val scale = when (animationStyle) {
+                                AnimationStyle.RETRO -> 1f
+                                AnimationStyle.MODERN -> 1f - (animationProgress * 0.2f)
                                 AnimationStyle.FLASHY -> 1f + sin(animationProgress * 6.28f) * 0.1f
                                 else -> 1f
                             }
-                        } else 1f
-                        
-                        val scaledSize = Size(cellSizeWithGap.width * scale, cellSizeWithGap.height * scale)
-                        val scaledOffset = Offset(
-                            offset.x + (cellSizeWithGap.width - scaledSize.width) / 2,
-                            offset.y + (cellSizeWithGap.height - scaledSize.height) / 2
-                        )
-                        
-                        drawRoundRect(
-                            color = color,
-                            topLeft = scaledOffset,
-                            size = scaledSize,
-                            cornerRadius = CornerRadius(cornerRadius * scale, cornerRadius * scale)
-                        )
+                            
+                            val scaledSize = Size(cellSizeWithGap.width * scale, cellSizeWithGap.height * scale)
+                            val scaledOffset = Offset(
+                                offset.x + (cellSizeWithGap.width - scaledSize.width) / 2,
+                                offset.y + (cellSizeWithGap.height - scaledSize.height) / 2
+                            )
+                            
+                            drawRoundRect(
+                                color = color,
+                                topLeft = scaledOffset,
+                                size = scaledSize,
+                                cornerRadius = CornerRadius(cornerRadius * scale, cornerRadius * scale)
+                            )
+                        } else {
+                            // Normal cell
+                            drawRoundRect(
+                                color = theme.pixelOn,
+                                topLeft = offset,
+                                size = cellSizeWithGap,
+                                cornerRadius = CornerRadius(cornerRadius, cornerRadius)
+                            )
+                        }
                     }
                 }
             }
@@ -133,44 +172,6 @@ fun GameBoard(
             if (showGhost && currentPiece != null && ghostY > currentPiece.position.y) {
                 drawGhostPiece(currentPiece, ghostY, cellSize, gap, cornerRadius, theme.pixelOn)
             }
-        }
-    }
-}
-
-private fun getLineClearColor(
-    style: AnimationStyle,
-    progress: Float,
-    x: Int,
-    phase: Int,
-    baseColor: Color
-): Color {
-    return when (style) {
-        AnimationStyle.NONE -> baseColor
-        
-        AnimationStyle.RETRO -> {
-            // Simple blink
-            if (progress > 0.5f) Color.White else baseColor
-        }
-        
-        AnimationStyle.MODERN -> {
-            // Smooth fade to white
-            val alpha = progress
-            Color(
-                red = baseColor.red + (1f - baseColor.red) * alpha,
-                green = baseColor.green + (1f - baseColor.green) * alpha,
-                blue = baseColor.blue + (1f - baseColor.blue) * alpha,
-                alpha = 1f
-            )
-        }
-        
-        AnimationStyle.FLASHY -> {
-            // Rainbow wave effect
-            val colors = listOf(
-                Color(0xFFFF0000), Color(0xFFFF7F00), Color(0xFFFFFF00),
-                Color(0xFF00FF00), Color(0xFF0000FF), Color(0xFF8B00FF)
-            )
-            val colorIndex = ((x + phase + (progress * 10).toInt()) % colors.size)
-            colors[colorIndex]
         }
     }
 }
@@ -216,27 +217,15 @@ private fun DrawScope.drawGhostPiece(
     }
 }
 
-/**
- * Next piece preview
- */
 @Composable
-fun NextPiecePreview(
-    shape: List<List<Int>>?,
-    modifier: Modifier = Modifier
-) {
+fun NextPiecePreview(shape: List<List<Int>>?, modifier: Modifier = Modifier) {
     val theme = LocalGameTheme.current
     
-    Box(
-        modifier = modifier
-            .clip(RoundedCornerShape(4.dp))
-            .background(theme.pixelOff)
-            .padding(4.dp)
-    ) {
+    Box(modifier = modifier.clip(RoundedCornerShape(4.dp)).background(theme.pixelOff).padding(4.dp)) {
         if (shape != null) {
             Canvas(modifier = Modifier.fillMaxSize()) {
                 val rows = shape.size
                 val cols = shape.maxOfOrNull { it.size } ?: 0
-                
                 if (rows == 0 || cols == 0) return@Canvas
                 
                 val cellSize = minOf(size.width / cols, size.height / rows)
