@@ -1,21 +1,18 @@
 package com.brickgame.tetris.game
 
+import android.util.Log
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 
-/**
- * Tetris Game Engine
- * Handles all game logic, board state, and piece management
- */
 class TetrisGame {
     
     companion object {
+        private const val TAG = "TetrisGame"
         const val BOARD_WIDTH = 10
         const val BOARD_HEIGHT = 20
         
-        // Tetromino shapes (rotations are generated)
         val TETROMINOS = mapOf(
             TetrominoType.I to arrayOf(intArrayOf(1, 1, 1, 1)),
             TetrominoType.O to arrayOf(intArrayOf(1, 1), intArrayOf(1, 1)),
@@ -26,30 +23,20 @@ class TetrisGame {
             TetrominoType.L to arrayOf(intArrayOf(0, 0, 1), intArrayOf(1, 1, 1))
         )
         
-        // Scoring table
         val SCORE_TABLE = intArrayOf(0, 100, 300, 500, 800)
     }
     
-    // Game state
     private val _state = MutableStateFlow(GameState())
     val state: StateFlow<GameState> = _state.asStateFlow()
     
-    // Board state (0 = empty, 1+ = filled)
     private var board = Array(BOARD_HEIGHT) { IntArray(BOARD_WIDTH) }
-    
-    // Current piece
     private var currentPiece: Tetromino? = null
     private var currentPosition = Position(0, 0)
-    
-    // Next piece
     private var nextPiece: Tetromino? = null
-    
-    // Game control
     private var isRunning = false
     private var isPaused = false
     
     fun startGame() {
-        // Reset everything
         board = Array(BOARD_HEIGHT) { IntArray(BOARD_WIDTH) }
         currentPiece = null
         nextPiece = null
@@ -69,7 +56,6 @@ class TetrisGame {
         isRunning = true
         isPaused = false
         
-        // Spawn first pieces
         nextPiece = generateRandomPiece()
         spawnPiece()
     }
@@ -92,10 +78,8 @@ class TetrisGame {
         if (isPaused) resumeGame() else pauseGame()
     }
     
-    // Check if game is currently paused
     fun isPaused(): Boolean = isPaused
     
-    // Check if game is running (not menu or game over)
     fun isGameActive(): Boolean = isRunning && _state.value.status != GameStatus.MENU && _state.value.status != GameStatus.GAME_OVER
     
     private fun generateRandomPiece(): Tetromino {
@@ -112,7 +96,6 @@ class TetrisGame {
         val startX = (BOARD_WIDTH - piece.width) / 2
         currentPosition = Position(startX, 0)
         
-        // Check if spawn position is valid
         if (checkCollision(piece.shape, currentPosition)) {
             gameOver()
             return
@@ -175,14 +158,12 @@ class TetrisGame {
         val piece = currentPiece ?: return false
         val rotated = rotateShape(piece.shape)
         
-        // Try normal rotation
         if (!checkCollision(rotated, currentPosition)) {
             currentPiece = piece.copy(shape = rotated)
             updateState()
             return true
         }
         
-        // Try wall kicks
         val kicks = listOf(-1, 1, -2, 2)
         for (kick in kicks) {
             val kickedPos = Position(currentPosition.x + kick, currentPosition.y)
@@ -207,6 +188,7 @@ class TetrisGame {
                 rotated[x][rows - 1 - y] = shape[y][x]
             }
         }
+        
         return rotated
     }
     
@@ -217,11 +199,8 @@ class TetrisGame {
                     val boardX = pos.x + x
                     val boardY = pos.y + y
                     
-                    // Check boundaries
                     if (boardX < 0 || boardX >= BOARD_WIDTH) return true
                     if (boardY >= BOARD_HEIGHT) return true
-                    
-                    // Check collision with locked pieces
                     if (boardY >= 0 && board[boardY][boardX] != 0) return true
                 }
             }
@@ -245,28 +224,25 @@ class TetrisGame {
             }
         }
         
-        // Check for completed lines - FIXED ALGORITHM
-        val clearedLines = findAndClearLines()
+        // IMMEDIATELY check and clear lines
+        val clearedCount = clearCompleteLines()
         
-        if (clearedLines.isNotEmpty()) {
-            val linesCleared = clearedLines.size
+        if (clearedCount > 0) {
             val currentState = _state.value
-            val newLines = currentState.lines + linesCleared
+            val newLines = currentState.lines + clearedCount
             val newLevel = (newLines / 10) + 1
-            val points = SCORE_TABLE[linesCleared.coerceAtMost(4)] * currentState.level
+            val points = SCORE_TABLE[clearedCount.coerceAtMost(4)] * currentState.level
+            
+            Log.d(TAG, "Cleared $clearedCount lines! Score: +$points")
             
             _state.update { 
                 it.copy(
                     score = it.score + points,
                     lines = newLines,
                     level = newLevel.coerceAtMost(20),
-                    clearedRows = clearedLines,
-                    lastEvent = GameEvent.LINES_CLEARED,
                     board = board.map { row -> row.toList() }
                 )
             }
-        } else {
-            _state.update { it.copy(lastEvent = GameEvent.PIECE_LOCKED) }
         }
         
         // Spawn next piece
@@ -274,46 +250,47 @@ class TetrisGame {
     }
     
     /**
-     * FIXED line clearing algorithm
-     * Properly detects and removes completed lines
+     * Clear complete lines and return count
+     * This modifies the board directly
      */
-    private fun findAndClearLines(): List<Int> {
-        val clearedRows = mutableListOf<Int>()
+    private fun clearCompleteLines(): Int {
+        var linesCleared = 0
+        var y = BOARD_HEIGHT - 1
         
-        // Find all complete rows (check from bottom to top)
-        for (y in BOARD_HEIGHT - 1 downTo 0) {
-            var isComplete = true
-            for (x in 0 until BOARD_WIDTH) {
-                if (board[y][x] == 0) {
-                    isComplete = false
-                    break
-                }
-            }
-            if (isComplete) {
-                clearedRows.add(y)
+        while (y >= 0) {
+            if (isRowComplete(y)) {
+                Log.d(TAG, "Row $y is complete, clearing...")
+                removeRow(y)
+                linesCleared++
+                // Don't decrement y - check same position again since rows shifted down
+            } else {
+                y--
             }
         }
         
-        if (clearedRows.isEmpty()) return emptyList()
-        
-        // Sort rows in descending order (bottom to top)
-        val sortedRows = clearedRows.sortedDescending()
-        
-        // Remove each cleared row and shift everything down
-        for (clearedRow in sortedRows) {
-            // Shift all rows above the cleared row down by one
-            for (y in clearedRow downTo 1) {
-                for (x in 0 until BOARD_WIDTH) {
-                    board[y][x] = board[y - 1][x]
-                }
-            }
-            // Clear the top row
-            for (x in 0 until BOARD_WIDTH) {
-                board[0][x] = 0
+        return linesCleared
+    }
+    
+    private fun isRowComplete(row: Int): Boolean {
+        for (x in 0 until BOARD_WIDTH) {
+            if (board[row][x] == 0) {
+                return false
             }
         }
-        
-        return clearedRows
+        return true
+    }
+    
+    private fun removeRow(row: Int) {
+        // Shift all rows above down by one
+        for (y in row downTo 1) {
+            for (x in 0 until BOARD_WIDTH) {
+                board[y][x] = board[y - 1][x]
+            }
+        }
+        // Clear top row
+        for (x in 0 until BOARD_WIDTH) {
+            board[0][x] = 0
+        }
     }
     
     private fun gameOver() {
@@ -321,7 +298,8 @@ class TetrisGame {
         _state.update { 
             it.copy(
                 status = GameStatus.GAME_OVER,
-                lastEvent = GameEvent.GAME_OVER
+                lastEvent = GameEvent.GAME_OVER,
+                board = board.map { row -> row.toList() }
             )
         }
     }
@@ -332,7 +310,6 @@ class TetrisGame {
     
     private fun updateState() {
         val displayBoard = getDisplayBoard()
-        val ghostY = getGhostPosition()
         
         _state.update { state ->
             state.copy(
@@ -343,7 +320,6 @@ class TetrisGame {
                 nextPiece = nextPiece?.let {
                     PieceState(it.type, Position(0, 0), it.shape.map { row -> row.toList() })
                 },
-                ghostY = ghostY,
                 clearedRows = emptyList()
             )
         }
@@ -352,7 +328,6 @@ class TetrisGame {
     private fun getDisplayBoard(): List<List<Int>> {
         val display = board.map { it.toMutableList() }
         
-        // Add current piece
         currentPiece?.let { piece ->
             for (y in piece.shape.indices) {
                 for (x in piece.shape[y].indices) {
@@ -367,32 +342,20 @@ class TetrisGame {
             }
         }
         
-        return display
-    }
-    
-    private fun getGhostPosition(): Int {
-        val piece = currentPiece ?: return currentPosition.y
-        var ghostY = currentPosition.y
-        
-        while (!checkCollision(piece.shape, Position(currentPosition.x, ghostY + 1))) {
-            ghostY++
-        }
-        
-        return ghostY
+        return display.map { it.toList() }
     }
     
     fun getDropSpeed(): Long {
         val level = _state.value.level
-        return (1000L - (level - 1) * 100L).coerceAtLeast(50L)
+        return (1000 - (level - 1) * 80).coerceAtLeast(100).toLong()
     }
     
     fun clearEvent() {
-        _state.update { it.copy(lastEvent = GameEvent.NONE, clearedRows = emptyList()) }
+        _state.update { it.copy(clearedRows = emptyList(), lastEvent = GameEvent.NONE) }
     }
 }
 
-// Data classes
-data class Position(val x: Int, val y: Int)
+enum class TetrominoType { I, O, T, S, Z, J, L }
 
 data class Tetromino(
     val type: TetrominoType,
@@ -407,24 +370,18 @@ data class Tetromino(
         return type == other.type && shape.contentDeepEquals(other.shape)
     }
     
-    override fun hashCode(): Int = 31 * type.hashCode() + shape.contentDeepHashCode()
+    override fun hashCode(): Int {
+        return 31 * type.hashCode() + shape.contentDeepHashCode()
+    }
 }
 
-enum class TetrominoType {
-    I, O, T, S, Z, J, L
-}
+data class Position(val x: Int, val y: Int)
 
-enum class GameStatus {
-    MENU, PLAYING, PAUSED, GAME_OVER
-}
+enum class MoveResult { MOVED, LOCKED, BLOCKED }
 
-enum class MoveResult {
-    MOVED, LOCKED, BLOCKED
-}
+enum class GameStatus { MENU, PLAYING, PAUSED, GAME_OVER }
 
-enum class GameEvent {
-    NONE, PIECE_LOCKED, LINES_CLEARED, LEVEL_UP, GAME_OVER
-}
+enum class GameEvent { NONE, PIECE_LOCKED, LINES_CLEARED, GAME_OVER }
 
 data class PieceState(
     val type: TetrominoType,
@@ -437,11 +394,11 @@ data class GameState(
     val score: Int = 0,
     val level: Int = 1,
     val lines: Int = 0,
-    val highScore: Int = 0,
-    val board: List<List<Int>> = List(TetrisGame.BOARD_HEIGHT) { List(TetrisGame.BOARD_WIDTH) { 0 } },
+    val board: List<List<Int>> = List(20) { List(10) { 0 } },
     val currentPiece: PieceState? = null,
     val nextPiece: PieceState? = null,
     val ghostY: Int = 0,
     val clearedRows: List<Int> = emptyList(),
-    val lastEvent: GameEvent = GameEvent.NONE
+    val lastEvent: GameEvent = GameEvent.NONE,
+    val highScore: Int = 0
 )
