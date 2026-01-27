@@ -21,7 +21,9 @@ class SettingsRepository(private val context: Context) {
         private val SOUND_ENABLED = booleanPreferencesKey("sound_enabled")
         private val SOUND_VOLUME = floatPreferencesKey("sound_volume")
         private val SOUND_STYLE = stringPreferencesKey("sound_style")
+        private val ANIMATION_ENABLED = booleanPreferencesKey("animation_enabled")
         private val ANIMATION_STYLE = stringPreferencesKey("animation_style")
+        private val ANIMATION_DURATION = floatPreferencesKey("animation_duration")
         private val STYLE_PRESET = stringPreferencesKey("style_preset")
         private val HIGH_SCORE = intPreferencesKey("high_score")
         private val LAYOUT_MODE = stringPreferencesKey("layout_mode")
@@ -50,8 +52,14 @@ class SettingsRepository(private val context: Context) {
     val soundStyle: Flow<String> = context.dataStore.data.catch { if (it is IOException) emit(emptyPreferences()) else throw it }.map { it[SOUND_STYLE] ?: "RETRO_BEEP" }
     suspend fun setSoundStyle(style: String) { context.dataStore.edit { it[SOUND_STYLE] = style } }
     
+    val animationEnabled: Flow<Boolean> = context.dataStore.data.catch { if (it is IOException) emit(emptyPreferences()) else throw it }.map { it[ANIMATION_ENABLED] ?: true }
+    suspend fun setAnimationEnabled(enabled: Boolean) { context.dataStore.edit { it[ANIMATION_ENABLED] = enabled } }
+    
     val animationStyle: Flow<String> = context.dataStore.data.catch { if (it is IOException) emit(emptyPreferences()) else throw it }.map { it[ANIMATION_STYLE] ?: "MODERN" }
     suspend fun setAnimationStyle(style: String) { context.dataStore.edit { it[ANIMATION_STYLE] = style } }
+    
+    val animationDuration: Flow<Float> = context.dataStore.data.catch { if (it is IOException) emit(emptyPreferences()) else throw it }.map { it[ANIMATION_DURATION] ?: 0.5f }
+    suspend fun setAnimationDuration(duration: Float) { context.dataStore.edit { it[ANIMATION_DURATION] = duration.coerceIn(0.1f, 2f) } }
     
     val stylePreset: Flow<String> = context.dataStore.data.catch { if (it is IOException) emit(emptyPreferences()) else throw it }.map { it[STYLE_PRESET] ?: "CUSTOM" }
     suspend fun setStylePreset(preset: String) { context.dataStore.edit { it[STYLE_PRESET] = preset } }
