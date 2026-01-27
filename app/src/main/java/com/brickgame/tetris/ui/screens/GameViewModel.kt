@@ -6,6 +6,7 @@ import android.os.Build
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.brickgame.tetris.data.PlayerRepository
@@ -29,52 +30,51 @@ import kotlinx.coroutines.launch
 
 class GameViewModel(application: Application) : AndroidViewModel(application) {
     
+    companion object {
+        private const val TAG = "GameViewModel"
+    }
+    
     private val settingsRepository = SettingsRepository(application)
     private val playerRepository = PlayerRepository(application)
     private val game = TetrisGame()
     
-    // Vibrator instance - cached for performance
+    // Vibrator - get once and cache
     private val vibrator: Vibrator? = try {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            val vibratorManager = application.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
-            vibratorManager.defaultVibrator
+            val vm = application.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager
+            vm?.defaultVibrator
         } else {
             @Suppress("DEPRECATION")
-            application.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+            application.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
         }
     } catch (e: Exception) {
+        Log.e(TAG, "Failed to get vibrator", e)
         null
     }
     
-    // Game state
     val gameState: StateFlow<GameState> = game.state
     
-    // UI state
     private val _uiState = MutableStateFlow(UiState())
     val uiState: StateFlow<UiState> = _uiState.asStateFlow()
     
-    // Line clear animation state
     private val _lineClearAnimation = MutableStateFlow(LineClearAnimationState())
     val lineClearAnimation: StateFlow<LineClearAnimationState> = _lineClearAnimation.asStateFlow()
     
-    // Theme
     private val _currentTheme = MutableStateFlow(GameThemes.Classic)
     val currentTheme: StateFlow<GameTheme> = _currentTheme.asStateFlow()
     
-    // Score history
     private val _scoreHistory = MutableStateFlow<List<ScoreEntry>>(emptyList())
     val scoreHistory: StateFlow<List<ScoreEntry>> = _scoreHistory.asStateFlow()
     
-    // Game loop job
     private var gameLoopJob: Job? = null
-    
-    // Move repeat jobs
     private var leftRepeatJob: Job? = null
     private var rightRepeatJob: Job? = null
     private var downRepeatJob: Job? = null
     
+    // Track current vibration setting locally for immediate effect
+    private var vibrationOn = true
+    
     init {
-        // Load settings
         viewModelScope.launch {
             val themeName = settingsRepository.themeName.first()
             _currentTheme.value = GameThemes.getThemeByName(themeName)
@@ -84,11 +84,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             val highScore = settingsRepository.highScore.first()
             val playerName = playerRepository.playerName.first()
             val layoutModeStr = settingsRepository.layoutMode.first()
-            val layoutMode = try {
-                LayoutMode.valueOf(layoutModeStr)
-            } catch (e: Exception) {
-                LayoutMode.CLASSIC
-            }
+            val layoutMode = try { LayoutMode.valueOf(layoutModeStr) } catch (e: Exception) { LayoutMode.CLASSIC }
+            
+            vibrationOn = vibration
             
             _uiState.update {
                 it.copy(
@@ -99,46 +97,24 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                     layoutMode = layoutMode
                 )
             }
-        }
-        
-        // Collect settings changes in real-time for immediate effect
-        viewModelScope.launch {
-            settingsRepository.vibrationEnabled.collect { enabled ->
-                _uiState.update { it.copy(vibrationEnabled = enabled) }
-            }
+            
+            Log.d(TAG, "Loaded settings: vibration=$vibration, sound=$sound")
         }
         
         viewModelScope.launch {
-            settingsRepository.soundEnabled.collect { enabled ->
-                _uiState.update { it.copy(soundEnabled = enabled) }
-            }
+            playerRepository.scoreHistory.collect { _scoreHistory.value = it }
         }
         
-        // Load score history
-        viewModelScope.launch {
-            playerRepository.scoreHistory.collect { history ->
-                _scoreHistory.value = history
-            }
-        }
-        
-        // Listen to game events
         viewModelScope.launch {
             game.state.collect { state ->
-                // Handle line clear animation
                 if (state.clearedRows.isNotEmpty()) {
                     playLineClearAnimation(state.clearedRows)
-                    vibrateIfEnabled(50)
+                    doVibrate(50)
                 }
                 
-                // Handle game over - save score
                 if (state.status == GameStatus.GAME_OVER && state.score > 0) {
                     val playerName = _uiState.value.playerName
-                    playerRepository.addScore(
-                        playerName = playerName,
-                        score = state.score, 
-                        level = state.level, 
-                        lines = state.lines
-                    )
+                    playerRepository.addScore(playerName, state.score, state.level, state.lines)
                     
                     if (state.score > _uiState.value.highScore) {
                         _uiState.update { it.copy(highScore = state.score) }
@@ -149,9 +125,12 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
     
-    // Vibration helper - CHECKS SETTING BEFORE VIBRATING
-    private fun vibrateIfEnabled(durationMs: Long) {
-        if (!_uiState.value.vibrationEnabled) return
+    // VIBRATION - uses local flag for immediate effect
+    private fun doVibrate(durationMs: Long) {
+        if (!vibrationOn) {
+            Log.d(TAG, "Vibration disabled, skipping")
+            return
+        }
         
         vibrator?.let { vib ->
             try {
@@ -161,21 +140,20 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                     @Suppress("DEPRECATION")
                     vib.vibrate(durationMs)
                 }
+                Log.d(TAG, "Vibrated for ${durationMs}ms")
             } catch (e: Exception) {
-                // Ignore vibration errors
+                Log.e(TAG, "Vibration failed", e)
             }
-        }
+        } ?: Log.w(TAG, "No vibrator available")
     }
     
-    // Game controls
     fun startGame() {
         game.startGame()
         startGameLoop()
     }
     
     fun togglePauseResume() {
-        val currentStatus = game.state.value.status
-        when (currentStatus) {
+        when (game.state.value.status) {
             GameStatus.PLAYING -> {
                 game.pauseGame()
                 stopGameLoop()
@@ -184,9 +162,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 game.resumeGame()
                 startGameLoop()
             }
-            GameStatus.MENU, GameStatus.GAME_OVER -> {
-                startGame()
-            }
+            GameStatus.MENU, GameStatus.GAME_OVER -> startGame()
         }
     }
     
@@ -214,12 +190,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         gameLoopJob = null
     }
     
-    // Movement controls
     fun moveLeft() {
-        if (game.state.value.status == GameStatus.PLAYING) {
-            if (game.moveLeft()) {
-                vibrateIfEnabled(10)
-            }
+        if (game.state.value.status == GameStatus.PLAYING && game.moveLeft()) {
+            doVibrate(10)
         }
     }
     
@@ -228,23 +201,15 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         leftRepeatJob?.cancel()
         leftRepeatJob = viewModelScope.launch {
             delay(200)
-            while (true) {
-                moveLeft()
-                delay(50)
-            }
+            while (true) { moveLeft(); delay(50) }
         }
     }
     
-    fun stopLeftRepeat() {
-        leftRepeatJob?.cancel()
-        leftRepeatJob = null
-    }
+    fun stopLeftRepeat() { leftRepeatJob?.cancel(); leftRepeatJob = null }
     
     fun moveRight() {
-        if (game.state.value.status == GameStatus.PLAYING) {
-            if (game.moveRight()) {
-                vibrateIfEnabled(10)
-            }
+        if (game.state.value.status == GameStatus.PLAYING && game.moveRight()) {
+            doVibrate(10)
         }
     }
     
@@ -253,97 +218,62 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         rightRepeatJob?.cancel()
         rightRepeatJob = viewModelScope.launch {
             delay(200)
-            while (true) {
-                moveRight()
-                delay(50)
-            }
+            while (true) { moveRight(); delay(50) }
         }
     }
     
-    fun stopRightRepeat() {
-        rightRepeatJob?.cancel()
-        rightRepeatJob = null
-    }
+    fun stopRightRepeat() { rightRepeatJob?.cancel(); rightRepeatJob = null }
     
     fun startDownRepeat() {
         downRepeatJob?.cancel()
         downRepeatJob = viewModelScope.launch {
             while (true) {
-                if (game.state.value.status == GameStatus.PLAYING) {
-                    game.moveDown()
-                }
+                if (game.state.value.status == GameStatus.PLAYING) game.moveDown()
                 delay(50)
             }
         }
     }
     
-    fun stopDownRepeat() {
-        downRepeatJob?.cancel()
-        downRepeatJob = null
-    }
+    fun stopDownRepeat() { downRepeatJob?.cancel(); downRepeatJob = null }
     
     fun hardDrop() {
         if (game.state.value.status == GameStatus.PLAYING) {
             val dropped = game.hardDrop()
-            if (dropped > 0) {
-                vibrateIfEnabled(30)
-            }
+            if (dropped > 0) doVibrate(30)
         }
     }
     
     fun rotate() {
-        if (game.state.value.status == GameStatus.PLAYING) {
-            if (game.rotate()) {
-                vibrateIfEnabled(15)
-            }
+        if (game.state.value.status == GameStatus.PLAYING && game.rotate()) {
+            doVibrate(15)
         }
     }
     
     private fun stopAllRepeats() {
-        leftRepeatJob?.cancel()
-        rightRepeatJob?.cancel()
-        downRepeatJob?.cancel()
-        leftRepeatJob = null
-        rightRepeatJob = null
-        downRepeatJob = null
+        leftRepeatJob?.cancel(); rightRepeatJob?.cancel(); downRepeatJob?.cancel()
+        leftRepeatJob = null; rightRepeatJob = null; downRepeatJob = null
     }
     
-    // Line clear animation
     private fun playLineClearAnimation(rows: List<Int>) {
         viewModelScope.launch {
-            _lineClearAnimation.value = LineClearAnimationState(
-                isAnimating = true,
-                phase = LineClearPhase.FLASH,
-                rows = rows,
-                progress = 0f
-            )
-            
+            _lineClearAnimation.value = LineClearAnimationState(true, LineClearPhase.FLASH, rows, 0f)
             repeat(3) {
                 _lineClearAnimation.value = _lineClearAnimation.value.copy(progress = 1f)
                 delay(60)
                 _lineClearAnimation.value = _lineClearAnimation.value.copy(progress = 0f)
                 delay(60)
             }
-            
-            _lineClearAnimation.value = _lineClearAnimation.value.copy(
-                phase = LineClearPhase.COLLAPSE,
-                progress = 0f
-            )
-            
-            val steps = 8
-            repeat(steps) { step ->
-                _lineClearAnimation.value = _lineClearAnimation.value.copy(
-                    progress = (step + 1).toFloat() / steps
-                )
+            _lineClearAnimation.value = _lineClearAnimation.value.copy(phase = LineClearPhase.COLLAPSE, progress = 0f)
+            repeat(8) { step ->
+                _lineClearAnimation.value = _lineClearAnimation.value.copy(progress = (step + 1).toFloat() / 8)
                 delay(25)
             }
-            
             _lineClearAnimation.value = LineClearAnimationState()
             game.clearEvent()
         }
     }
     
-    // Settings
+    // SETTINGS
     fun showSettings() {
         if (game.state.value.status == GameStatus.PLAYING) {
             game.pauseGame()
@@ -352,61 +282,47 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.update { it.copy(showSettings = true) }
     }
     
-    fun hideSettings() {
-        _uiState.update { it.copy(showSettings = false) }
-    }
+    fun hideSettings() { _uiState.update { it.copy(showSettings = false) } }
     
     fun setPlayerName(name: String) {
         _uiState.update { it.copy(playerName = name) }
-        viewModelScope.launch {
-            playerRepository.setPlayerName(name)
-        }
+        viewModelScope.launch { playerRepository.setPlayerName(name) }
     }
     
     fun clearScoreHistory() {
-        viewModelScope.launch {
-            playerRepository.clearHistory()
-        }
+        viewModelScope.launch { playerRepository.clearHistory() }
     }
     
     fun setTheme(themeName: String) {
         _currentTheme.value = GameThemes.getThemeByName(themeName)
-        viewModelScope.launch {
-            settingsRepository.setThemeName(themeName)
-        }
+        viewModelScope.launch { settingsRepository.setThemeName(themeName) }
     }
     
+    // VIBRATION TOGGLE - immediate effect
     fun setVibration(enabled: Boolean) {
-        // Update state immediately
+        Log.d(TAG, "setVibration: $enabled")
+        vibrationOn = enabled  // Update local flag immediately
         _uiState.update { it.copy(vibrationEnabled = enabled) }
-        // Persist to storage
-        viewModelScope.launch {
-            settingsRepository.setVibrationEnabled(enabled)
-        }
+        viewModelScope.launch { settingsRepository.setVibrationEnabled(enabled) }
+        
         // Test vibration when enabling
         if (enabled) {
-            vibrateIfEnabled(100)
+            doVibrate(100)
         }
     }
     
+    // SOUND TOGGLE
     fun setSound(enabled: Boolean) {
-        // Update state immediately
+        Log.d(TAG, "setSound: $enabled")
         _uiState.update { it.copy(soundEnabled = enabled) }
-        // Persist to storage
-        viewModelScope.launch {
-            settingsRepository.setSoundEnabled(enabled)
-        }
+        viewModelScope.launch { settingsRepository.setSoundEnabled(enabled) }
     }
     
-    fun toggleSound() {
-        setSound(!_uiState.value.soundEnabled)
-    }
+    fun toggleSound() { setSound(!_uiState.value.soundEnabled) }
     
     fun setLayoutMode(mode: LayoutMode) {
         _uiState.update { it.copy(layoutMode = mode) }
-        viewModelScope.launch {
-            settingsRepository.setLayoutMode(mode.name)
-        }
+        viewModelScope.launch { settingsRepository.setLayoutMode(mode.name) }
     }
     
     override fun onCleared() {
