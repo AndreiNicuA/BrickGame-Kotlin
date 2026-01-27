@@ -71,7 +71,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             val sound = settingsRepository.soundEnabled.first()
             val highScore = settingsRepository.highScore.first()
             val playerName = playerRepository.playerName.first()
-            val layoutMode = settingsRepository.layoutMode.first()
+            val isFullscreen = settingsRepository.isFullscreen.first()
             
             _uiState.update {
                 it.copy(
@@ -79,7 +79,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                     soundEnabled = sound,
                     highScore = highScore,
                     playerName = playerName,
-                    layoutMode = LayoutMode.valueOf(layoutMode)
+                    isFullscreen = isFullscreen
                 )
             }
         }
@@ -97,7 +97,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 // Handle line clear animation
                 if (state.clearedRows.isNotEmpty()) {
                     playLineClearAnimation(state.clearedRows)
-                    // Vibrate on line clear
+                    // Vibrate on line clear ONLY if enabled
                     if (_uiState.value.vibrationEnabled) {
                         vibrate(50)
                     }
@@ -105,8 +105,14 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 
                 // Handle game over - save score
                 if (state.status == GameStatus.GAME_OVER && state.score > 0) {
-                    // Save to history
-                    playerRepository.addScore(state.score, state.level, state.lines)
+                    // Save to history with player name
+                    val playerName = _uiState.value.playerName
+                    playerRepository.addScore(
+                        playerName = playerName,
+                        score = state.score, 
+                        level = state.level, 
+                        lines = state.lines
+                    )
                     
                     // Update high score if needed
                     if (state.score > _uiState.value.highScore) {
@@ -144,7 +150,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     fun resetGame() {
         stopGameLoop()
         stopAllRepeats()
-        _uiState.update { it.copy(showSettings = false, showProfile = false) }
+        _uiState.update { it.copy(showSettings = false) }
         game.startGame()
         game.pauseGame()
         stopGameLoop()
@@ -167,7 +173,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         gameLoopJob = null
     }
     
-    // Movement controls with vibration
+    // Movement controls with conditional vibration
     fun moveLeft() {
         if (game.state.value.status == GameStatus.PLAYING) {
             if (game.moveLeft() && _uiState.value.vibrationEnabled) {
@@ -261,8 +267,11 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         downRepeatJob = null
     }
     
-    // Vibration helper
+    // Vibration helper - ONLY vibrates if enabled
     private fun vibrate(durationMs: Long) {
+        // Double-check vibration is enabled
+        if (!_uiState.value.vibrationEnabled) return
+        
         try {
             val context = getApplication<Application>()
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -333,19 +342,6 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.update { it.copy(showSettings = false) }
     }
     
-    // Profile/History
-    fun showProfile() {
-        if (game.state.value.status == GameStatus.PLAYING) {
-            game.pauseGame()
-            stopGameLoop()
-        }
-        _uiState.update { it.copy(showProfile = true) }
-    }
-    
-    fun hideProfile() {
-        _uiState.update { it.copy(showProfile = false) }
-    }
-    
     fun setPlayerName(name: String) {
         _uiState.update { it.copy(playerName = name) }
         viewModelScope.launch {
@@ -371,7 +367,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             settingsRepository.setVibrationEnabled(enabled)
         }
-        // Test vibration when enabled
+        // Test vibration when enabling
         if (enabled) {
             vibrate(50)
         }
@@ -388,10 +384,10 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         setSound(!_uiState.value.soundEnabled)
     }
     
-    fun setLayoutMode(mode: LayoutMode) {
-        _uiState.update { it.copy(layoutMode = mode) }
+    fun setFullscreen(enabled: Boolean) {
+        _uiState.update { it.copy(isFullscreen = enabled) }
         viewModelScope.launch {
-            settingsRepository.setLayoutMode(mode.name)
+            settingsRepository.setFullscreen(enabled)
         }
     }
     
@@ -402,18 +398,11 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     }
 }
 
-enum class LayoutMode {
-    CLASSIC,    // Full device with decorations
-    COMPACT,    // Smaller device
-    FULLSCREEN  // Game only, no device frame
-}
-
 data class UiState(
     val showSettings: Boolean = false,
-    val showProfile: Boolean = false,
     val vibrationEnabled: Boolean = true,
     val soundEnabled: Boolean = true,
     val highScore: Int = 0,
     val playerName: String = "Player",
-    val layoutMode: LayoutMode = LayoutMode.CLASSIC
+    val isFullscreen: Boolean = false
 )
