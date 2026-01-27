@@ -175,7 +175,7 @@ private fun ClassicLayout(
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(4.dp))
                     .background(theme.screenBackground)
-                    .border(2.dp, theme.screenBorderColor, RoundedCornerShape(4.dp))
+                    .border(2.dp, theme.pixelBorder, RoundedCornerShape(4.dp))
                     .padding(4.dp)
             ) {
                 Row(modifier = Modifier.fillMaxSize()) {
@@ -365,7 +365,7 @@ private fun ModernLayout(
                         .size(44.dp)
                         .clip(RoundedCornerShape(6.dp))
                         .background(theme.screenBackground.copy(alpha = 0.5f))
-                        .border(1.dp, theme.screenBorderColor, RoundedCornerShape(6.dp))
+                        .border(1.dp, theme.pixelBorder, RoundedCornerShape(6.dp))
                         .padding(2.dp)
                 ) {
                     NextPiecePreview(
@@ -385,7 +385,7 @@ private fun ModernLayout(
                 .aspectRatio(0.5f)
                 .clip(RoundedCornerShape(8.dp))
                 .background(theme.screenBackground)
-                .border(2.dp, theme.screenBorderColor, RoundedCornerShape(8.dp))
+                .border(2.dp, theme.pixelBorder, RoundedCornerShape(8.dp))
         ) {
             GameBoard(
                 board = gameState.board,
