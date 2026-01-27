@@ -41,7 +41,6 @@ class MainActivity : ComponentActivity() {
             
             val gameState by viewModel.gameState.collectAsState()
             val uiState by viewModel.uiState.collectAsState()
-            val lineClearAnimation by viewModel.lineClearAnimation.collectAsState()
             val currentTheme by viewModel.currentTheme.collectAsState()
             val scoreHistory by viewModel.scoreHistory.collectAsState()
             
@@ -56,9 +55,9 @@ class MainActivity : ComponentActivity() {
                 Box(modifier = Modifier.fillMaxSize()) {
                     GameScreen(
                         gameState = gameState.copy(highScore = uiState.highScore),
-                        lineClearAnimation = lineClearAnimation,
                         vibrationEnabled = uiState.vibrationEnabled,
                         ghostPieceEnabled = uiState.ghostPieceEnabled,
+                        animationStyle = uiState.animationStyle,
                         layoutMode = uiState.layoutMode,
                         onStartGame = viewModel::startGame,
                         onTogglePause = viewModel::togglePauseResume,
@@ -93,6 +92,7 @@ class MainActivity : ComponentActivity() {
                             animationStyle = uiState.animationStyle,
                             stylePreset = uiState.stylePreset,
                             ghostPieceEnabled = uiState.ghostPieceEnabled,
+                            difficulty = uiState.difficulty,
                             playerName = uiState.playerName,
                             highScore = uiState.highScore,
                             scoreHistory = scoreHistory,
@@ -107,6 +107,7 @@ class MainActivity : ComponentActivity() {
                             onAnimationStyleChange = viewModel::setAnimationStyle,
                             onStylePresetChange = viewModel::applyStylePreset,
                             onGhostPieceChange = viewModel::setGhostPieceEnabled,
+                            onDifficultyChange = viewModel::setDifficulty,
                             onPlayerNameChange = viewModel::setPlayerName,
                             onClearHistory = viewModel::clearScoreHistory,
                             onClose = viewModel::hideSettings
