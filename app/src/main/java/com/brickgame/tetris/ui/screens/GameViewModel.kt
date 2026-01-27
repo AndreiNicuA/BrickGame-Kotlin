@@ -74,8 +74,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             val stylePreset = try { StylePreset.valueOf(settingsRepository.stylePreset.first()) } catch (e: Exception) { StylePreset.CUSTOM }
             val highScore = settingsRepository.highScore.first()
             val playerName = playerRepository.playerName.first()
-            val layoutModeStr = settingsRepository.layoutMode.first()
-            val layoutMode = try { LayoutMode.valueOf(layoutModeStr) } catch (e: Exception) { LayoutMode.CLASSIC }
+            val layoutMode = try { LayoutMode.valueOf(settingsRepository.layoutMode.first()) } catch (e: Exception) { LayoutMode.CLASSIC }
             val ghostPieceEnabled = settingsRepository.ghostPieceEnabled.first()
             val difficulty = try { Difficulty.valueOf(settingsRepository.difficulty.first()) } catch (e: Exception) { Difficulty.NORMAL }
             
@@ -106,9 +105,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     }
     
     private fun observeScoreHistory() {
-        viewModelScope.launch {
-            playerRepository.scoreHistory.collect { _scoreHistory.value = it }
-        }
+        viewModelScope.launch { playerRepository.scoreHistory.collect { _scoreHistory.value = it } }
     }
     
     private fun observeGameState() {
@@ -128,10 +125,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 if (state.status == GameStatus.GAME_OVER && state.score > 0) {
                     vibrationManager.vibrateGameOver()
                     soundManager.playGameOver()
-                    
-                    val playerName = _uiState.value.playerName
-                    playerRepository.addScore(playerName, state.score, state.level, state.lines)
-                    
+                    playerRepository.addScore(_uiState.value.playerName, state.score, state.level, state.lines)
                     if (state.score > _uiState.value.highScore) {
                         _uiState.update { it.copy(highScore = state.score) }
                         settingsRepository.setHighScore(state.score)
@@ -198,7 +192,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     
     fun setPlayerName(name: String) { _uiState.update { it.copy(playerName = name) }; viewModelScope.launch { playerRepository.setPlayerName(name) } }
     fun clearScoreHistory() { viewModelScope.launch { playerRepository.clearHistory() } }
-    fun setTheme(themeName: String) { _currentTheme.value = GameThemes.getThemeByName(themeName); viewModelScope.launch { settingsRepository.setThemeName(themeName) } }
+    fun setTheme(name: String) { _currentTheme.value = GameThemes.getThemeByName(name); viewModelScope.launch { settingsRepository.setThemeName(name) } }
     
     fun setVibrationEnabled(enabled: Boolean) { _uiState.update { it.copy(vibrationEnabled = enabled) }; vibrationManager.setEnabled(enabled); viewModelScope.launch { settingsRepository.setVibrationEnabled(enabled) }; if (enabled) vibrationManager.testVibration() }
     fun setVibrationIntensity(intensity: Float) { _uiState.update { it.copy(vibrationIntensity = intensity) }; vibrationManager.setIntensity(intensity); viewModelScope.launch { settingsRepository.setVibrationIntensity(intensity) } }
@@ -221,12 +215,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     
     fun setLayoutMode(mode: LayoutMode) { _uiState.update { it.copy(layoutMode = mode) }; viewModelScope.launch { settingsRepository.setLayoutMode(mode.name) } }
     fun setGhostPieceEnabled(enabled: Boolean) { _uiState.update { it.copy(ghostPieceEnabled = enabled) }; viewModelScope.launch { settingsRepository.setGhostPieceEnabled(enabled) } }
-    
-    fun setDifficulty(diff: Difficulty) {
-        _uiState.update { it.copy(difficulty = diff) }
-        game.setDifficulty(diff)
-        viewModelScope.launch { settingsRepository.setDifficulty(diff.name) }
-    }
+    fun setDifficulty(diff: Difficulty) { _uiState.update { it.copy(difficulty = diff) }; game.setDifficulty(diff); viewModelScope.launch { settingsRepository.setDifficulty(diff.name) } }
     
     override fun onCleared() { super.onCleared(); stopGameLoop(); stopAllRepeats(); soundManager.release() }
 }
