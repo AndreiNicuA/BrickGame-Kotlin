@@ -18,6 +18,7 @@ class SettingsRepository(private val context: Context) {
         private val VIBRATION_ENABLED = booleanPreferencesKey("vibration_enabled")
         private val SOUND_ENABLED = booleanPreferencesKey("sound_enabled")
         private val HIGH_SCORE = intPreferencesKey("high_score")
+        private val LAYOUT_MODE = stringPreferencesKey("layout_mode")
     }
     
     // Theme
@@ -93,6 +94,25 @@ class SettingsRepository(private val context: Context) {
     suspend fun setHighScore(score: Int) {
         context.dataStore.edit { preferences ->
             preferences[HIGH_SCORE] = score
+        }
+    }
+    
+    // Layout Mode
+    val layoutMode: Flow<String> = context.dataStore.data
+        .catch { exception ->
+            if (exception is IOException) {
+                emit(emptyPreferences())
+            } else {
+                throw exception
+            }
+        }
+        .map { preferences ->
+            preferences[LAYOUT_MODE] ?: "CLASSIC"
+        }
+    
+    suspend fun setLayoutMode(mode: String) {
+        context.dataStore.edit { preferences ->
+            preferences[LAYOUT_MODE] = mode
         }
     }
 }
