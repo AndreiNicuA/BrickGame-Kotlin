@@ -422,3 +422,46 @@ fun DecorationColumn(
         }
     }
 }
+
+/**
+ * Settings button (gear icon)
+ */
+@Composable
+fun SettingsButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val theme = LocalGameTheme.current
+    var isPressed by remember { mutableStateOf(false) }
+    
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed) 0.9f else 1f,
+        animationSpec = spring(dampingRatio = 0.7f),
+        label = "settingsScale"
+    )
+    
+    Box(
+        modifier = modifier
+            .size(44.dp)
+            .scale(scale)
+            .shadow(4.dp, CircleShape)
+            .clip(CircleShape)
+            .background(theme.buttonSecondary)
+            .pointerInput(Unit) {
+                detectTapGestures(
+                    onPress = {
+                        isPressed = true
+                        tryAwaitRelease()
+                        isPressed = false
+                    },
+                    onTap = { onClick() }
+                )
+            },
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = "⚙️",
+            fontSize = 20.sp
+        )
+    }
+}
