@@ -22,7 +22,6 @@ class PlayerRepository(private val context: Context) {
     companion object {
         private val PLAYER_NAME = stringPreferencesKey("player_name")
         private val SCORE_HISTORY = stringPreferencesKey("score_history")
-        private val CUSTOM_THEME = stringPreferencesKey("custom_theme")
     }
     
     private val json = Json { ignoreUnknownKeys = true }
@@ -48,7 +47,7 @@ class PlayerRepository(private val context: Context) {
             }
         }
     
-    suspend fun addScore(score: Int, level: Int, lines: Int) {
+    suspend fun addScore(playerName: String, score: Int, level: Int, lines: Int) {
         context.playerDataStore.edit { prefs ->
             val currentJson = prefs[SCORE_HISTORY] ?: "[]"
             val currentList = try {
@@ -58,6 +57,7 @@ class PlayerRepository(private val context: Context) {
             }
             
             currentList.add(0, ScoreEntry(
+                playerName = playerName,
                 score = score,
                 level = level,
                 lines = lines,
@@ -73,49 +73,13 @@ class PlayerRepository(private val context: Context) {
     suspend fun clearHistory() {
         context.playerDataStore.edit { it[SCORE_HISTORY] = "[]" }
     }
-    
-    // Custom theme colors
-    val customTheme: Flow<CustomThemeColors?> = context.playerDataStore.data
-        .catch { if (it is IOException) emit(emptyPreferences()) else throw it }
-        .map { prefs ->
-            val jsonString = prefs[CUSTOM_THEME]
-            if (jsonString != null) {
-                try {
-                    json.decodeFromString<CustomThemeColors>(jsonString)
-                } catch (e: Exception) {
-                    null
-                }
-            } else null
-        }
-    
-    suspend fun saveCustomTheme(colors: CustomThemeColors) {
-        context.playerDataStore.edit { 
-            it[CUSTOM_THEME] = json.encodeToString(colors)
-        }
-    }
-    
-    suspend fun clearCustomTheme() {
-        context.playerDataStore.edit { it.remove(CUSTOM_THEME) }
-    }
 }
 
 @Serializable
 data class ScoreEntry(
+    val playerName: String = "Player",
     val score: Int,
     val level: Int,
     val lines: Int,
     val timestamp: Long
-)
-
-@Serializable
-data class CustomThemeColors(
-    val name: String = "Custom",
-    val deviceColor: Long,
-    val screenBackground: Long,
-    val pixelOn: Long,
-    val pixelOff: Long,
-    val buttonPrimary: Long,
-    val accentColor: Long,
-    val decoColor1: Long,
-    val decoColor2: Long
 )
