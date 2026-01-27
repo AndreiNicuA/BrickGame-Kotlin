@@ -9,11 +9,10 @@ import com.brickgame.tetris.audio.VibrationManager
 import com.brickgame.tetris.data.PlayerRepository
 import com.brickgame.tetris.data.SettingsRepository
 import com.brickgame.tetris.data.ScoreEntry
+import com.brickgame.tetris.game.Difficulty
 import com.brickgame.tetris.game.GameState
 import com.brickgame.tetris.game.GameStatus
 import com.brickgame.tetris.game.TetrisGame
-import com.brickgame.tetris.ui.animations.LineClearAnimationState
-import com.brickgame.tetris.ui.animations.LineClearPhase
 import com.brickgame.tetris.ui.styles.AnimationStyle
 import com.brickgame.tetris.ui.styles.SoundStyle
 import com.brickgame.tetris.ui.styles.StylePreset
@@ -31,10 +30,6 @@ import kotlinx.coroutines.launch
 
 class GameViewModel(application: Application) : AndroidViewModel(application) {
     
-    companion object {
-        private const val TAG = "GameViewModel"
-    }
-    
     private val settingsRepository = SettingsRepository(application)
     private val playerRepository = PlayerRepository(application)
     private val game = TetrisGame()
@@ -45,9 +40,6 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     
     private val _uiState = MutableStateFlow(UiState())
     val uiState: StateFlow<UiState> = _uiState.asStateFlow()
-    
-    private val _lineClearAnimation = MutableStateFlow(LineClearAnimationState())
-    val lineClearAnimation: StateFlow<LineClearAnimationState> = _lineClearAnimation.asStateFlow()
     
     private val _currentTheme = MutableStateFlow(GameThemes.Classic)
     val currentTheme: StateFlow<GameTheme> = _currentTheme.asStateFlow()
@@ -85,6 +77,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             val layoutModeStr = settingsRepository.layoutMode.first()
             val layoutMode = try { LayoutMode.valueOf(layoutModeStr) } catch (e: Exception) { LayoutMode.CLASSIC }
             val ghostPieceEnabled = settingsRepository.ghostPieceEnabled.first()
+            val difficulty = try { Difficulty.valueOf(settingsRepository.difficulty.first()) } catch (e: Exception) { Difficulty.NORMAL }
             
             vibrationManager.setEnabled(vibrationEnabled)
             vibrationManager.setIntensity(vibrationIntensity)
@@ -92,6 +85,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             soundManager.setEnabled(soundEnabled)
             soundManager.setVolume(soundVolume)
             soundManager.setSoundStyle(soundStyle)
+            game.setDifficulty(difficulty)
             
             _uiState.value = UiState(
                 vibrationEnabled = vibrationEnabled,
@@ -105,7 +99,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 highScore = highScore,
                 playerName = playerName,
                 layoutMode = layoutMode,
-                ghostPieceEnabled = ghostPieceEnabled
+                ghostPieceEnabled = ghostPieceEnabled,
+                difficulty = difficulty
             )
         }
     }
@@ -119,20 +114,17 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private fun observeGameState() {
         viewModelScope.launch {
             game.state.collect { state ->
-                // Level up
                 if (state.level > lastLevel && state.status == GameStatus.PLAYING) {
                     vibrationManager.vibrateLevelUp()
                     soundManager.playLevelUp()
                     lastLevel = state.level
                 }
                 
-                // Lines cleared
                 if (state.linesCleared > 0) {
                     vibrationManager.vibrateClear(state.linesCleared)
                     soundManager.playClear()
                 }
                 
-                // Game over
                 if (state.status == GameStatus.GAME_OVER && state.score > 0) {
                     vibrationManager.vibrateGameOver()
                     soundManager.playGameOver()
@@ -149,9 +141,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
     
-    // Game controls
     fun startGame() {
-        lastLevel = 1
+        lastLevel = _uiState.value.difficulty.startLevel
+        game.setDifficulty(_uiState.value.difficulty)
         game.startGame()
         startGameLoop()
     }
@@ -167,7 +159,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     fun resetGame() {
         stopGameLoop()
         stopAllRepeats()
-        lastLevel = 1
+        lastLevel = _uiState.value.difficulty.startLevel
+        game.setDifficulty(_uiState.value.difficulty)
         game.startGame()
         game.pauseGame()
     }
@@ -176,212 +169,66 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         gameLoopJob?.cancel()
         gameLoopJob = viewModelScope.launch {
             while (true) {
-                if (game.state.value.status == GameStatus.PLAYING) {
-                    game.moveDown()
-                }
+                if (game.state.value.status == GameStatus.PLAYING) game.moveDown()
                 delay(game.getDropSpeed())
             }
         }
     }
     
-    private fun stopGameLoop() {
-        gameLoopJob?.cancel()
-        gameLoopJob = null
-    }
+    private fun stopGameLoop() { gameLoopJob?.cancel(); gameLoopJob = null }
     
-    fun moveLeft() {
-        if (game.state.value.status == GameStatus.PLAYING && game.moveLeft()) {
-            vibrationManager.vibrateMove()
-            soundManager.playMove()
-        }
-    }
-    
-    fun startLeftRepeat() {
-        moveLeft()
-        leftRepeatJob?.cancel()
-        leftRepeatJob = viewModelScope.launch {
-            delay(200)
-            while (true) { moveLeft(); delay(50) }
-        }
-    }
-    
+    fun moveLeft() { if (game.state.value.status == GameStatus.PLAYING && game.moveLeft()) { vibrationManager.vibrateMove(); soundManager.playMove() } }
+    fun startLeftRepeat() { moveLeft(); leftRepeatJob?.cancel(); leftRepeatJob = viewModelScope.launch { delay(200); while (true) { moveLeft(); delay(50) } } }
     fun stopLeftRepeat() { leftRepeatJob?.cancel(); leftRepeatJob = null }
     
-    fun moveRight() {
-        if (game.state.value.status == GameStatus.PLAYING && game.moveRight()) {
-            vibrationManager.vibrateMove()
-            soundManager.playMove()
-        }
-    }
-    
-    fun startRightRepeat() {
-        moveRight()
-        rightRepeatJob?.cancel()
-        rightRepeatJob = viewModelScope.launch {
-            delay(200)
-            while (true) { moveRight(); delay(50) }
-        }
-    }
-    
+    fun moveRight() { if (game.state.value.status == GameStatus.PLAYING && game.moveRight()) { vibrationManager.vibrateMove(); soundManager.playMove() } }
+    fun startRightRepeat() { moveRight(); rightRepeatJob?.cancel(); rightRepeatJob = viewModelScope.launch { delay(200); while (true) { moveRight(); delay(50) } } }
     fun stopRightRepeat() { rightRepeatJob?.cancel(); rightRepeatJob = null }
     
-    fun startDownRepeat() {
-        downRepeatJob?.cancel()
-        downRepeatJob = viewModelScope.launch {
-            while (true) {
-                if (game.state.value.status == GameStatus.PLAYING) game.moveDown()
-                delay(50)
-            }
-        }
-    }
-    
+    fun startDownRepeat() { downRepeatJob?.cancel(); downRepeatJob = viewModelScope.launch { while (true) { if (game.state.value.status == GameStatus.PLAYING) game.moveDown(); delay(50) } } }
     fun stopDownRepeat() { downRepeatJob?.cancel(); downRepeatJob = null }
     
-    fun hardDrop() {
-        if (game.state.value.status == GameStatus.PLAYING && game.hardDrop() > 0) {
-            vibrationManager.vibrateDrop()
-            soundManager.playDrop()
-        }
-    }
+    fun hardDrop() { if (game.state.value.status == GameStatus.PLAYING && game.hardDrop() > 0) { vibrationManager.vibrateDrop(); soundManager.playDrop() } }
+    fun rotate() { if (game.state.value.status == GameStatus.PLAYING && game.rotate()) { vibrationManager.vibrateRotate(); soundManager.playRotate() } }
     
-    fun rotate() {
-        if (game.state.value.status == GameStatus.PLAYING && game.rotate()) {
-            vibrationManager.vibrateRotate()
-            soundManager.playRotate()
-        }
-    }
+    private fun stopAllRepeats() { leftRepeatJob?.cancel(); rightRepeatJob?.cancel(); downRepeatJob?.cancel(); leftRepeatJob = null; rightRepeatJob = null; downRepeatJob = null }
     
-    private fun stopAllRepeats() {
-        leftRepeatJob?.cancel(); rightRepeatJob?.cancel(); downRepeatJob?.cancel()
-        leftRepeatJob = null; rightRepeatJob = null; downRepeatJob = null
-    }
+    fun showSettings() { if (game.state.value.status == GameStatus.PLAYING) { game.pauseGame(); stopGameLoop() }; _uiState.update { it.copy(showSettings = true) } }
+    fun hideSettings() { _uiState.update { it.copy(showSettings = false) } }
     
-    // Settings
-    fun showSettings() {
-        if (game.state.value.status == GameStatus.PLAYING) {
-            game.pauseGame()
-            stopGameLoop()
-        }
-        _uiState.update { it.copy(showSettings = true) }
-    }
+    fun setPlayerName(name: String) { _uiState.update { it.copy(playerName = name) }; viewModelScope.launch { playerRepository.setPlayerName(name) } }
+    fun clearScoreHistory() { viewModelScope.launch { playerRepository.clearHistory() } }
+    fun setTheme(themeName: String) { _currentTheme.value = GameThemes.getThemeByName(themeName); viewModelScope.launch { settingsRepository.setThemeName(themeName) } }
     
-    fun hideSettings() {
-        _uiState.update { it.copy(showSettings = false) }
-    }
+    fun setVibrationEnabled(enabled: Boolean) { _uiState.update { it.copy(vibrationEnabled = enabled) }; vibrationManager.setEnabled(enabled); viewModelScope.launch { settingsRepository.setVibrationEnabled(enabled) }; if (enabled) vibrationManager.testVibration() }
+    fun setVibrationIntensity(intensity: Float) { _uiState.update { it.copy(vibrationIntensity = intensity) }; vibrationManager.setIntensity(intensity); viewModelScope.launch { settingsRepository.setVibrationIntensity(intensity) } }
+    fun setVibrationStyle(style: VibrationStyle) { _uiState.update { it.copy(vibrationStyle = style, stylePreset = StylePreset.CUSTOM) }; vibrationManager.setVibrationStyle(style); viewModelScope.launch { settingsRepository.setVibrationStyle(style.name); settingsRepository.setStylePreset(StylePreset.CUSTOM.name) }; vibrationManager.testVibration() }
     
-    fun setPlayerName(name: String) {
-        _uiState.update { it.copy(playerName = name) }
-        viewModelScope.launch { playerRepository.setPlayerName(name) }
-    }
+    fun setSoundEnabled(enabled: Boolean) { _uiState.update { it.copy(soundEnabled = enabled) }; soundManager.setEnabled(enabled); viewModelScope.launch { settingsRepository.setSoundEnabled(enabled) }; if (enabled) soundManager.playMove() }
+    fun setSoundVolume(volume: Float) { _uiState.update { it.copy(soundVolume = volume) }; soundManager.setVolume(volume); viewModelScope.launch { settingsRepository.setSoundVolume(volume) } }
+    fun setSoundStyle(style: SoundStyle) { _uiState.update { it.copy(soundStyle = style, stylePreset = StylePreset.CUSTOM) }; soundManager.setSoundStyle(style); viewModelScope.launch { settingsRepository.setSoundStyle(style.name); settingsRepository.setStylePreset(StylePreset.CUSTOM.name) }; soundManager.playMove() }
     
-    fun clearScoreHistory() {
-        viewModelScope.launch { playerRepository.clearHistory() }
-    }
+    fun setAnimationStyle(style: AnimationStyle) { _uiState.update { it.copy(animationStyle = style, stylePreset = StylePreset.CUSTOM) }; viewModelScope.launch { settingsRepository.setAnimationStyle(style.name); settingsRepository.setStylePreset(StylePreset.CUSTOM.name) } }
     
-    fun setTheme(themeName: String) {
-        _currentTheme.value = GameThemes.getThemeByName(themeName)
-        viewModelScope.launch { settingsRepository.setThemeName(themeName) }
-    }
-    
-    // Vibration settings
-    fun setVibrationEnabled(enabled: Boolean) {
-        _uiState.update { it.copy(vibrationEnabled = enabled) }
-        vibrationManager.setEnabled(enabled)
-        viewModelScope.launch { settingsRepository.setVibrationEnabled(enabled) }
-        if (enabled) vibrationManager.testVibration()
-    }
-    
-    fun setVibrationIntensity(intensity: Float) {
-        _uiState.update { it.copy(vibrationIntensity = intensity) }
-        vibrationManager.setIntensity(intensity)
-        viewModelScope.launch { settingsRepository.setVibrationIntensity(intensity) }
-    }
-    
-    fun setVibrationStyle(style: VibrationStyle) {
-        _uiState.update { it.copy(vibrationStyle = style, stylePreset = StylePreset.CUSTOM) }
-        vibrationManager.setVibrationStyle(style)
-        viewModelScope.launch { 
-            settingsRepository.setVibrationStyle(style.name)
-            settingsRepository.setStylePreset(StylePreset.CUSTOM.name)
-        }
-        vibrationManager.testVibration()
-    }
-    
-    // Sound settings
-    fun setSoundEnabled(enabled: Boolean) {
-        _uiState.update { it.copy(soundEnabled = enabled) }
-        soundManager.setEnabled(enabled)
-        viewModelScope.launch { settingsRepository.setSoundEnabled(enabled) }
-        if (enabled) soundManager.playMove()
-    }
-    
-    fun setSoundVolume(volume: Float) {
-        _uiState.update { it.copy(soundVolume = volume) }
-        soundManager.setVolume(volume)
-        viewModelScope.launch { settingsRepository.setSoundVolume(volume) }
-    }
-    
-    fun setSoundStyle(style: SoundStyle) {
-        _uiState.update { it.copy(soundStyle = style, stylePreset = StylePreset.CUSTOM) }
-        soundManager.setSoundStyle(style)
-        viewModelScope.launch { 
-            settingsRepository.setSoundStyle(style.name)
-            settingsRepository.setStylePreset(StylePreset.CUSTOM.name)
-        }
-        soundManager.playMove()
-    }
-    
-    // Animation settings
-    fun setAnimationStyle(style: AnimationStyle) {
-        _uiState.update { it.copy(animationStyle = style, stylePreset = StylePreset.CUSTOM) }
-        viewModelScope.launch { 
-            settingsRepository.setAnimationStyle(style.name)
-            settingsRepository.setStylePreset(StylePreset.CUSTOM.name)
-        }
-    }
-    
-    // Style presets
     fun applyStylePreset(preset: StylePreset) {
-        _uiState.update { 
-            it.copy(
-                stylePreset = preset,
-                animationStyle = preset.animationStyle,
-                vibrationStyle = preset.vibrationStyle,
-                soundStyle = preset.soundStyle
-            )
-        }
-        
+        _uiState.update { it.copy(stylePreset = preset, animationStyle = preset.animationStyle, vibrationStyle = preset.vibrationStyle, soundStyle = preset.soundStyle) }
         vibrationManager.setVibrationStyle(preset.vibrationStyle)
         soundManager.setSoundStyle(preset.soundStyle)
-        
-        viewModelScope.launch {
-            settingsRepository.setStylePreset(preset.name)
-            settingsRepository.setAnimationStyle(preset.animationStyle.name)
-            settingsRepository.setVibrationStyle(preset.vibrationStyle.name)
-            settingsRepository.setSoundStyle(preset.soundStyle.name)
-        }
-        
+        viewModelScope.launch { settingsRepository.setStylePreset(preset.name); settingsRepository.setAnimationStyle(preset.animationStyle.name); settingsRepository.setVibrationStyle(preset.vibrationStyle.name); settingsRepository.setSoundStyle(preset.soundStyle.name) }
         if (preset.vibrationStyle != VibrationStyle.NONE) vibrationManager.testVibration()
         if (preset.soundStyle != SoundStyle.NONE) soundManager.playMove()
     }
     
-    fun setLayoutMode(mode: LayoutMode) {
-        _uiState.update { it.copy(layoutMode = mode) }
-        viewModelScope.launch { settingsRepository.setLayoutMode(mode.name) }
+    fun setLayoutMode(mode: LayoutMode) { _uiState.update { it.copy(layoutMode = mode) }; viewModelScope.launch { settingsRepository.setLayoutMode(mode.name) } }
+    fun setGhostPieceEnabled(enabled: Boolean) { _uiState.update { it.copy(ghostPieceEnabled = enabled) }; viewModelScope.launch { settingsRepository.setGhostPieceEnabled(enabled) } }
+    
+    fun setDifficulty(diff: Difficulty) {
+        _uiState.update { it.copy(difficulty = diff) }
+        game.setDifficulty(diff)
+        viewModelScope.launch { settingsRepository.setDifficulty(diff.name) }
     }
     
-    // Ghost piece
-    fun setGhostPieceEnabled(enabled: Boolean) {
-        _uiState.update { it.copy(ghostPieceEnabled = enabled) }
-        viewModelScope.launch { settingsRepository.setGhostPieceEnabled(enabled) }
-    }
-    
-    override fun onCleared() {
-        super.onCleared()
-        stopGameLoop()
-        stopAllRepeats()
-        soundManager.release()
-    }
+    override fun onCleared() { super.onCleared(); stopGameLoop(); stopAllRepeats(); soundManager.release() }
 }
 
 data class UiState(
@@ -397,5 +244,6 @@ data class UiState(
     val highScore: Int = 0,
     val playerName: String = "Player",
     val layoutMode: LayoutMode = LayoutMode.CLASSIC,
-    val ghostPieceEnabled: Boolean = true
+    val ghostPieceEnabled: Boolean = true,
+    val difficulty: Difficulty = Difficulty.NORMAL
 )
