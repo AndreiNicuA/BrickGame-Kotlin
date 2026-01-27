@@ -93,7 +93,7 @@ fun Modifier.pulseAnimation(
         initialValue = minScale,
         targetValue = maxScale,
         animationSpec = infiniteRepeatable(
-            animation = tween(duration, easing = EaseInOutSine),
+            animation = tween(duration, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
         ),
         label = "pulseScale"
