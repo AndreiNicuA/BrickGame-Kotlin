@@ -461,7 +461,7 @@ private fun AboutPage(onBack: () -> Unit) {
             ) {
                 Text("🎮", fontSize = 48.sp)
                 Text("Brick Game", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                Text("Version 1.2.0", fontSize = 14.sp, color = Color(0xFFF4D03F))
+                Text("Version 1.3.0", fontSize = 14.sp, color = Color(0xFFF4D03F))
                 Spacer(modifier = Modifier.height(16.dp))
                 Text("Developer", fontSize = 12.sp, color = Color.Gray)
                 Text("Andrei Anton", fontSize = 16.sp, color = Color.White)
