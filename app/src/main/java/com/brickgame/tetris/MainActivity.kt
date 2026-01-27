@@ -45,23 +45,16 @@ class MainActivity : ComponentActivity() {
             val currentTheme by viewModel.currentTheme.collectAsState()
             val scoreHistory by viewModel.scoreHistory.collectAsState()
             
-            // Handle back button - don't exit the app
+            // Handle back button
             BackHandler(enabled = true) {
                 when {
-                    uiState.showSettings -> {
-                        // Close settings if open
-                        viewModel.hideSettings()
-                    }
-                    else -> {
-                        // Don't exit the app - just ignore or pause the game
-                        // You could also show a confirmation dialog here
-                    }
+                    uiState.showSettings -> viewModel.hideSettings()
+                    else -> { /* Don't exit */ }
                 }
             }
             
             BrickGameTheme(gameTheme = currentTheme) {
                 Box(modifier = Modifier.fillMaxSize()) {
-                    // Main game screen
                     GameScreen(
                         gameState = gameState.copy(highScore = uiState.highScore),
                         lineClearAnimation = lineClearAnimation,
@@ -83,7 +76,6 @@ class MainActivity : ComponentActivity() {
                         modifier = Modifier.fillMaxSize()
                     )
                     
-                    // Settings overlay
                     AnimatedVisibility(
                         visible = uiState.showSettings,
                         enter = fadeIn() + slideInVertically { it },
@@ -94,8 +86,12 @@ class MainActivity : ComponentActivity() {
                             layoutMode = uiState.layoutMode,
                             vibrationEnabled = uiState.vibrationEnabled,
                             vibrationIntensity = uiState.vibrationIntensity,
+                            vibrationStyle = uiState.vibrationStyle,
                             soundEnabled = uiState.soundEnabled,
                             soundVolume = uiState.soundVolume,
+                            soundStyle = uiState.soundStyle,
+                            animationStyle = uiState.animationStyle,
+                            stylePreset = uiState.stylePreset,
                             playerName = uiState.playerName,
                             highScore = uiState.highScore,
                             scoreHistory = scoreHistory,
@@ -103,12 +99,15 @@ class MainActivity : ComponentActivity() {
                             onLayoutModeChange = viewModel::setLayoutMode,
                             onVibrationEnabledChange = viewModel::setVibrationEnabled,
                             onVibrationIntensityChange = viewModel::setVibrationIntensity,
+                            onVibrationStyleChange = viewModel::setVibrationStyle,
                             onSoundEnabledChange = viewModel::setSoundEnabled,
                             onSoundVolumeChange = viewModel::setSoundVolume,
+                            onSoundStyleChange = viewModel::setSoundStyle,
+                            onAnimationStyleChange = viewModel::setAnimationStyle,
+                            onStylePresetChange = viewModel::applyStylePreset,
                             onPlayerNameChange = viewModel::setPlayerName,
                             onClearHistory = viewModel::clearScoreHistory,
-                            onClose = viewModel::hideSettings,
-                            onBack = viewModel::hideSettings
+                            onClose = viewModel::hideSettings
                         )
                     }
                 }
