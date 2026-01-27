@@ -2,6 +2,7 @@ package com.brickgame.tetris
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.AnimatedVisibility
@@ -44,6 +45,20 @@ class MainActivity : ComponentActivity() {
             val currentTheme by viewModel.currentTheme.collectAsState()
             val scoreHistory by viewModel.scoreHistory.collectAsState()
             
+            // Handle back button - don't exit the app
+            BackHandler(enabled = true) {
+                when {
+                    uiState.showSettings -> {
+                        // Close settings if open
+                        viewModel.hideSettings()
+                    }
+                    else -> {
+                        // Don't exit the app - just ignore or pause the game
+                        // You could also show a confirmation dialog here
+                    }
+                }
+            }
+            
             BrickGameTheme(gameTheme = currentTheme) {
                 Box(modifier = Modifier.fillMaxSize()) {
                     // Main game screen
@@ -55,7 +70,7 @@ class MainActivity : ComponentActivity() {
                         onStartGame = viewModel::startGame,
                         onTogglePause = viewModel::togglePauseResume,
                         onResetGame = viewModel::resetGame,
-                        onToggleSound = viewModel::toggleSound,
+                        onToggleSound = { viewModel.setSoundEnabled(!uiState.soundEnabled) },
                         onMoveLeft = viewModel::startLeftRepeat,
                         onMoveLeftRelease = viewModel::stopLeftRepeat,
                         onMoveRight = viewModel::startRightRepeat,
@@ -78,17 +93,22 @@ class MainActivity : ComponentActivity() {
                             currentThemeName = currentTheme.name,
                             layoutMode = uiState.layoutMode,
                             vibrationEnabled = uiState.vibrationEnabled,
+                            vibrationIntensity = uiState.vibrationIntensity,
                             soundEnabled = uiState.soundEnabled,
+                            soundVolume = uiState.soundVolume,
                             playerName = uiState.playerName,
                             highScore = uiState.highScore,
                             scoreHistory = scoreHistory,
                             onThemeChange = viewModel::setTheme,
                             onLayoutModeChange = viewModel::setLayoutMode,
-                            onVibrationChange = viewModel::setVibration,
-                            onSoundChange = viewModel::setSound,
+                            onVibrationEnabledChange = viewModel::setVibrationEnabled,
+                            onVibrationIntensityChange = viewModel::setVibrationIntensity,
+                            onSoundEnabledChange = viewModel::setSoundEnabled,
+                            onSoundVolumeChange = viewModel::setSoundVolume,
                             onPlayerNameChange = viewModel::setPlayerName,
                             onClearHistory = viewModel::clearScoreHistory,
-                            onClose = viewModel::hideSettings
+                            onClose = viewModel::hideSettings,
+                            onBack = viewModel::hideSettings
                         )
                     }
                 }
