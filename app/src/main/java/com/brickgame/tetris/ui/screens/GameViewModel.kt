@@ -11,7 +11,6 @@ import androidx.lifecycle.viewModelScope
 import com.brickgame.tetris.data.PlayerRepository
 import com.brickgame.tetris.data.SettingsRepository
 import com.brickgame.tetris.data.ScoreEntry
-import com.brickgame.tetris.game.GameEvent
 import com.brickgame.tetris.game.GameState
 import com.brickgame.tetris.game.GameStatus
 import com.brickgame.tetris.game.TetrisGame
@@ -33,6 +32,19 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private val settingsRepository = SettingsRepository(application)
     private val playerRepository = PlayerRepository(application)
     private val game = TetrisGame()
+    
+    // Vibrator instance - cached for performance
+    private val vibrator: Vibrator? = try {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val vibratorManager = application.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
+            vibratorManager.defaultVibrator
+        } else {
+            @Suppress("DEPRECATION")
+            application.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+        }
+    } catch (e: Exception) {
+        null
+    }
     
     // Game state
     val gameState: StateFlow<GameState> = game.state
@@ -71,7 +83,12 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             val sound = settingsRepository.soundEnabled.first()
             val highScore = settingsRepository.highScore.first()
             val playerName = playerRepository.playerName.first()
-            val isFullscreen = settingsRepository.isFullscreen.first()
+            val layoutModeStr = settingsRepository.layoutMode.first()
+            val layoutMode = try {
+                LayoutMode.valueOf(layoutModeStr)
+            } catch (e: Exception) {
+                LayoutMode.CLASSIC
+            }
             
             _uiState.update {
                 it.copy(
@@ -79,8 +96,21 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                     soundEnabled = sound,
                     highScore = highScore,
                     playerName = playerName,
-                    isFullscreen = isFullscreen
+                    layoutMode = layoutMode
                 )
+            }
+        }
+        
+        // Collect settings changes in real-time for immediate effect
+        viewModelScope.launch {
+            settingsRepository.vibrationEnabled.collect { enabled ->
+                _uiState.update { it.copy(vibrationEnabled = enabled) }
+            }
+        }
+        
+        viewModelScope.launch {
+            settingsRepository.soundEnabled.collect { enabled ->
+                _uiState.update { it.copy(soundEnabled = enabled) }
             }
         }
         
@@ -97,15 +127,11 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 // Handle line clear animation
                 if (state.clearedRows.isNotEmpty()) {
                     playLineClearAnimation(state.clearedRows)
-                    // Vibrate on line clear ONLY if enabled
-                    if (_uiState.value.vibrationEnabled) {
-                        vibrate(50)
-                    }
+                    vibrateIfEnabled(50)
                 }
                 
                 // Handle game over - save score
                 if (state.status == GameStatus.GAME_OVER && state.score > 0) {
-                    // Save to history with player name
                     val playerName = _uiState.value.playerName
                     playerRepository.addScore(
                         playerName = playerName,
@@ -114,12 +140,29 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                         lines = state.lines
                     )
                     
-                    // Update high score if needed
                     if (state.score > _uiState.value.highScore) {
                         _uiState.update { it.copy(highScore = state.score) }
                         settingsRepository.setHighScore(state.score)
                     }
                 }
+            }
+        }
+    }
+    
+    // Vibration helper - CHECKS SETTING BEFORE VIBRATING
+    private fun vibrateIfEnabled(durationMs: Long) {
+        if (!_uiState.value.vibrationEnabled) return
+        
+        vibrator?.let { vib ->
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    vib.vibrate(VibrationEffect.createOneShot(durationMs, VibrationEffect.DEFAULT_AMPLITUDE))
+                } else {
+                    @Suppress("DEPRECATION")
+                    vib.vibrate(durationMs)
+                }
+            } catch (e: Exception) {
+                // Ignore vibration errors
             }
         }
     }
@@ -150,10 +193,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     fun resetGame() {
         stopGameLoop()
         stopAllRepeats()
-        _uiState.update { it.copy(showSettings = false) }
         game.startGame()
         game.pauseGame()
-        stopGameLoop()
     }
     
     private fun startGameLoop() {
@@ -173,11 +214,11 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         gameLoopJob = null
     }
     
-    // Movement controls with conditional vibration
+    // Movement controls
     fun moveLeft() {
         if (game.state.value.status == GameStatus.PLAYING) {
-            if (game.moveLeft() && _uiState.value.vibrationEnabled) {
-                vibrate(10)
+            if (game.moveLeft()) {
+                vibrateIfEnabled(10)
             }
         }
     }
@@ -201,8 +242,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     
     fun moveRight() {
         if (game.state.value.status == GameStatus.PLAYING) {
-            if (game.moveRight() && _uiState.value.vibrationEnabled) {
-                vibrate(10)
+            if (game.moveRight()) {
+                vibrateIfEnabled(10)
             }
         }
     }
@@ -244,16 +285,16 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     fun hardDrop() {
         if (game.state.value.status == GameStatus.PLAYING) {
             val dropped = game.hardDrop()
-            if (dropped > 0 && _uiState.value.vibrationEnabled) {
-                vibrate(30)
+            if (dropped > 0) {
+                vibrateIfEnabled(30)
             }
         }
     }
     
     fun rotate() {
         if (game.state.value.status == GameStatus.PLAYING) {
-            if (game.rotate() && _uiState.value.vibrationEnabled) {
-                vibrate(15)
+            if (game.rotate()) {
+                vibrateIfEnabled(15)
             }
         }
     }
@@ -265,33 +306,6 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         leftRepeatJob = null
         rightRepeatJob = null
         downRepeatJob = null
-    }
-    
-    // Vibration helper - ONLY vibrates if enabled
-    private fun vibrate(durationMs: Long) {
-        // Double-check vibration is enabled
-        if (!_uiState.value.vibrationEnabled) return
-        
-        try {
-            val context = getApplication<Application>()
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                val vibratorManager = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
-                vibratorManager.defaultVibrator.vibrate(
-                    VibrationEffect.createOneShot(durationMs, VibrationEffect.DEFAULT_AMPLITUDE)
-                )
-            } else {
-                @Suppress("DEPRECATION")
-                val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    vibrator.vibrate(VibrationEffect.createOneShot(durationMs, VibrationEffect.DEFAULT_AMPLITUDE))
-                } else {
-                    @Suppress("DEPRECATION")
-                    vibrator.vibrate(durationMs)
-                }
-            }
-        } catch (e: Exception) {
-            // Vibration not available
-        }
     }
     
     // Line clear animation
@@ -363,18 +377,22 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     }
     
     fun setVibration(enabled: Boolean) {
+        // Update state immediately
         _uiState.update { it.copy(vibrationEnabled = enabled) }
+        // Persist to storage
         viewModelScope.launch {
             settingsRepository.setVibrationEnabled(enabled)
         }
         // Test vibration when enabling
         if (enabled) {
-            vibrate(50)
+            vibrateIfEnabled(100)
         }
     }
     
     fun setSound(enabled: Boolean) {
+        // Update state immediately
         _uiState.update { it.copy(soundEnabled = enabled) }
+        // Persist to storage
         viewModelScope.launch {
             settingsRepository.setSoundEnabled(enabled)
         }
@@ -384,10 +402,10 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         setSound(!_uiState.value.soundEnabled)
     }
     
-    fun setFullscreen(enabled: Boolean) {
-        _uiState.update { it.copy(isFullscreen = enabled) }
+    fun setLayoutMode(mode: LayoutMode) {
+        _uiState.update { it.copy(layoutMode = mode) }
         viewModelScope.launch {
-            settingsRepository.setFullscreen(enabled)
+            settingsRepository.setLayoutMode(mode.name)
         }
     }
     
@@ -404,5 +422,5 @@ data class UiState(
     val soundEnabled: Boolean = true,
     val highScore: Int = 0,
     val playerName: String = "Player",
-    val isFullscreen: Boolean = false
+    val layoutMode: LayoutMode = LayoutMode.CLASSIC
 )
