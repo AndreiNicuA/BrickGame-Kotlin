@@ -6,37 +6,53 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.brickgame.tetris.data.ScoreEntry
 import com.brickgame.tetris.ui.theme.GameTheme
 import com.brickgame.tetris.ui.theme.GameThemes
+import java.text.SimpleDateFormat
+import java.util.*
 
 /**
- * Settings Screen
- * Theme, Layout, Vibration, Sound settings
+ * Settings Screen - All settings + Profile + History in one place
  */
 @Composable
 fun SettingsScreen(
     currentThemeName: String,
-    currentLayoutMode: LayoutMode,
+    isFullscreen: Boolean,
     vibrationEnabled: Boolean,
     soundEnabled: Boolean,
+    playerName: String,
+    highScore: Int,
+    scoreHistory: List<ScoreEntry>,
     onThemeChange: (String) -> Unit,
-    onLayoutChange: (LayoutMode) -> Unit,
+    onFullscreenChange: (Boolean) -> Unit,
     onVibrationChange: (Boolean) -> Unit,
     onSoundChange: (Boolean) -> Unit,
+    onPlayerNameChange: (String) -> Unit,
+    onClearHistory: () -> Unit,
     onClose: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    var editingName by remember { mutableStateOf(false) }
+    var nameInput by remember { mutableStateOf(playerName) }
+    var showClearConfirm by remember { mutableStateOf(false) }
+    
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -67,62 +83,123 @@ fun SettingsScreen(
                         .clip(CircleShape)
                         .background(Color(0xFF444444))
                 ) {
-                    Text(
-                        text = "✕",
-                        fontSize = 20.sp,
-                        color = Color.White
-                    )
+                    Text("✕", fontSize = 20.sp, color = Color.White)
                 }
             }
             
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(16.dp))
             
-            // Settings content
+            // Scrollable content
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(24.dp)
+                verticalArrangement = Arrangement.spacedBy(20.dp)
             ) {
-                // Layout section
+                // Player Profile Section
                 item {
-                    SettingsSection(title = "📱 Layout") {
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            LayoutOption.entries.forEach { mode ->
-                                LayoutOptionItem(
-                                    mode = mode,
-                                    isSelected = currentLayoutMode == mode.layoutMode,
-                                    onClick = { onLayoutChange(mode.layoutMode) }
-                                )
+                    SettingsSection(title = "👤 Player Profile") {
+                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            // Player name
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(Color(0xFF1E1E1E))
+                                    .padding(16.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                if (editingName) {
+                                    BasicTextField(
+                                        value = nameInput,
+                                        onValueChange = { nameInput = it.take(20) },
+                                        textStyle = TextStyle(fontSize = 18.sp, color = Color.White),
+                                        cursorBrush = SolidColor(Color(0xFFF4D03F)),
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    TextButton(onClick = {
+                                        if (nameInput.isNotBlank()) {
+                                            onPlayerNameChange(nameInput)
+                                        }
+                                        editingName = false
+                                    }) {
+                                        Text("Save", color = Color(0xFFF4D03F))
+                                    }
+                                } else {
+                                    Column {
+                                        Text("Name", fontSize = 12.sp, color = Color.Gray)
+                                        Text(playerName, fontSize = 18.sp, fontWeight = FontWeight.Medium, color = Color.White)
+                                    }
+                                    TextButton(onClick = {
+                                        nameInput = playerName
+                                        editingName = true
+                                    }) {
+                                        Text("Edit", color = Color(0xFFF4D03F))
+                                    }
+                                }
+                            }
+                            
+                            // High score
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(Color(0xFF1E1E1E))
+                                    .padding(16.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column {
+                                    Text("🏆 High Score", fontSize = 12.sp, color = Color.Gray)
+                                    Text(
+                                        highScore.toString().padStart(6, '0'),
+                                        fontSize = 24.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFFF4D03F),
+                                        letterSpacing = 2.sp
+                                    )
+                                }
                             }
                         }
                     }
                 }
                 
-                // Theme section
+                // Layout Section
+                item {
+                    SettingsSection(title = "📱 Layout") {
+                        ToggleOption(
+                            title = "Fullscreen Mode",
+                            description = "Game only, no device frame",
+                            isEnabled = isFullscreen,
+                            onToggle = onFullscreenChange
+                        )
+                    }
+                }
+                
+                // Theme Section
                 item {
                     SettingsSection(title = "🎨 Theme") {
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            GameThemes.allThemes.forEach { gameTheme ->
+                            GameThemes.allThemes.forEach { theme ->
                                 ThemeOption(
-                                    theme = gameTheme,
-                                    isSelected = gameTheme.name == currentThemeName,
-                                    onClick = { onThemeChange(gameTheme.name) }
+                                    theme = theme,
+                                    isSelected = theme.name == currentThemeName,
+                                    onClick = { onThemeChange(theme.name) }
                                 )
                             }
                         }
                     }
                 }
                 
-                // Feedback section
+                // Feedback Section
                 item {
                     SettingsSection(title = "📳 Feedback") {
                         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                             ToggleOption(
                                 title = "Vibration",
-                                description = "Haptic feedback on actions",
+                                description = "Haptic feedback on button press",
                                 isEnabled = vibrationEnabled,
                                 onToggle = onVibrationChange
                             )
-                            
                             ToggleOption(
                                 title = "Sound",
                                 description = "Sound effects (coming soon)",
@@ -133,104 +210,102 @@ fun SettingsScreen(
                     }
                 }
                 
-                // About section
+                // Score History Section
                 item {
-                    SettingsSection(title = "ℹ️ About") {
-                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text(
-                                text = "Brick Game v1.1.0",
-                                fontSize = 14.sp,
-                                color = Color.White
-                            )
-                            Text(
-                                text = "Developer: Andrei Anton",
-                                fontSize = 13.sp,
-                                color = Color.Gray
-                            )
-                            Text(
-                                text = "Built with Kotlin & Jetpack Compose",
-                                fontSize = 13.sp,
-                                color = Color.Gray
-                            )
+                    SettingsSection(
+                        title = "📊 Score History",
+                        action = if (scoreHistory.isNotEmpty()) {
+                            { TextButton(onClick = { showClearConfirm = true }) {
+                                Text("Clear", color = Color.Gray, fontSize = 14.sp)
+                            }}
+                        } else null
+                    ) {
+                        if (scoreHistory.isEmpty()) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(Color(0xFF1E1E1E))
+                                    .padding(24.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    "No games played yet.\nStart playing to see your history!",
+                                    color = Color.Gray,
+                                    textAlign = TextAlign.Center
+                                )
+                            }
+                        } else {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(Color(0xFF1E1E1E))
+                                    .padding(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                scoreHistory.take(10).forEachIndexed { index, entry ->
+                                    ScoreHistoryItem(
+                                        rank = index + 1,
+                                        entry = entry,
+                                        isHighScore = entry.score == highScore
+                                    )
+                                }
+                                if (scoreHistory.size > 10) {
+                                    Text(
+                                        "... and ${scoreHistory.size - 10} more",
+                                        fontSize = 12.sp,
+                                        color = Color.Gray,
+                                        modifier = Modifier.padding(8.dp)
+                                    )
+                                }
+                            }
                         }
                     }
                 }
                 
-                // Spacer at bottom
+                // About Section
                 item {
-                    Spacer(modifier = Modifier.height(32.dp))
+                    SettingsSection(title = "ℹ️ About") {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(Color(0xFF1E1E1E))
+                                .padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Text("Brick Game v1.2.0", fontSize = 14.sp, color = Color.White)
+                            Text("Developer: Andrei Anton", fontSize = 13.sp, color = Color.Gray)
+                            Text("Built with Kotlin & Jetpack Compose", fontSize = 13.sp, color = Color.Gray)
+                        }
+                    }
                 }
-            }
-        }
-    }
-}
-
-private enum class LayoutOption(
-    val layoutMode: LayoutMode,
-    val icon: String,
-    val title: String,
-    val description: String
-) {
-    CLASSIC(LayoutMode.CLASSIC, "📱", "Classic", "Full device with decorations"),
-    COMPACT(LayoutMode.COMPACT, "🎮", "Compact", "Smaller device, more screen"),
-    FULLSCREEN(LayoutMode.FULLSCREEN, "📺", "Fullscreen", "Game only, no frame")
-}
-
-@Composable
-private fun LayoutOptionItem(
-    mode: LayoutOption,
-    isSelected: Boolean,
-    onClick: () -> Unit
-) {
-    val borderColor by animateColorAsState(
-        targetValue = if (isSelected) Color(0xFFF4D03F) else Color.Transparent,
-        label = "borderColor"
-    )
-    
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(Color(0xFF1E1E1E))
-            .border(
-                width = if (isSelected) 2.dp else 0.dp,
-                color = borderColor,
-                shape = RoundedCornerShape(12.dp)
-            )
-            .clickable { onClick() }
-            .padding(16.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = mode.icon,
-                fontSize = 24.sp
-            )
-            Column {
-                Text(
-                    text = mode.title,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = Color.White
-                )
-                Text(
-                    text = mode.description,
-                    fontSize = 12.sp,
-                    color = Color.Gray
-                )
+                
+                // Bottom spacer
+                item { Spacer(modifier = Modifier.height(32.dp)) }
             }
         }
         
-        if (isSelected) {
-            Text(
-                text = "✓",
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color(0xFFF4D03F)
+        // Clear confirmation dialog
+        if (showClearConfirm) {
+            AlertDialog(
+                onDismissRequest = { showClearConfirm = false },
+                title = { Text("Clear History?") },
+                text = { Text("This will delete all your score history. This cannot be undone.") },
+                confirmButton = {
+                    TextButton(onClick = {
+                        onClearHistory()
+                        showClearConfirm = false
+                    }) {
+                        Text("Clear", color = Color.Red)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showClearConfirm = false }) {
+                        Text("Cancel")
+                    }
+                }
             )
         }
     }
@@ -239,15 +314,23 @@ private fun LayoutOptionItem(
 @Composable
 private fun SettingsSection(
     title: String,
+    action: (@Composable () -> Unit)? = null,
     content: @Composable () -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text(
-            text = title,
-            fontSize = 18.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = Color(0xFFF4D03F)
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = title,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = Color(0xFFF4D03F)
+            )
+            action?.invoke()
+        }
         content()
     }
 }
@@ -304,21 +387,11 @@ private fun ThemeOption(
                 )
             }
             
-            Text(
-                text = theme.name,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Medium,
-                color = Color.White
-            )
+            Text(theme.name, fontSize = 16.sp, fontWeight = FontWeight.Medium, color = Color.White)
         }
         
         if (isSelected) {
-            Text(
-                text = "✓",
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color(0xFFF4D03F)
-            )
+            Text("✓", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color(0xFFF4D03F))
         }
     }
 }
@@ -341,17 +414,8 @@ private fun ToggleOption(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = title,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Medium,
-                color = Color.White
-            )
-            Text(
-                text = description,
-                fontSize = 13.sp,
-                color = Color.Gray
-            )
+            Text(title, fontSize = 16.sp, fontWeight = FontWeight.Medium, color = Color.White)
+            Text(description, fontSize = 13.sp, color = Color.Gray)
         }
         
         Switch(
@@ -363,6 +427,69 @@ private fun ToggleOption(
                 uncheckedThumbColor = Color.Gray,
                 uncheckedTrackColor = Color.DarkGray
             )
+        )
+    }
+}
+
+@Composable
+private fun ScoreHistoryItem(
+    rank: Int,
+    entry: ScoreEntry,
+    isHighScore: Boolean
+) {
+    val dateFormat = remember { SimpleDateFormat("MMM dd, HH:mm", Locale.getDefault()) }
+    
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .background(if (isHighScore) Color(0xFF2A2A1A) else Color.Transparent)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                "#$rank",
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+                color = if (rank <= 3) Color(0xFFF4D03F) else Color.Gray,
+                modifier = Modifier.width(32.dp)
+            )
+            
+            Column {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(entry.playerName, fontSize = 14.sp, fontWeight = FontWeight.Medium, color = Color.White)
+                    if (isHighScore) {
+                        Text("👑", fontSize = 12.sp)
+                    }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        "${entry.score} pts",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFFF4D03F)
+                    )
+                    Text(
+                        "Lv.${entry.level} • ${entry.lines}L",
+                        fontSize = 12.sp,
+                        color = Color.Gray
+                    )
+                }
+            }
+        }
+        
+        Text(
+            dateFormat.format(Date(entry.timestamp)),
+            fontSize = 11.sp,
+            color = Color.Gray
         )
     }
 }
