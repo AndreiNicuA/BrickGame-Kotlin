@@ -13,11 +13,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -28,14 +26,11 @@ import com.brickgame.tetris.ui.components.*
 import com.brickgame.tetris.ui.theme.LocalGameTheme
 
 enum class LayoutMode {
-    CLASSIC,    // Design A - Unified LCD
-    MODERN,     // Design C - Modern minimal  
-    FULLSCREEN  // Pure game, maximum screen
+    CLASSIC,
+    MODERN,
+    FULLSCREEN
 }
 
-/**
- * Main Game Screen
- */
 @Composable
 fun GameScreen(
     gameState: GameState,
@@ -70,7 +65,6 @@ fun GameScreen(
                 lineClearAnimation = lineClearAnimation,
                 onTogglePause = onTogglePause,
                 onResetGame = onResetGame,
-                onToggleSound = onToggleSound,
                 onMoveLeft = onMoveLeft,
                 onMoveLeftRelease = onMoveLeftRelease,
                 onMoveRight = onMoveRight,
@@ -81,7 +75,6 @@ fun GameScreen(
                 onRotate = onRotate,
                 onOpenSettings = onOpenSettings
             )
-            
             LayoutMode.MODERN -> ModernLayout(
                 gameState = gameState,
                 lineClearAnimation = lineClearAnimation,
@@ -97,7 +90,6 @@ fun GameScreen(
                 onRotate = onRotate,
                 onOpenSettings = onOpenSettings
             )
-            
             LayoutMode.FULLSCREEN -> FullscreenLayout(
                 gameState = gameState,
                 lineClearAnimation = lineClearAnimation,
@@ -115,7 +107,7 @@ fun GameScreen(
             )
         }
         
-        // Game Over Overlay (50% transparent)
+        // Game Over Overlay
         if (gameState.status == GameStatus.GAME_OVER) {
             GameOverOverlay(
                 score = gameState.score,
@@ -129,8 +121,7 @@ fun GameScreen(
 }
 
 /**
- * Design A: Classic Layout - Unified LCD Screen
- * All info inside single LCD display like original hardware
+ * CLASSIC LAYOUT - Simple unified LCD like original hardware
  */
 @Composable
 private fun ClassicLayout(
@@ -138,7 +129,6 @@ private fun ClassicLayout(
     lineClearAnimation: LineClearAnimationState,
     onTogglePause: () -> Unit,
     onResetGame: () -> Unit,
-    onToggleSound: () -> Unit,
     onMoveLeft: () -> Unit,
     onMoveLeftRelease: () -> Unit,
     onMoveRight: () -> Unit,
@@ -154,7 +144,7 @@ private fun ClassicLayout(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(8.dp),
+            .padding(12.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         // Device frame
@@ -162,88 +152,87 @@ private fun ClassicLayout(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(20.dp))
+                .clip(RoundedCornerShape(16.dp))
                 .background(theme.deviceColor)
-                .border(3.dp, theme.deviceBorderColor, RoundedCornerShape(20.dp))
+                .border(2.dp, theme.deviceBorderColor, RoundedCornerShape(16.dp))
                 .padding(12.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Unified LCD Screen (game + info together)
-            Box(
+            // LCD Screen with game + info
+            Row(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(4.dp))
                     .background(theme.screenBackground)
-                    .border(2.dp, theme.pixelBorder, RoundedCornerShape(4.dp))
                     .padding(4.dp)
             ) {
-                Row(modifier = Modifier.fillMaxSize()) {
-                    // Game board area
-                    GameBoard(
-                        board = gameState.board,
-                        lineClearAnimation = lineClearAnimation,
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxHeight()
+                // Game board
+                GameBoard(
+                    board = gameState.board,
+                    lineClearAnimation = lineClearAnimation,
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                )
+                
+                // Divider
+                Spacer(modifier = Modifier
+                    .width(1.dp)
+                    .fillMaxHeight()
+                    .background(theme.pixelOn.copy(alpha = 0.3f)))
+                
+                // Info panel
+                Column(
+                    modifier = Modifier
+                        .width(60.dp)
+                        .fillMaxHeight()
+                        .padding(4.dp),
+                    verticalArrangement = Arrangement.SpaceEvenly,
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    InfoBlock("SCORE", gameState.score.toString().padStart(6, '0'))
+                    InfoBlock("LEVEL", gameState.level.toString())
+                    InfoBlock("LINES", gameState.lines.toString())
+                    Text("NEXT", fontSize = 8.sp, color = theme.pixelOn.copy(alpha = 0.6f))
+                    NextPiecePreview(
+                        shape = gameState.nextPiece?.shape,
+                        modifier = Modifier.size(36.dp)
                     )
-                    
-                    // Divider line
-                    Box(
-                        modifier = Modifier
-                            .width(2.dp)
-                            .fillMaxHeight()
-                            .background(theme.pixelOff)
-                    )
-                    
-                    // Info panel (inside LCD)
-                    Column(
-                        modifier = Modifier
-                            .width(65.dp)
-                            .fillMaxHeight()
-                            .padding(4.dp),
-                        verticalArrangement = Arrangement.SpaceEvenly,
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        LcdInfoItem(label = "SCORE", value = gameState.score.toString().padStart(6, '0'))
-                        LcdInfoItem(label = "LEVEL", value = gameState.level.toString())
-                        LcdInfoItem(label = "LINES", value = gameState.lines.toString())
-                        LcdInfoItem(label = "NEXT", value = null)
-                        NextPiecePreview(
-                            shape = gameState.nextPiece?.shape,
-                            modifier = Modifier.size(40.dp)
-                        )
-                    }
                 }
             }
             
             Spacer(modifier = Modifier.height(8.dp))
             
-            // Pause indicator
+            // Pause text
             if (gameState.status == GameStatus.PAUSED) {
-                PauseIndicator()
+                Text(
+                    "PAUSED",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = theme.accentColor
+                )
                 Spacer(modifier = Modifier.height(4.dp))
             }
             
-            // Small function buttons row
+            // Simple button row
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceEvenly
             ) {
-                SmallFunctionButton(label = "SOUND", onClick = onToggleSound)
-                SmallFunctionButton(
-                    label = if (gameState.status == GameStatus.PAUSED) "RESUME" else "START",
+                SimpleButton(
+                    text = if (gameState.status == GameStatus.PAUSED) "PLAY" else "PAUSE",
                     onClick = onTogglePause
                 )
-                SmallFunctionButton(label = "RESET", onClick = onResetGame)
+                SimpleButton(text = "RESET", onClick = onResetGame)
             }
             
             Spacer(modifier = Modifier.height(12.dp))
             
-            // D-Pad and Rotate (no overlap)
+            // Controls
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly,
+                horizontalArrangement = Arrangement.SpaceAround,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 DPad(
@@ -254,38 +243,26 @@ private fun ClassicLayout(
                     onLeftRelease = onMoveLeftRelease,
                     onRightPress = onMoveRight,
                     onRightRelease = onMoveRightRelease,
-                    buttonSize = 50.dp
+                    buttonSize = 46.dp
                 )
                 
-                RotateButton(onClick = onRotate, size = 60.dp)
+                RotateButton(onClick = onRotate, size = 56.dp)
             }
             
             Spacer(modifier = Modifier.height(8.dp))
             
-            // Branding
-            Text(
-                text = "BRICK GAME",
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold,
-                color = theme.textPrimary,
-                letterSpacing = 3.sp
-            )
-            Text(
-                text = "9999 in 1",
-                fontSize = 10.sp,
-                color = theme.textSecondary
-            )
+            // Branding + Settings
+            Text("BRICK GAME", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = theme.textPrimary, letterSpacing = 2.sp)
             
             Spacer(modifier = Modifier.height(8.dp))
             
-            // Settings button (hamburger menu)
-            HamburgerMenuButton(onClick = onOpenSettings)
+            MenuButton(onClick = onOpenSettings)
         }
     }
 }
 
 /**
- * Design C: Modern Layout - Clean minimal look
+ * MODERN LAYOUT - Clean status bar at top
  */
 @Composable
 private fun ModernLayout(
@@ -316,67 +293,25 @@ private fun ModernLayout(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(10.dp))
-                .background(Color.Black.copy(alpha = 0.3f))
-                .padding(horizontal = 16.dp, vertical = 10.dp),
+                .clip(RoundedCornerShape(8.dp))
+                .background(Color.Black.copy(alpha = 0.4f))
+                .padding(12.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Score
             Column {
-                Text(
-                    text = "SCORE",
-                    fontSize = 9.sp,
-                    color = theme.textSecondary
-                )
-                Text(
-                    text = gameState.score.toString().padStart(6, '0'),
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold,
-                    fontFamily = FontFamily.Monospace,
-                    color = theme.accentColor
-                )
+                Text(gameState.score.toString().padStart(6, '0'), 
+                    fontSize = 20.sp, fontWeight = FontWeight.Bold, 
+                    fontFamily = FontFamily.Monospace, color = theme.accentColor)
             }
-            
-            // Level & Lines
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
-                    text = "LV.${gameState.level}",
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = theme.textPrimary
-                )
-                Text(
-                    text = "${gameState.lines} lines",
-                    fontSize = 11.sp,
-                    color = theme.textSecondary
-                )
+                Text("LV.${gameState.level}", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = theme.textPrimary)
+                Text("${gameState.lines} lines", fontSize = 10.sp, color = theme.textSecondary)
             }
-            
-            // Next piece preview
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
-                    text = "NEXT",
-                    fontSize = 8.sp,
-                    color = theme.textSecondary
-                )
-                Box(
-                    modifier = Modifier
-                        .size(44.dp)
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(theme.screenBackground.copy(alpha = 0.5f))
-                        .border(1.dp, theme.pixelBorder, RoundedCornerShape(6.dp))
-                        .padding(2.dp)
-                ) {
-                    NextPiecePreview(
-                        shape = gameState.nextPiece?.shape,
-                        modifier = Modifier.fillMaxSize()
-                    )
-                }
-            }
+            NextPiecePreview(shape = gameState.nextPiece?.shape, modifier = Modifier.size(40.dp))
         }
         
-        Spacer(modifier = Modifier.height(10.dp))
+        Spacer(modifier = Modifier.height(8.dp))
         
         // Game board
         Box(
@@ -384,46 +319,33 @@ private fun ModernLayout(
                 .weight(1f)
                 .aspectRatio(0.5f)
                 .clip(RoundedCornerShape(8.dp))
-                .background(theme.screenBackground)
-                .border(2.dp, theme.pixelBorder, RoundedCornerShape(8.dp))
+                .background(theme.screenBackground),
+            contentAlignment = Alignment.Center
         ) {
             GameBoard(
                 board = gameState.board,
                 lineClearAnimation = lineClearAnimation,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(4.dp)
+                modifier = Modifier.fillMaxSize().padding(4.dp)
             )
             
-            // Pause overlay
             if (gameState.status == GameStatus.PAUSED) {
                 Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(Color.Black.copy(alpha = 0.7f)),
+                    modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.6f)),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text = "PAUSED",
-                        fontSize = 24.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
-                    )
+                    Text("PAUSED", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Color.White)
                 }
             }
         }
         
-        Spacer(modifier = Modifier.height(10.dp))
+        Spacer(modifier = Modifier.height(8.dp))
         
-        // Controls row (no overlap)
+        // Controls
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 8.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceAround,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // D-Pad
             DPad(
                 onUpPress = onHardDrop,
                 onDownPress = onMoveDown,
@@ -432,34 +354,28 @@ private fun ModernLayout(
                 onLeftRelease = onMoveLeftRelease,
                 onRightPress = onMoveRight,
                 onRightRelease = onMoveRightRelease,
-                buttonSize = 48.dp
+                buttonSize = 44.dp
             )
             
-            // Center buttons
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                SmallFunctionButton(
-                    label = if (gameState.status == GameStatus.PAUSED) "RESUME" else "START",
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                SimpleButton(
+                    text = if (gameState.status == GameStatus.PAUSED) "▶" else "⏸",
                     onClick = onTogglePause
                 )
-                SmallFunctionButton(label = "RESET", onClick = onResetGame)
+                SimpleButton(text = "↺", onClick = onResetGame)
             }
             
-            // Rotate button
-            RotateButton(onClick = onRotate, size = 56.dp)
+            RotateButton(onClick = onRotate, size = 52.dp)
         }
         
-        Spacer(modifier = Modifier.height(10.dp))
+        Spacer(modifier = Modifier.height(8.dp))
         
-        // Settings button
-        HamburgerMenuButton(onClick = onOpenSettings)
+        MenuButton(onClick = onOpenSettings)
     }
 }
 
 /**
- * Fullscreen Layout - Maximum game area
+ * FULLSCREEN LAYOUT - Maximum game area
  */
 @Composable
 private fun FullscreenLayout(
@@ -486,77 +402,43 @@ private fun FullscreenLayout(
             .padding(8.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Minimal top bar
+        // Minimal top info
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 4.dp, vertical = 4.dp),
+            modifier = Modifier.fillMaxWidth().padding(4.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = gameState.score.toString().padStart(6, '0'),
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold,
-                fontFamily = FontFamily.Monospace,
-                color = theme.pixelOn
+                gameState.score.toString().padStart(6, '0'),
+                fontSize = 16.sp, fontWeight = FontWeight.Bold,
+                fontFamily = FontFamily.Monospace, color = theme.pixelOn
             )
-            
             Text(
-                text = "LV.${gameState.level} | ${gameState.lines}L",
-                fontSize = 12.sp,
-                color = theme.pixelOn.copy(alpha = 0.7f)
+                "L${gameState.level} • ${gameState.lines}",
+                fontSize = 12.sp, color = theme.pixelOn.copy(alpha = 0.7f)
             )
-            
-            // Mini next preview
-            Box(
-                modifier = Modifier
-                    .size(32.dp)
-                    .clip(RoundedCornerShape(4.dp))
-                    .background(theme.pixelOff)
-            ) {
-                NextPiecePreview(
-                    shape = gameState.nextPiece?.shape,
-                    modifier = Modifier.fillMaxSize().padding(2.dp)
-                )
+            Box(modifier = Modifier.size(28.dp).background(theme.pixelOff, RoundedCornerShape(4.dp))) {
+                NextPiecePreview(shape = gameState.nextPiece?.shape, modifier = Modifier.fillMaxSize().padding(2.dp))
             }
         }
         
         // Game board - maximum size
-        Box(
+        GameBoard(
+            board = gameState.board,
+            lineClearAnimation = lineClearAnimation,
             modifier = Modifier
                 .weight(1f)
-                .fillMaxWidth(),
-            contentAlignment = Alignment.Center
-        ) {
-            GameBoard(
-                board = gameState.board,
-                lineClearAnimation = lineClearAnimation,
-                modifier = Modifier
-                    .fillMaxHeight()
-                    .aspectRatio(0.5f)
-                    .clip(RoundedCornerShape(4.dp))
-                    .border(1.dp, theme.pixelOn.copy(alpha = 0.3f), RoundedCornerShape(4.dp))
-            )
-            
-            if (gameState.status == GameStatus.PAUSED) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "PAUSED",
-                        fontSize = 28.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = theme.pixelOn
-                    )
-                }
-            }
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp)
+        )
+        
+        if (gameState.status == GameStatus.PAUSED) {
+            Text("PAUSED", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = theme.pixelOn)
         }
         
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(4.dp))
         
-        // Controls (compact, no overlap)
+        // Compact controls
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceEvenly,
@@ -570,122 +452,68 @@ private fun FullscreenLayout(
                 onLeftRelease = onMoveLeftRelease,
                 onRightPress = onMoveRight,
                 onRightRelease = onMoveRightRelease,
-                buttonSize = 44.dp
+                buttonSize = 40.dp
             )
             
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                SmallFunctionButton(
-                    label = if (gameState.status == GameStatus.PAUSED) "▶" else "⏸",
-                    onClick = onTogglePause
-                )
-                SmallFunctionButton(label = "↺", onClick = onResetGame)
-            }
+            SimpleButton(
+                text = if (gameState.status == GameStatus.PAUSED) "▶" else "⏸",
+                onClick = onTogglePause
+            )
             
-            RotateButton(onClick = onRotate, size = 52.dp)
+            RotateButton(onClick = onRotate, size = 48.dp)
         }
         
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(4.dp))
         
-        // Settings button
-        HamburgerMenuButton(onClick = onOpenSettings, size = 40.dp)
+        MenuButton(onClick = onOpenSettings, size = 36.dp)
     }
 }
 
-/**
- * LCD Info Item (for Classic layout)
- */
 @Composable
-private fun LcdInfoItem(label: String, value: String?) {
+private fun InfoBlock(label: String, value: String) {
     val theme = LocalGameTheme.current
-    
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(
-            text = label,
-            fontSize = 7.sp,
-            color = theme.pixelOn.copy(alpha = 0.6f),
-            fontFamily = FontFamily.Monospace
-        )
-        if (value != null) {
-            Text(
-                text = value,
-                fontSize = 10.sp,
-                fontWeight = FontWeight.Bold,
-                color = theme.pixelOn,
-                fontFamily = FontFamily.Monospace
-            )
-        }
+        Text(label, fontSize = 7.sp, color = theme.pixelOn.copy(alpha = 0.5f), fontFamily = FontFamily.Monospace)
+        Text(value, fontSize = 10.sp, fontWeight = FontWeight.Bold, color = theme.pixelOn, fontFamily = FontFamily.Monospace)
     }
 }
 
-/**
- * Hamburger Menu Button (☰)
- */
 @Composable
-private fun HamburgerMenuButton(
-    onClick: () -> Unit,
-    size: Dp = 44.dp
-) {
+private fun SimpleButton(text: String, onClick: () -> Unit) {
     val theme = LocalGameTheme.current
-    
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(theme.buttonSecondary)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(text, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = theme.textPrimary)
+    }
+}
+
+@Composable
+private fun MenuButton(onClick: () -> Unit, size: Dp = 40.dp) {
+    val theme = LocalGameTheme.current
     Box(
         modifier = Modifier
             .size(size)
             .clip(CircleShape)
             .background(theme.buttonSecondary)
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = onClick
-            ),
+            .clickable(onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
-        Column(
-            verticalArrangement = Arrangement.spacedBy(3.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
+        Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
             repeat(3) {
-                Box(
-                    modifier = Modifier
-                        .width(size * 0.4f)
-                        .height(2.dp)
-                        .clip(RoundedCornerShape(1.dp))
-                        .background(theme.textPrimary)
-                )
+                Box(modifier = Modifier.width(size * 0.4f).height(2.dp).background(theme.textPrimary, RoundedCornerShape(1.dp)))
             }
         }
     }
 }
 
 /**
- * Pause Indicator
- */
-@Composable
-private fun PauseIndicator() {
-    val theme = LocalGameTheme.current
-    val infiniteTransition = rememberInfiniteTransition(label = "pause")
-    val alpha by infiniteTransition.animateFloat(
-        initialValue = 1f,
-        targetValue = 0.3f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(500),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "pauseAlpha"
-    )
-    
-    Text(
-        text = "PAUSED - Press START",
-        fontSize = 12.sp,
-        fontWeight = FontWeight.Bold,
-        color = theme.accentColor.copy(alpha = alpha)
-    )
-}
-
-/**
- * Game Over Overlay - 50% transparent background with PLAY AGAIN button
+ * Game Over - 50% transparent, PLAY AGAIN button
  */
 @Composable
 private fun GameOverOverlay(
@@ -700,94 +528,56 @@ private fun GameOverOverlay(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.5f)),  // 50% transparent
+            .background(Color.Black.copy(alpha = 0.5f)),
         contentAlignment = Alignment.Center
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            modifier = Modifier
+                .clip(RoundedCornerShape(16.dp))
+                .background(Color.Black.copy(alpha = 0.8f))
+                .padding(32.dp)
         ) {
-            // Game Over title (uses theme accent color)
             Text(
-                text = "GAME OVER",
-                fontSize = 28.sp,
+                "GAME OVER",
+                fontSize = 24.sp,
                 fontWeight = FontWeight.Bold,
-                color = theme.accentColor,
-                letterSpacing = 4.sp
+                color = theme.accentColor
             )
             
-            // Score box
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(Color.Black.copy(alpha = 0.7f))
-                    .padding(24.dp)
-            ) {
-                Text(
-                    text = "FINAL SCORE",
-                    fontSize = 12.sp,
-                    color = Color.Gray
-                )
-                Text(
-                    text = score.toString().padStart(6, '0'),
-                    fontSize = 32.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = theme.accentColor,
-                    fontFamily = FontFamily.Monospace,
-                    letterSpacing = 3.sp
-                )
-                
-                Spacer(modifier = Modifier.height(12.dp))
-                
-                Row(horizontalArrangement = Arrangement.spacedBy(32.dp)) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("LEVEL", fontSize = 10.sp, color = Color.Gray)
-                        Text(
-                            level.toString(),
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White
-                        )
-                    }
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("LINES", fontSize = 10.sp, color = Color.Gray)
-                        Text(
-                            lines.toString(),
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White
-                        )
-                    }
-                }
-                
-                if (score >= highScore && score > 0) {
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Text(
-                        text = "🏆 NEW HIGH SCORE!",
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = theme.accentColor
-                    )
-                }
-            }
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            Text(
+                score.toString().padStart(6, '0'),
+                fontSize = 32.sp,
+                fontWeight = FontWeight.Bold,
+                fontFamily = FontFamily.Monospace,
+                color = theme.accentColor
+            )
             
             Spacer(modifier = Modifier.height(8.dp))
             
-            // PLAY AGAIN button (uses theme accent color)
+            Text(
+                "Level $level • $lines lines",
+                fontSize = 14.sp,
+                color = Color.Gray
+            )
+            
+            if (score >= highScore && score > 0) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text("NEW HIGH SCORE!", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = theme.accentColor)
+            }
+            
+            Spacer(modifier = Modifier.height(24.dp))
+            
             Box(
                 modifier = Modifier
                     .clip(RoundedCornerShape(25.dp))
                     .background(theme.accentColor)
                     .clickable(onClick = onPlayAgain)
-                    .padding(horizontal = 32.dp, vertical = 14.dp)
+                    .padding(horizontal = 32.dp, vertical = 12.dp)
             ) {
-                Text(
-                    text = "▶  PLAY AGAIN",
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.Black
-                )
+                Text("PLAY AGAIN", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color.Black)
             }
         }
     }
