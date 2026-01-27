@@ -196,7 +196,6 @@ private fun ClassicLayout(
                 score = gameState.score,
                 level = gameState.level,
                 lines = gameState.lines,
-                highScore = gameState.highScore,
                 nextShape = gameState.nextPiece?.shape,
                 modifier = Modifier.width(70.dp)
             )
@@ -544,7 +543,6 @@ private fun FullscreenLayout(
             // Left side - D-Pad
             DPad(
                 onUpPress = onHardDrop,
-                onUpRelease = {},
                 onDownPress = onMoveDown,
                 onDownRelease = onMoveDownRelease,
                 onLeftPress = onMoveLeft,
@@ -651,7 +649,6 @@ private fun ControlsSection(
     ) {
         DPad(
             onUpPress = onHardDrop,
-            onUpRelease = {},
             onDownPress = onMoveDown,
             onDownRelease = onMoveDownRelease,
             onLeftPress = onMoveLeft,
