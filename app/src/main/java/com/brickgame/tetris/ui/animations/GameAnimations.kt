@@ -186,11 +186,8 @@ fun Modifier.gameOverAnimation(
     
     if (isGameOver && progress > 0f) {
         this
-            .scale(scaleY = 1f - progress * 0.5f)
+            .scale(scaleX = 1f - progress * 0.3f, scaleY = 1f - progress * 0.5f)
             .alpha(1f - progress * 0.7f)
-            .graphicsLayer {
-                this.rotationX = progress * 30f
-            }
     } else {
         this
     }
