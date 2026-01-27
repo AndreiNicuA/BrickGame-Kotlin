@@ -189,7 +189,7 @@ fun Modifier.gameOverAnimation(
             .scale(scaleY = 1f - progress * 0.5f)
             .alpha(1f - progress * 0.7f)
             .graphicsLayer {
-                rotationX = progress * 30f
+                this.rotationX = progress * 30f
             }
     } else {
         this
