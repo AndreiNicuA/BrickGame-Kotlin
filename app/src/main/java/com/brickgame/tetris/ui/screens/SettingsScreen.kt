@@ -47,13 +47,14 @@ fun SettingsScreen(
     currentThemeName: String, layoutMode: LayoutMode,
     vibrationEnabled: Boolean, vibrationIntensity: Float, vibrationStyle: VibrationStyle,
     soundEnabled: Boolean, soundVolume: Float, soundStyle: SoundStyle,
-    animationStyle: AnimationStyle, stylePreset: StylePreset,
-    ghostPieceEnabled: Boolean, difficulty: Difficulty,
+    animationEnabled: Boolean, animationStyle: AnimationStyle, animationDuration: Float,
+    stylePreset: StylePreset, ghostPieceEnabled: Boolean, difficulty: Difficulty,
     playerName: String, highScore: Int, scoreHistory: List<ScoreEntry>,
     onThemeChange: (String) -> Unit, onLayoutModeChange: (LayoutMode) -> Unit,
     onVibrationEnabledChange: (Boolean) -> Unit, onVibrationIntensityChange: (Float) -> Unit, onVibrationStyleChange: (VibrationStyle) -> Unit,
     onSoundEnabledChange: (Boolean) -> Unit, onSoundVolumeChange: (Float) -> Unit, onSoundStyleChange: (SoundStyle) -> Unit,
-    onAnimationStyleChange: (AnimationStyle) -> Unit, onStylePresetChange: (StylePreset) -> Unit,
+    onAnimationEnabledChange: (Boolean) -> Unit, onAnimationStyleChange: (AnimationStyle) -> Unit, onAnimationDurationChange: (Float) -> Unit,
+    onStylePresetChange: (StylePreset) -> Unit,
     onGhostPieceChange: (Boolean) -> Unit, onDifficultyChange: (Difficulty) -> Unit,
     onPlayerNameChange: (String) -> Unit, onClearHistory: () -> Unit, onClose: () -> Unit,
     modifier: Modifier = Modifier
@@ -72,7 +73,7 @@ fun SettingsScreen(
                 SettingsPage.LAYOUT -> LayoutPage(layoutMode, onLayoutModeChange) { currentPage = SettingsPage.MAIN }
                 SettingsPage.GAMEPLAY -> GameplayPage(ghostPieceEnabled, difficulty, onGhostPieceChange, onDifficultyChange) { currentPage = SettingsPage.MAIN }
                 SettingsPage.FEEDBACK -> FeedbackPage(vibrationEnabled, vibrationIntensity, soundEnabled, soundVolume, onVibrationEnabledChange, onVibrationIntensityChange, onSoundEnabledChange, onSoundVolumeChange) { currentPage = SettingsPage.MAIN }
-                SettingsPage.STYLES -> StylesPage(stylePreset, animationStyle, vibrationStyle, soundStyle, onStylePresetChange, onAnimationStyleChange, onVibrationStyleChange, onSoundStyleChange) { currentPage = SettingsPage.MAIN }
+                SettingsPage.STYLES -> StylesPage(stylePreset, animationEnabled, animationStyle, animationDuration, vibrationStyle, soundStyle, onStylePresetChange, onAnimationEnabledChange, onAnimationStyleChange, onAnimationDurationChange, onVibrationStyleChange, onSoundStyleChange) { currentPage = SettingsPage.MAIN }
                 SettingsPage.ABOUT -> AboutPage { currentPage = SettingsPage.MAIN }
             }
         }
@@ -97,7 +98,7 @@ private fun MainPage(onNavigate: (SettingsPage) -> Unit, onClose: () -> Unit) {
             Spacer(modifier = Modifier.height(20.dp))
             Divider(color = Color(0xFF222222))
             Spacer(modifier = Modifier.height(20.dp))
-            MenuRow("About", "Version 1.4.0") { onNavigate(SettingsPage.ABOUT) }
+            MenuRow("About", "Version 1.4.1") { onNavigate(SettingsPage.ABOUT) }
         }
     }
 }
@@ -128,10 +129,56 @@ private fun GameplayPage(ghostPieceEnabled: Boolean, difficulty: Difficulty, onG
 }
 
 @Composable
-private fun StylesPage(stylePreset: StylePreset, animationStyle: AnimationStyle, vibrationStyle: VibrationStyle, soundStyle: SoundStyle, onStylePresetChange: (StylePreset) -> Unit, onAnimationStyleChange: (AnimationStyle) -> Unit, onVibrationStyleChange: (VibrationStyle) -> Unit, onSoundStyleChange: (SoundStyle) -> Unit, onBack: () -> Unit) {
+private fun StylesPage(
+    stylePreset: StylePreset,
+    animationEnabled: Boolean, animationStyle: AnimationStyle, animationDuration: Float,
+    vibrationStyle: VibrationStyle, soundStyle: SoundStyle,
+    onStylePresetChange: (StylePreset) -> Unit,
+    onAnimationEnabledChange: (Boolean) -> Unit, onAnimationStyleChange: (AnimationStyle) -> Unit, onAnimationDurationChange: (Float) -> Unit,
+    onVibrationStyleChange: (VibrationStyle) -> Unit, onSoundStyleChange: (SoundStyle) -> Unit,
+    onBack: () -> Unit
+) {
     LazyColumn(modifier = Modifier.fillMaxSize().padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         item { PageHeader("Experience", onBack) }
-        item { SectionTitle("Presets") }
+        
+        // Animation section with toggle and duration
+        item { SectionTitle("Animation") }
+        item {
+            SettingCard {
+                Column {
+                    SettingToggle("Line Clear Animation", "Visual effects when clearing lines", animationEnabled, onAnimationEnabledChange)
+                    
+                    if (animationEnabled) {
+                        Spacer(modifier = Modifier.height(20.dp))
+                        
+                        // Duration slider
+                        Column {
+                            Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween) {
+                                Text("Duration", fontSize = LabelSize, color = TextTertiary)
+                                Text("${(animationDuration * 1000).toInt()}ms", fontSize = LabelSize, color = AccentColor)
+                            }
+                            Slider(
+                                value = animationDuration,
+                                onValueChange = onAnimationDurationChange,
+                                valueRange = 0.1f..2f,
+                                colors = SliderDefaults.colors(thumbColor = AccentColor, activeTrackColor = AccentColor, inactiveTrackColor = Color(0xFF333333))
+                            )
+                        }
+                        
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text("Style", fontSize = LabelSize, color = TextSecondary)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        
+                        AnimationStyle.entries.filter { it != AnimationStyle.NONE }.forEach { style ->
+                            CompactOption(style.displayName, style.description, animationStyle == style) { onAnimationStyleChange(style) }
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Presets section
+        item { SectionTitle("Quick Presets") }
         item {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 StylePreset.entries.filter { it != StylePreset.CUSTOM }.forEach { preset ->
@@ -139,8 +186,9 @@ private fun StylesPage(stylePreset: StylePreset, animationStyle: AnimationStyle,
                 }
             }
         }
-        item { SectionTitle("Custom"); Text("Selecting below switches to custom", fontSize = SmallSize, color = TextTertiary) }
-        item { SettingCard { Column { Text("Animation", fontSize = LabelSize, color = TextSecondary); Spacer(Modifier.height(8.dp)); AnimationStyle.entries.forEach { CompactOption(it.displayName, it.description, animationStyle == it) { onAnimationStyleChange(it) } } } } }
+        
+        // Custom patterns
+        item { SectionTitle("Custom Patterns"); Text("Selecting below switches to custom", fontSize = SmallSize, color = TextTertiary) }
         item { SettingCard { Column { Text("Vibration Pattern", fontSize = LabelSize, color = TextSecondary); Spacer(Modifier.height(8.dp)); VibrationStyle.entries.forEach { CompactOption(it.displayName, it.description, vibrationStyle == it) { onVibrationStyleChange(it) } } } } }
         item { SettingCard { Column { Text("Sound Style", fontSize = LabelSize, color = TextSecondary); Spacer(Modifier.height(8.dp)); SoundStyle.entries.forEach { CompactOption(it.displayName, it.description, soundStyle == it) { onSoundStyleChange(it) } } } } }
     }
@@ -231,7 +279,7 @@ private fun AboutPage(onBack: () -> Unit) {
         Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
             Text("Brick Game", fontSize = 32.sp, fontWeight = FontWeight.Light, color = TextPrimary, letterSpacing = 3.sp)
             Spacer(Modifier.height(12.dp))
-            Text("1.4.0", fontSize = BodySize, color = AccentColor, fontWeight = FontWeight.Medium)
+            Text("1.4.1", fontSize = BodySize, color = AccentColor, fontWeight = FontWeight.Medium)
             Spacer(Modifier.height(56.dp))
             Text("Developed by", fontSize = LabelSize, color = TextTertiary)
             Text("Andrei Anton", fontSize = BodySize, color = TextPrimary)
@@ -244,7 +292,7 @@ private fun AboutPage(onBack: () -> Unit) {
 @Composable private fun PageHeader(title: String, onBack: () -> Unit) { Row(verticalAlignment = Alignment.CenterVertically) { Box(Modifier.size(44.dp).clip(CircleShape).clickable(onClick = onBack), contentAlignment = Alignment.Center) { Text("‹", fontSize = 28.sp, color = TextSecondary) }; Spacer(Modifier.width(14.dp)); Text(title, fontSize = HeaderSize, fontWeight = FontWeight.Light, color = TextPrimary) } }
 @Composable private fun SectionTitle(title: String) { Text(title, fontSize = LabelSize, fontWeight = FontWeight.Medium, color = AccentColor, letterSpacing = 1.sp) }
 @Composable private fun SettingCard(content: @Composable () -> Unit) { Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(CardBackground).padding(18.dp)) { content() } }
-@Composable private fun SettingToggle(title: String, desc: String, checked: Boolean, onChange: (Boolean) -> Unit) { Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) { Column { Text(title, fontSize = BodySize, color = TextPrimary); Text(desc, fontSize = LabelSize, color = TextTertiary) }; Switch(checked, onChange, colors = SwitchDefaults.colors(checkedThumbColor = AccentColor, checkedTrackColor = AccentColor.copy(0.4f), uncheckedThumbColor = TextTertiary, uncheckedTrackColor = Color(0xFF333333))) } }
+@Composable private fun SettingToggle(title: String, desc: String, checked: Boolean, onChange: (Boolean) -> Unit) { Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text(title, fontSize = BodySize, color = TextPrimary); Text(desc, fontSize = LabelSize, color = TextTertiary) }; Switch(checked, onChange, colors = SwitchDefaults.colors(checkedThumbColor = AccentColor, checkedTrackColor = AccentColor.copy(0.4f), uncheckedThumbColor = TextTertiary, uncheckedTrackColor = Color(0xFF333333))) } }
 @Composable private fun IntensitySlider(label: String, value: Float, onChange: (Float) -> Unit) { Column { Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween) { Text(label, fontSize = LabelSize, color = TextTertiary); Text("${(value * 100).toInt()}%", fontSize = LabelSize, color = AccentColor) }; Slider(value, onChange, colors = SliderDefaults.colors(thumbColor = AccentColor, activeTrackColor = AccentColor, inactiveTrackColor = Color(0xFF333333))) } }
 @Composable private fun SelectableRow(title: String, subtitle: String, selected: Boolean, onClick: () -> Unit) { Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(if (selected) CardBackgroundSelected else CardBackground).clickable(onClick = onClick).padding(18.dp), Arrangement.SpaceBetween, Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text(title, fontSize = BodySize, color = TextPrimary); Text(subtitle, fontSize = LabelSize, color = TextTertiary) }; if (selected) Text("✓", fontSize = 20.sp, color = AccentColor) } }
 @Composable private fun CompactOption(name: String, desc: String, selected: Boolean, onClick: () -> Unit) { Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(if (selected) Color(0xFF252520) else Color.Transparent).clickable(onClick = onClick).padding(14.dp, 12.dp), Arrangement.SpaceBetween, Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text(name, fontSize = LabelSize, color = if (selected) TextPrimary else TextSecondary); Text(desc, fontSize = SmallSize, color = TextTertiary) }; RadioButton(selected, onClick, colors = RadioButtonDefaults.colors(selectedColor = AccentColor, unselectedColor = TextTertiary), modifier = Modifier.size(24.dp)) } }
