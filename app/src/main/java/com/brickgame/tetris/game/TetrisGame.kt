@@ -1,6 +1,5 @@
 package com.brickgame.tetris.game
 
-import android.util.Log
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -9,7 +8,6 @@ import kotlinx.coroutines.flow.update
 class TetrisGame {
     
     companion object {
-        private const val TAG = "TetrisGame"
         const val BOARD_WIDTH = 10
         const val BOARD_HEIGHT = 20
         
@@ -227,6 +225,7 @@ class TetrisGame {
     private fun lockPiece() {
         val piece = currentPiece ?: return
         
+        // First, place the piece on the board
         for (y in piece.shape.indices) {
             for (x in piece.shape[y].indices) {
                 if (piece.shape[y][x] != 0) {
@@ -239,20 +238,19 @@ class TetrisGame {
             }
         }
         
+        // Find completed lines IMMEDIATELY after placing piece
         val clearedLines = findCompletedLines()
         val clearedCount = clearedLines.size
         
         if (clearedCount > 0) {
-            // Store which lines were cleared for animation
             val currentState = _state.value
             val basePoints = SCORE_TABLE[clearedCount.coerceAtMost(4)] * currentState.level
             val points = (basePoints * difficulty.scoreMultiplier).toInt()
             val newLines = currentState.lines + clearedCount
             val newLevel = maxOf(difficulty.startLevel, (newLines / 10) + 1)
             
-            // Clear the lines
-            clearLines(clearedLines)
-            
+            // Update state WITH the lines that need to be cleared (for animation)
+            // The board still shows the complete lines at this moment
             _state.update { 
                 it.copy(
                     score = it.score + points,
@@ -263,8 +261,12 @@ class TetrisGame {
                     board = board.map { row -> row.toList() }
                 )
             }
+            
+            // Now actually remove the lines from the board
+            clearLines(clearedLines)
         }
         
+        // Spawn next piece
         spawnPiece()
     }
     
@@ -360,10 +362,6 @@ class TetrisGame {
         val level = _state.value.level
         val baseSpeed = (1000 - (level - 1) * 80).coerceAtLeast(100).toLong()
         return (baseSpeed * difficulty.speedMultiplier).toLong().coerceAtLeast(50)
-    }
-    
-    fun clearEvent() {
-        _state.update { it.copy(linesCleared = 0, clearedLineRows = emptyList()) }
     }
 }
 
