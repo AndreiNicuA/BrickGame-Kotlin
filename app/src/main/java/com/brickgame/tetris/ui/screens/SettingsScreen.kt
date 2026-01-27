@@ -19,18 +19,19 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.brickgame.tetris.ui.theme.GameTheme
 import com.brickgame.tetris.ui.theme.GameThemes
-import com.brickgame.tetris.ui.theme.LocalGameTheme
 
 /**
  * Settings Screen
- * Allows user to customize theme, vibration, sound
+ * Theme, Layout, Vibration, Sound settings
  */
 @Composable
 fun SettingsScreen(
     currentThemeName: String,
+    currentLayoutMode: LayoutMode,
     vibrationEnabled: Boolean,
     soundEnabled: Boolean,
     onThemeChange: (String) -> Unit,
+    onLayoutChange: (LayoutMode) -> Unit,
     onVibrationChange: (Boolean) -> Unit,
     onSoundChange: (Boolean) -> Unit,
     onClose: () -> Unit,
@@ -81,12 +82,25 @@ fun SettingsScreen(
                 modifier = Modifier.fillMaxSize(),
                 verticalArrangement = Arrangement.spacedBy(24.dp)
             ) {
+                // Layout section
+                item {
+                    SettingsSection(title = "📱 Layout") {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            LayoutOption.entries.forEach { mode ->
+                                LayoutOptionItem(
+                                    mode = mode,
+                                    isSelected = currentLayoutMode == mode.layoutMode,
+                                    onClick = { onLayoutChange(mode.layoutMode) }
+                                )
+                            }
+                        }
+                    }
+                }
+                
                 // Theme section
                 item {
                     SettingsSection(title = "🎨 Theme") {
-                        Column(
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             GameThemes.allThemes.forEach { gameTheme ->
                                 ThemeOption(
                                     theme = gameTheme,
@@ -101,12 +115,10 @@ fun SettingsScreen(
                 // Feedback section
                 item {
                     SettingsSection(title = "📳 Feedback") {
-                        Column(
-                            verticalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
+                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                             ToggleOption(
                                 title = "Vibration",
-                                description = "Haptic feedback on button press",
+                                description = "Haptic feedback on actions",
                                 isEnabled = vibrationEnabled,
                                 onToggle = onVibrationChange
                             )
@@ -124,11 +136,9 @@ fun SettingsScreen(
                 // About section
                 item {
                     SettingsSection(title = "ℹ️ About") {
-                        Column(
-                            verticalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text(
-                                text = "Brick Game v1.0.0",
+                                text = "Brick Game v1.1.0",
                                 fontSize = 14.sp,
                                 color = Color.White
                             )
@@ -155,21 +165,89 @@ fun SettingsScreen(
     }
 }
 
+private enum class LayoutOption(
+    val layoutMode: LayoutMode,
+    val icon: String,
+    val title: String,
+    val description: String
+) {
+    CLASSIC(LayoutMode.CLASSIC, "📱", "Classic", "Full device with decorations"),
+    COMPACT(LayoutMode.COMPACT, "🎮", "Compact", "Smaller device, more screen"),
+    FULLSCREEN(LayoutMode.FULLSCREEN, "📺", "Fullscreen", "Game only, no frame")
+}
+
+@Composable
+private fun LayoutOptionItem(
+    mode: LayoutOption,
+    isSelected: Boolean,
+    onClick: () -> Unit
+) {
+    val borderColor by animateColorAsState(
+        targetValue = if (isSelected) Color(0xFFF4D03F) else Color.Transparent,
+        label = "borderColor"
+    )
+    
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(Color(0xFF1E1E1E))
+            .border(
+                width = if (isSelected) 2.dp else 0.dp,
+                color = borderColor,
+                shape = RoundedCornerShape(12.dp)
+            )
+            .clickable { onClick() }
+            .padding(16.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = mode.icon,
+                fontSize = 24.sp
+            )
+            Column {
+                Text(
+                    text = mode.title,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = Color.White
+                )
+                Text(
+                    text = mode.description,
+                    fontSize = 12.sp,
+                    color = Color.Gray
+                )
+            }
+        }
+        
+        if (isSelected) {
+            Text(
+                text = "✓",
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFFF4D03F)
+            )
+        }
+    }
+}
+
 @Composable
 private fun SettingsSection(
     title: String,
     content: @Composable () -> Unit
 ) {
-    Column(
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(
             text = title,
             fontSize = 18.sp,
             fontWeight = FontWeight.SemiBold,
             color = Color(0xFFF4D03F)
         )
-        
         content()
     }
 }
@@ -205,9 +283,7 @@ private fun ThemeOption(
             verticalAlignment = Alignment.CenterVertically
         ) {
             // Color preview
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(2.dp)
-            ) {
+            Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                 Box(
                     modifier = Modifier
                         .size(24.dp)
@@ -264,9 +340,7 @@ private fun ToggleOption(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Column(
-            modifier = Modifier.weight(1f)
-        ) {
+        Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = title,
                 fontSize = 16.sp,
