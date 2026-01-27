@@ -22,13 +22,12 @@ import androidx.compose.ui.unit.sp
 import com.brickgame.tetris.ui.theme.LocalGameTheme
 
 /**
- * Primary game button (D-pad buttons, rotate)
- * NO BUILT-IN VIBRATION - vibration is handled by ViewModel
+ * Primary game button (D-pad, rotate) - 20% larger default
  */
 @Composable
 fun PrimaryGameButton(
     text: String,
-    size: Dp = 56.dp,
+    size: Dp = 68.dp,  // 20% larger than 56dp
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     onPress: () -> Unit = {},
@@ -40,15 +39,12 @@ fun PrimaryGameButton(
     
     val scale by animateFloatAsState(
         targetValue = if (isPressed) 0.88f else 1f,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessHigh
-        ),
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessHigh),
         label = "scale"
     )
     
     val shadowElevation by animateDpAsState(
-        targetValue = if (isPressed) 2.dp else 8.dp,
+        targetValue = if (isPressed) 2.dp else 10.dp,
         animationSpec = tween(100),
         label = "shadow"
     )
@@ -80,7 +76,7 @@ fun PrimaryGameButton(
     ) {
         Text(
             text = text,
-            fontSize = (size.value * 0.4f).sp,
+            fontSize = (size.value * 0.38f).sp,
             fontWeight = FontWeight.Bold,
             color = Color(0xFF1A1A1A),
             textAlign = TextAlign.Center
@@ -89,12 +85,11 @@ fun PrimaryGameButton(
 }
 
 /**
- * D-Pad component
- * NO BUILT-IN VIBRATION - vibration is handled by ViewModel
+ * D-Pad component - ergonomic layout with 20% larger buttons
  */
 @Composable
 fun DPad(
-    buttonSize: Dp = 54.dp,
+    buttonSize: Dp = 58.dp,  // 20% larger than 48dp
     modifier: Modifier = Modifier,
     onUpPress: () -> Unit = {},
     onDownPress: () -> Unit = {},
@@ -105,7 +100,7 @@ fun DPad(
     onRightRelease: () -> Unit = {}
 ) {
     val theme = LocalGameTheme.current
-    val spacing = 4.dp
+    val spacing = 6.dp
     
     Column(
         modifier = modifier,
@@ -131,10 +126,10 @@ fun DPad(
                 onRelease = onLeftRelease
             )
             
-            // Center circle (decoration)
+            // Center decoration
             Box(
                 modifier = Modifier
-                    .size(buttonSize)
+                    .size(buttonSize * 0.7f)
                     .clip(CircleShape)
                     .background(theme.buttonSecondaryPressed)
             )
@@ -154,26 +149,16 @@ fun DPad(
             onPress = onDownPress,
             onRelease = onDownRelease
         )
-        
-        // Labels
-        Row(
-            modifier = Modifier.padding(top = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(buttonSize - 10.dp)
-        ) {
-            Text("LEFT", fontSize = 8.sp, color = theme.textSecondary)
-            Text("DOWN", fontSize = 8.sp, color = theme.textSecondary)
-            Text("RIGHT", fontSize = 8.sp, color = theme.textSecondary)
-        }
     }
 }
 
 /**
- * Rotate button
+ * Rotate button - 20% larger
  */
 @Composable
 fun RotateButton(
     onClick: () -> Unit,
-    size: Dp = 64.dp,
+    size: Dp = 72.dp,  // 20% larger than 60dp
     modifier: Modifier = Modifier
 ) {
     val theme = LocalGameTheme.current
@@ -190,9 +175,10 @@ fun RotateButton(
         
         Text(
             text = "ROTATE",
-            fontSize = 10.sp,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Bold,
             color = theme.textSecondary,
-            modifier = Modifier.padding(top = 4.dp)
+            modifier = Modifier.padding(top = 6.dp)
         )
     }
 }
