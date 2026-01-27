@@ -334,3 +334,91 @@ private fun vibrateButton(context: Context, duration: Long = 15L) {
         // Vibration not available
     }
 }
+
+/**
+ * Small function button (ON/OFF, SOUND, START, RESET)
+ */
+@Composable
+fun SmallFunctionButton(
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val theme = LocalGameTheme.current
+    var isPressed by remember { mutableStateOf(false) }
+    
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed) 0.9f else 1f,
+        animationSpec = spring(dampingRatio = 0.7f),
+        label = "buttonScale"
+    )
+    
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = modifier
+    ) {
+        Text(
+            text = label,
+            fontSize = 9.sp,
+            color = theme.textSecondary,
+            textAlign = TextAlign.Center
+        )
+        
+        Spacer(modifier = Modifier.height(2.dp))
+        
+        Box(
+            modifier = Modifier
+                .size(34.dp)
+                .scale(scale)
+                .shadow(
+                    elevation = if (isPressed) 1.dp else 3.dp,
+                    shape = CircleShape
+                )
+                .clip(CircleShape)
+                .background(if (isPressed) theme.buttonSecondaryPressed else theme.buttonSecondary)
+                .pointerInput(Unit) {
+                    detectTapGestures(
+                        onPress = {
+                            isPressed = true
+                            tryAwaitRelease()
+                            isPressed = false
+                        },
+                        onTap = { onClick() }
+                    )
+                },
+            contentAlignment = Alignment.Center
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(8.dp)
+                    .clip(CircleShape)
+                    .background(theme.deviceBorderColor.copy(alpha = 0.6f))
+            )
+        }
+    }
+}
+
+/**
+ * Vertical decoration column (blue/red squares on sides)
+ */
+@Composable
+fun DecorationColumn(
+    color: Color,
+    count: Int,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(2.dp)
+    ) {
+        repeat(count) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(1f)
+                    .clip(RoundedCornerShape(2.dp))
+                    .background(color)
+            )
+        }
+    }
+}
