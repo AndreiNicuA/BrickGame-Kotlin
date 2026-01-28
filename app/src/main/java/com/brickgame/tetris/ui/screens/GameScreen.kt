@@ -35,8 +35,8 @@ fun GameScreen(
     animationDuration: Float,
     layoutMode: LayoutMode,
     onStartGame: () -> Unit,
-    onTogglePause: () -> Unit,
-    onResetGame: () -> Unit,
+    onPauseGame: () -> Unit,
+    onResumeGame: () -> Unit,
     onToggleSound: () -> Unit,
     onMoveLeft: () -> Unit,
     onMoveLeftRelease: () -> Unit,
@@ -54,11 +54,17 @@ fun GameScreen(
     
     Box(modifier = modifier.fillMaxSize().background(theme.backgroundColor)) {
         when (layoutMode) {
-            LayoutMode.CLASSIC -> ClassicLayout(gameState, clearingLines, ghostPieceEnabled, effectiveStyle, animationDuration, onTogglePause, onResetGame, onMoveLeft, onMoveLeftRelease, onMoveRight, onMoveRightRelease, onMoveDown, onMoveDownRelease, onHardDrop, onRotate, onOpenSettings)
-            LayoutMode.MODERN -> ModernLayout(gameState, clearingLines, ghostPieceEnabled, effectiveStyle, animationDuration, onTogglePause, onResetGame, onMoveLeft, onMoveLeftRelease, onMoveRight, onMoveRightRelease, onMoveDown, onMoveDownRelease, onHardDrop, onRotate, onOpenSettings)
-            LayoutMode.FULLSCREEN -> FullscreenLayout(gameState, clearingLines, ghostPieceEnabled, effectiveStyle, animationDuration, onTogglePause, onResetGame, onMoveLeft, onMoveLeftRelease, onMoveRight, onMoveRightRelease, onMoveDown, onMoveDownRelease, onHardDrop, onRotate, onOpenSettings)
+            LayoutMode.CLASSIC -> ClassicLayout(gameState, clearingLines, ghostPieceEnabled, effectiveStyle, animationDuration, onStartGame, onPauseGame, onMoveLeft, onMoveLeftRelease, onMoveRight, onMoveRightRelease, onMoveDown, onMoveDownRelease, onHardDrop, onRotate, onOpenSettings)
+            LayoutMode.MODERN -> ModernLayout(gameState, clearingLines, ghostPieceEnabled, effectiveStyle, animationDuration, onStartGame, onPauseGame, onMoveLeft, onMoveLeftRelease, onMoveRight, onMoveRightRelease, onMoveDown, onMoveDownRelease, onHardDrop, onRotate, onOpenSettings)
+            LayoutMode.FULLSCREEN -> FullscreenLayout(gameState, clearingLines, ghostPieceEnabled, effectiveStyle, animationDuration, onStartGame, onPauseGame, onMoveLeft, onMoveLeftRelease, onMoveRight, onMoveRightRelease, onMoveDown, onMoveDownRelease, onHardDrop, onRotate, onOpenSettings)
         }
         
+        // Pause Overlay
+        if (gameState.status == GameStatus.PAUSED) {
+            PauseOverlay(onResume = onResumeGame, onSettings = onOpenSettings)
+        }
+        
+        // Game Over Overlay
         if (gameState.status == GameStatus.GAME_OVER) {
             GameOverOverlay(score = gameState.score, level = gameState.level, lines = gameState.lines, highScore = gameState.highScore, onPlayAgain = onStartGame)
         }
@@ -68,7 +74,7 @@ fun GameScreen(
 @Composable
 private fun ClassicLayout(
     gameState: GameState, clearingLines: List<Int>, ghostPieceEnabled: Boolean, animationStyle: AnimationStyle, animationDuration: Float,
-    onTogglePause: () -> Unit, onResetGame: () -> Unit,
+    onStartGame: () -> Unit, onPauseGame: () -> Unit,
     onMoveLeft: () -> Unit, onMoveLeftRelease: () -> Unit,
     onMoveRight: () -> Unit, onMoveRightRelease: () -> Unit,
     onMoveDown: () -> Unit, onMoveDownRelease: () -> Unit,
@@ -81,6 +87,7 @@ private fun ClassicLayout(
             modifier = Modifier.weight(1f).fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(theme.deviceColor).padding(12.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            // LCD Screen - full height without shrinking for status text
             Row(
                 modifier = Modifier.weight(1f).fillMaxWidth().clip(RoundedCornerShape(6.dp)).background(theme.screenBackground).padding(6.dp)
             ) {
@@ -112,18 +119,15 @@ private fun ClassicLayout(
             
             Spacer(modifier = Modifier.height(10.dp))
             
-            if (gameState.status == GameStatus.PAUSED) {
-                Text("PAUSED", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = theme.accentColor)
-                Spacer(modifier = Modifier.height(6.dp))
-            }
-            
+            // Action buttons - consistent style
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                ActionButton(if (gameState.status == GameStatus.PAUSED) "PLAY" else "PAUSE", onTogglePause)
-                ActionButton("RESET", onResetGame)
+                ActionButton("START", onStartGame)
+                ActionButton("PAUSE", onPauseGame, enabled = gameState.status == GameStatus.PLAYING)
             }
             
             Spacer(modifier = Modifier.height(16.dp))
             
+            // Controls
             Row(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -144,7 +148,7 @@ private fun ClassicLayout(
 @Composable
 private fun ModernLayout(
     gameState: GameState, clearingLines: List<Int>, ghostPieceEnabled: Boolean, animationStyle: AnimationStyle, animationDuration: Float,
-    onTogglePause: () -> Unit, onResetGame: () -> Unit,
+    onStartGame: () -> Unit, onPauseGame: () -> Unit,
     onMoveLeft: () -> Unit, onMoveLeftRelease: () -> Unit,
     onMoveRight: () -> Unit, onMoveRightRelease: () -> Unit,
     onMoveDown: () -> Unit, onMoveDownRelease: () -> Unit,
@@ -153,6 +157,7 @@ private fun ModernLayout(
     val theme = LocalGameTheme.current
     
     Column(modifier = Modifier.fillMaxSize().background(theme.backgroundColor).padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        // Status bar
         Row(
             modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Color.Black.copy(alpha = 0.5f)).padding(14.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -168,6 +173,7 @@ private fun ModernLayout(
         
         Spacer(modifier = Modifier.height(10.dp))
         
+        // Game board
         Box(modifier = Modifier.weight(1f).aspectRatio(0.5f).clip(RoundedCornerShape(10.dp)).background(theme.screenBackground), contentAlignment = Alignment.Center) {
             GameBoard(
                 board = gameState.board,
@@ -179,26 +185,26 @@ private fun ModernLayout(
                 animationDuration = animationDuration,
                 modifier = Modifier.fillMaxSize().padding(6.dp)
             )
-            
-            if (gameState.status == GameStatus.PAUSED) {
-                Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.7f)), contentAlignment = Alignment.Center) {
-                    Text("PAUSED", fontSize = 28.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                }
-            }
         }
         
         Spacer(modifier = Modifier.height(12.dp))
         
+        // Action buttons row
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+            ActionButton("START", onStartGame)
+            Spacer(modifier = Modifier.width(16.dp))
+            ActionButton("PAUSE", onPauseGame, enabled = gameState.status == GameStatus.PLAYING)
+        }
+        
+        Spacer(modifier = Modifier.height(12.dp))
+        
+        // Controls
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             DPad(onUpPress = onHardDrop, onDownPress = onMoveDown, onDownRelease = onMoveDownRelease, onLeftPress = onMoveLeft, onLeftRelease = onMoveLeftRelease, onRightPress = onMoveRight, onRightRelease = onMoveRightRelease, buttonSize = 54.dp)
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                SmallButton(if (gameState.status == GameStatus.PAUSED) "▶" else "⏸", onTogglePause, 42.dp)
-                SmallButton("↺", onResetGame, 42.dp)
-            }
             RotateButton(onClick = onRotate, size = 68.dp)
         }
         
@@ -210,7 +216,7 @@ private fun ModernLayout(
 @Composable
 private fun FullscreenLayout(
     gameState: GameState, clearingLines: List<Int>, ghostPieceEnabled: Boolean, animationStyle: AnimationStyle, animationDuration: Float,
-    onTogglePause: () -> Unit, onResetGame: () -> Unit,
+    onStartGame: () -> Unit, onPauseGame: () -> Unit,
     onMoveLeft: () -> Unit, onMoveLeftRelease: () -> Unit,
     onMoveRight: () -> Unit, onMoveRightRelease: () -> Unit,
     onMoveDown: () -> Unit, onMoveDownRelease: () -> Unit,
@@ -219,6 +225,7 @@ private fun FullscreenLayout(
     val theme = LocalGameTheme.current
     
     Column(modifier = Modifier.fillMaxSize().background(theme.screenBackground).padding(6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        // Compact status row
         Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 2.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             Text(gameState.score.toString().padStart(6, '0'), fontSize = 20.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, color = theme.pixelOn)
             Text("L${gameState.level} • ${gameState.lines}", fontSize = 14.sp, color = theme.pixelOn.copy(alpha = 0.7f), fontWeight = FontWeight.Medium)
@@ -227,6 +234,7 @@ private fun FullscreenLayout(
             }
         }
         
+        // Game board - maximum space
         GameBoard(
             board = gameState.board,
             currentPiece = gameState.currentPiece,
@@ -238,20 +246,21 @@ private fun FullscreenLayout(
             modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 12.dp)
         )
         
-        if (gameState.status == GameStatus.PAUSED) {
-            Text("PAUSED", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = theme.pixelOn)
-            Spacer(modifier = Modifier.height(4.dp))
-        }
+        Spacer(modifier = Modifier.height(4.dp))
         
+        // Controls with action buttons
         Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             DPad(onUpPress = onHardDrop, onDownPress = onMoveDown, onDownRelease = onMoveDownRelease, onLeftPress = onMoveLeft, onLeftRelease = onMoveLeftRelease, onRightPress = onMoveRight, onRightRelease = onMoveRightRelease, buttonSize = 50.dp)
+            
+            // Center buttons column
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    SmallButton(if (gameState.status == GameStatus.PAUSED) "▶" else "⏸", onTogglePause, 38.dp)
-                    SmallButton("↺", onResetGame, 38.dp)
+                    SmallActionButton("▶", onStartGame)
+                    SmallActionButton("⏸", onPauseGame, enabled = gameState.status == GameStatus.PLAYING)
                 }
-                SmallButton("☰", onOpenSettings, 38.dp)
+                SmallActionButton("☰", onOpenSettings)
             }
+            
             RotateButton(onClick = onRotate, size = 60.dp)
         }
         
@@ -269,18 +278,32 @@ private fun InfoBlock(label: String, value: String) {
 }
 
 @Composable
-private fun ActionButton(text: String, onClick: () -> Unit) {
+private fun ActionButton(text: String, onClick: () -> Unit, enabled: Boolean = true) {
     val theme = LocalGameTheme.current
-    Box(modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(theme.buttonSecondary).clickable(onClick = onClick).padding(horizontal = 20.dp, vertical = 10.dp), contentAlignment = Alignment.Center) {
-        Text(text, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = theme.textPrimary)
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(if (enabled) theme.buttonSecondary else theme.buttonSecondary.copy(alpha = 0.3f))
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(horizontal = 20.dp, vertical = 10.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(text, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = if (enabled) theme.textPrimary else theme.textPrimary.copy(alpha = 0.3f))
     }
 }
 
 @Composable
-private fun SmallButton(text: String, onClick: () -> Unit, size: Dp) {
+private fun SmallActionButton(text: String, onClick: () -> Unit, enabled: Boolean = true) {
     val theme = LocalGameTheme.current
-    Box(modifier = Modifier.size(size).clip(CircleShape).background(theme.buttonSecondary).clickable(onClick = onClick), contentAlignment = Alignment.Center) {
-        Text(text, fontSize = 18.sp, color = theme.textPrimary, fontWeight = FontWeight.Medium)
+    Box(
+        modifier = Modifier
+            .size(38.dp)
+            .clip(CircleShape)
+            .background(if (enabled) theme.buttonSecondary else theme.buttonSecondary.copy(alpha = 0.3f))
+            .clickable(enabled = enabled, onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(text, fontSize = 18.sp, color = if (enabled) theme.textPrimary else theme.textPrimary.copy(alpha = 0.3f), fontWeight = FontWeight.Medium)
     }
 }
 
@@ -289,6 +312,43 @@ private fun MenuButton(onClick: () -> Unit) {
     val theme = LocalGameTheme.current
     Box(modifier = Modifier.clip(RoundedCornerShape(10.dp)).background(theme.buttonSecondary.copy(alpha = 0.6f)).clickable(onClick = onClick).padding(horizontal = 24.dp, vertical = 10.dp), contentAlignment = Alignment.Center) {
         Text("☰ MENU", fontSize = 16.sp, color = theme.textSecondary, fontWeight = FontWeight.Medium)
+    }
+}
+
+@Composable
+private fun PauseOverlay(onResume: () -> Unit, onSettings: () -> Unit) {
+    Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.85f)), contentAlignment = Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text("PAUSED", fontSize = 40.sp, fontWeight = FontWeight.Bold, color = Color.White, letterSpacing = 4.sp)
+            
+            Spacer(modifier = Modifier.height(48.dp))
+            
+            // Resume button
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Color(0xFFF4D03F))
+                    .clickable(onClick = onResume)
+                    .padding(horizontal = 48.dp, vertical = 16.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("RESUME", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color.Black)
+            }
+            
+            Spacer(modifier = Modifier.height(20.dp))
+            
+            // Settings button
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Color(0xFF333333))
+                    .clickable(onClick = onSettings)
+                    .padding(horizontal = 48.dp, vertical = 16.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("SETTINGS", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color.White)
+            }
+        }
     }
 }
 
