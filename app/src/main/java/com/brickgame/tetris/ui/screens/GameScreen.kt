@@ -3,7 +3,6 @@ package com.brickgame.tetris.ui.screens
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
@@ -13,7 +12,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.brickgame.tetris.game.GameState
@@ -87,7 +85,7 @@ private fun ClassicLayout(
             modifier = Modifier.weight(1f).fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(theme.deviceColor).padding(12.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // LCD Screen - full height without shrinking for status text
+            // LCD Screen
             Row(
                 modifier = Modifier.weight(1f).fillMaxWidth().clip(RoundedCornerShape(6.dp)).background(theme.screenBackground).padding(6.dp)
             ) {
@@ -119,7 +117,7 @@ private fun ClassicLayout(
             
             Spacer(modifier = Modifier.height(10.dp))
             
-            // Action buttons - consistent style
+            // Action buttons
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                 ActionButton("START", onStartGame)
                 ActionButton("PAUSE", onPauseGame, enabled = gameState.status == GameStatus.PLAYING)
@@ -246,21 +244,22 @@ private fun FullscreenLayout(
             modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 12.dp)
         )
         
-        Spacer(modifier = Modifier.height(4.dp))
+        Spacer(modifier = Modifier.height(6.dp))
         
-        // Controls with action buttons
+        // Action buttons - same style as Classic/Modern
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+            ActionButton("START", onStartGame)
+            Spacer(modifier = Modifier.width(12.dp))
+            ActionButton("PAUSE", onPauseGame, enabled = gameState.status == GameStatus.PLAYING)
+            Spacer(modifier = Modifier.width(12.dp))
+            ActionButton("MENU", onOpenSettings)
+        }
+        
+        Spacer(modifier = Modifier.height(8.dp))
+        
+        // Controls
         Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             DPad(onUpPress = onHardDrop, onDownPress = onMoveDown, onDownRelease = onMoveDownRelease, onLeftPress = onMoveLeft, onLeftRelease = onMoveLeftRelease, onRightPress = onMoveRight, onRightRelease = onMoveRightRelease, buttonSize = 50.dp)
-            
-            // Center buttons column
-            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    SmallActionButton("▶", onStartGame)
-                    SmallActionButton("⏸", onPauseGame, enabled = gameState.status == GameStatus.PLAYING)
-                }
-                SmallActionButton("☰", onOpenSettings)
-            }
-            
             RotateButton(onClick = onRotate, size = 60.dp)
         }
         
@@ -289,21 +288,6 @@ private fun ActionButton(text: String, onClick: () -> Unit, enabled: Boolean = t
         contentAlignment = Alignment.Center
     ) {
         Text(text, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = if (enabled) theme.textPrimary else theme.textPrimary.copy(alpha = 0.3f))
-    }
-}
-
-@Composable
-private fun SmallActionButton(text: String, onClick: () -> Unit, enabled: Boolean = true) {
-    val theme = LocalGameTheme.current
-    Box(
-        modifier = Modifier
-            .size(38.dp)
-            .clip(CircleShape)
-            .background(if (enabled) theme.buttonSecondary else theme.buttonSecondary.copy(alpha = 0.3f))
-            .clickable(enabled = enabled, onClick = onClick),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(text, fontSize = 18.sp, color = if (enabled) theme.textPrimary else theme.textPrimary.copy(alpha = 0.3f), fontWeight = FontWeight.Medium)
     }
 }
 
