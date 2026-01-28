@@ -235,19 +235,37 @@ private fun FullscreenLayout(
 ) {
     val theme = LocalGameTheme.current
     
-    Column(modifier = Modifier.fillMaxSize().background(theme.screenBackground).padding(6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        // Compact status row
-        Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 2.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            Text(gameState.score.toString().padStart(6, '0'), fontSize = 20.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, color = theme.pixelOn)
-            Text("L${gameState.level} • ${gameState.lines}", fontSize = 14.sp, color = theme.pixelOn.copy(alpha = 0.7f), fontWeight = FontWeight.Medium)
-            Box(modifier = Modifier.size(32.dp).background(theme.pixelOff, RoundedCornerShape(4.dp))) {
-                NextPiecePreview(shape = gameState.nextPiece?.shape, modifier = Modifier.fillMaxSize().padding(3.dp))
+    Column(modifier = Modifier.fillMaxSize().background(theme.screenBackground).padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        // Status row with more info
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), 
+            horizontalArrangement = Arrangement.SpaceBetween, 
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Score
+            Column {
+                Text("SCORE", fontSize = 10.sp, color = theme.pixelOn.copy(alpha = 0.5f), fontWeight = FontWeight.Medium)
+                Text(gameState.score.toString().padStart(6, '0'), fontSize = 22.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, color = theme.pixelOn)
+            }
+            // Level & Lines
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("LV.${gameState.level}", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = theme.pixelOn)
+                Text("${gameState.lines} lines", fontSize = 12.sp, color = theme.pixelOn.copy(alpha = 0.6f))
+            }
+            // Next piece
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("NEXT", fontSize = 10.sp, color = theme.pixelOn.copy(alpha = 0.5f), fontWeight = FontWeight.Medium)
+                Box(modifier = Modifier.size(40.dp).background(theme.pixelOff, RoundedCornerShape(4.dp))) {
+                    NextPiecePreview(shape = gameState.nextPiece?.shape, modifier = Modifier.fillMaxSize().padding(4.dp))
+                }
             }
         }
         
-        // Game board - centered with proper aspect ratio
+        Spacer(modifier = Modifier.height(8.dp))
+        
+        // Game board - reduced size (70% of available height) for more control space
         Box(
-            modifier = Modifier.weight(1f).fillMaxWidth(),
+            modifier = Modifier.weight(0.65f).fillMaxWidth(),
             contentAlignment = Alignment.Center
         ) {
             GameBoard(
@@ -262,15 +280,30 @@ private fun FullscreenLayout(
             )
         }
         
-        Spacer(modifier = Modifier.height(4.dp))
+        Spacer(modifier = Modifier.height(12.dp))
         
-        // Controls row - D-pad on left, small squared buttons in middle, Rotate on right
+        // Action buttons - larger, more ergonomic
         Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.Top
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp), 
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            // D-pad
+            FullscreenButton("START", onStartGame, width = 90.dp, height = 40.dp)
+            Spacer(modifier = Modifier.width(12.dp))
+            FullscreenButton("PAUSE", onPauseGame, width = 90.dp, height = 40.dp, enabled = gameState.status == GameStatus.PLAYING)
+            Spacer(modifier = Modifier.width(12.dp))
+            FullscreenButton("MENU", onOpenSettings, width = 70.dp, height = 40.dp)
+        }
+        
+        Spacer(modifier = Modifier.height(16.dp))
+        
+        // Controls - larger buttons for better ergonomics
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Larger D-pad
             DPad(
                 onUpPress = onHardDrop, 
                 onDownPress = onMoveDown, 
@@ -279,27 +312,14 @@ private fun FullscreenLayout(
                 onLeftRelease = onMoveLeftRelease, 
                 onRightPress = onMoveRight, 
                 onRightRelease = onMoveRightRelease, 
-                buttonSize = 50.dp
+                buttonSize = 56.dp
             )
             
-            // Small squared action buttons - START and PAUSE on top row, MENU below
-            Column(
-                modifier = Modifier.padding(top = 4.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    CompactButton("START", onStartGame, width = 52.dp, height = 28.dp)
-                    CompactButton("PAUSE", onPauseGame, width = 52.dp, height = 28.dp, enabled = gameState.status == GameStatus.PLAYING)
-                }
-                CompactButton("MENU", onOpenSettings, width = 108.dp, height = 28.dp)
-            }
-            
-            // Rotate button
-            RotateButton(onClick = onRotate, size = 60.dp)
+            // Larger Rotate button
+            RotateButton(onClick = onRotate, size = 72.dp)
         }
         
-        Spacer(modifier = Modifier.height(4.dp))
+        Spacer(modifier = Modifier.height(12.dp))
     }
 }
 
@@ -328,23 +348,22 @@ private fun ActionButton(text: String, onClick: () -> Unit, enabled: Boolean = t
 }
 
 @Composable
-private fun CompactButton(text: String, onClick: () -> Unit, width: Dp, height: Dp, enabled: Boolean = true) {
+private fun FullscreenButton(text: String, onClick: () -> Unit, width: Dp, height: Dp, enabled: Boolean = true) {
     val theme = LocalGameTheme.current
     Box(
         modifier = Modifier
             .width(width)
             .height(height)
-            .clip(RoundedCornerShape(6.dp))
+            .clip(RoundedCornerShape(8.dp))
             .background(if (enabled) theme.buttonSecondary else theme.buttonSecondary.copy(alpha = 0.3f))
             .clickable(enabled = enabled, onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
         Text(
             text, 
-            fontSize = 10.sp, 
+            fontSize = 13.sp, 
             fontWeight = FontWeight.Bold, 
-            color = if (enabled) theme.textPrimary else theme.textPrimary.copy(alpha = 0.3f),
-            letterSpacing = 0.5.sp
+            color = if (enabled) theme.textPrimary else theme.textPrimary.copy(alpha = 0.3f)
         )
     }
 }
