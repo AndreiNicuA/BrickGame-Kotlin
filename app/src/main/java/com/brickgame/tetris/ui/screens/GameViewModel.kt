@@ -122,6 +122,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private fun observeGameState() {
         viewModelScope.launch {
             game.state.collect { state ->
+                // Level up feedback
                 if (state.level > lastLevel && state.status == GameStatus.PLAYING) {
                     vibrationManager.vibrateLevelUp()
                     soundManager.playLevelUp()
@@ -133,20 +134,28 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                     vibrationManager.vibrateClear(state.linesCleared)
                     soundManager.playClear()
                     
+                    // Set the lines to animate
+                    _clearingLines.value = state.clearedLineRows
+                    
+                    // Cancel any existing animation job
+                    animationJob?.cancel()
+                    
                     if (_uiState.value.animationEnabled) {
-                        // Start animation
-                        _clearingLines.value = state.clearedLineRows
-                        
-                        // Clear after duration
-                        animationJob?.cancel()
+                        // Wait for animation duration, then complete the clear
                         animationJob = viewModelScope.launch {
                             val durationMs = (_uiState.value.animationDuration * 1000).toLong()
                             delay(durationMs)
                             _clearingLines.value = emptyList()
+                            game.completePendingLineClear()
                         }
+                    } else {
+                        // No animation - complete immediately
+                        _clearingLines.value = emptyList()
+                        game.completePendingLineClear()
                     }
                 }
                 
+                // Game over handling
                 if (state.status == GameStatus.GAME_OVER && state.score > 0) {
                     vibrationManager.vibrateGameOver()
                     soundManager.playGameOver()
@@ -181,6 +190,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     fun resetGame() {
         stopGameLoop()
         stopAllRepeats()
+        animationJob?.cancel()
         _clearingLines.value = emptyList()
         lastLevel = _uiState.value.difficulty.startLevel
         game.setDifficulty(_uiState.value.difficulty)
@@ -192,7 +202,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         gameLoopJob?.cancel()
         gameLoopJob = viewModelScope.launch {
             while (true) {
-                if (game.state.value.status == GameStatus.PLAYING) game.moveDown()
+                if (game.state.value.status == GameStatus.PLAYING && !game.isPendingLineClear()) {
+                    game.moveDown()
+                }
                 delay(game.getDropSpeed())
             }
         }
@@ -200,19 +212,19 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     
     private fun stopGameLoop() { gameLoopJob?.cancel(); gameLoopJob = null }
     
-    fun moveLeft() { if (game.state.value.status == GameStatus.PLAYING && game.moveLeft()) { vibrationManager.vibrateMove(); soundManager.playMove() } }
+    fun moveLeft() { if (game.state.value.status == GameStatus.PLAYING && !game.isPendingLineClear() && game.moveLeft()) { vibrationManager.vibrateMove(); soundManager.playMove() } }
     fun startLeftRepeat() { moveLeft(); leftRepeatJob?.cancel(); leftRepeatJob = viewModelScope.launch { delay(200); while (true) { moveLeft(); delay(50) } } }
     fun stopLeftRepeat() { leftRepeatJob?.cancel(); leftRepeatJob = null }
     
-    fun moveRight() { if (game.state.value.status == GameStatus.PLAYING && game.moveRight()) { vibrationManager.vibrateMove(); soundManager.playMove() } }
+    fun moveRight() { if (game.state.value.status == GameStatus.PLAYING && !game.isPendingLineClear() && game.moveRight()) { vibrationManager.vibrateMove(); soundManager.playMove() } }
     fun startRightRepeat() { moveRight(); rightRepeatJob?.cancel(); rightRepeatJob = viewModelScope.launch { delay(200); while (true) { moveRight(); delay(50) } } }
     fun stopRightRepeat() { rightRepeatJob?.cancel(); rightRepeatJob = null }
     
-    fun startDownRepeat() { downRepeatJob?.cancel(); downRepeatJob = viewModelScope.launch { while (true) { if (game.state.value.status == GameStatus.PLAYING) game.moveDown(); delay(50) } } }
+    fun startDownRepeat() { downRepeatJob?.cancel(); downRepeatJob = viewModelScope.launch { while (true) { if (game.state.value.status == GameStatus.PLAYING && !game.isPendingLineClear()) game.moveDown(); delay(50) } } }
     fun stopDownRepeat() { downRepeatJob?.cancel(); downRepeatJob = null }
     
-    fun hardDrop() { if (game.state.value.status == GameStatus.PLAYING && game.hardDrop() > 0) { vibrationManager.vibrateDrop(); soundManager.playDrop() } }
-    fun rotate() { if (game.state.value.status == GameStatus.PLAYING && game.rotate()) { vibrationManager.vibrateRotate(); soundManager.playRotate() } }
+    fun hardDrop() { if (game.state.value.status == GameStatus.PLAYING && !game.isPendingLineClear() && game.hardDrop() > 0) { vibrationManager.vibrateDrop(); soundManager.playDrop() } }
+    fun rotate() { if (game.state.value.status == GameStatus.PLAYING && !game.isPendingLineClear() && game.rotate()) { vibrationManager.vibrateRotate(); soundManager.playRotate() } }
     
     private fun stopAllRepeats() { leftRepeatJob?.cancel(); rightRepeatJob?.cancel(); downRepeatJob?.cancel(); leftRepeatJob = null; rightRepeatJob = null; downRepeatJob = null }
     
