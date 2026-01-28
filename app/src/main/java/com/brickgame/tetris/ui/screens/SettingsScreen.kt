@@ -98,7 +98,7 @@ private fun MainPage(onNavigate: (SettingsPage) -> Unit, onClose: () -> Unit) {
             Spacer(modifier = Modifier.height(20.dp))
             Divider(color = Color(0xFF222222))
             Spacer(modifier = Modifier.height(20.dp))
-            MenuRow("About", "Version 1.4.8") { onNavigate(SettingsPage.ABOUT) }
+            MenuRow("About", "Version 1.4.9") { onNavigate(SettingsPage.ABOUT) }
         }
     }
 }
@@ -279,7 +279,7 @@ private fun AboutPage(onBack: () -> Unit) {
         Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
             Text("Brick Game", fontSize = 32.sp, fontWeight = FontWeight.Light, color = TextPrimary, letterSpacing = 3.sp)
             Spacer(Modifier.height(12.dp))
-            Text("1.4.8", fontSize = BodySize, color = AccentColor, fontWeight = FontWeight.Medium)
+            Text("1.4.9", fontSize = BodySize, color = AccentColor, fontWeight = FontWeight.Medium)
             Spacer(Modifier.height(56.dp))
             Text("Developed by", fontSize = LabelSize, color = TextTertiary)
             Text("Andrei Anton", fontSize = BodySize, color = TextPrimary)
