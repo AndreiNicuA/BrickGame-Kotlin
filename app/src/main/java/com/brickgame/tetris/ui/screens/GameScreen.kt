@@ -3,6 +3,7 @@ package com.brickgame.tetris.ui.screens
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
@@ -12,6 +13,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.brickgame.tetris.game.GameState
@@ -85,33 +87,38 @@ private fun ClassicLayout(
             modifier = Modifier.weight(1f).fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(theme.deviceColor).padding(12.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // LCD Screen
-            Row(
-                modifier = Modifier.weight(1f).fillMaxWidth().clip(RoundedCornerShape(6.dp)).background(theme.screenBackground).padding(6.dp)
+            // LCD Screen - centered
+            Box(
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+                contentAlignment = Alignment.Center
             ) {
-                GameBoard(
-                    board = gameState.board,
-                    currentPiece = gameState.currentPiece,
-                    ghostY = gameState.ghostY,
-                    showGhost = ghostPieceEnabled,
-                    clearingLines = clearingLines,
-                    animationStyle = animationStyle,
-                    animationDuration = animationDuration,
-                    modifier = Modifier.weight(1f).fillMaxHeight()
-                )
-                
-                Spacer(modifier = Modifier.width(2.dp).fillMaxHeight().background(theme.pixelOn.copy(alpha = 0.2f)))
-                
-                Column(
-                    modifier = Modifier.width(70.dp).fillMaxHeight().padding(6.dp),
-                    verticalArrangement = Arrangement.SpaceEvenly,
-                    horizontalAlignment = Alignment.CenterHorizontally
+                Row(
+                    modifier = Modifier.fillMaxHeight().clip(RoundedCornerShape(6.dp)).background(theme.screenBackground).padding(6.dp)
                 ) {
-                    InfoBlock("SCORE", gameState.score.toString().padStart(6, '0'))
-                    InfoBlock("LEVEL", gameState.level.toString())
-                    InfoBlock("LINES", gameState.lines.toString())
-                    Text("NEXT", fontSize = 12.sp, color = theme.pixelOn.copy(alpha = 0.6f), fontWeight = FontWeight.Bold)
-                    NextPiecePreview(shape = gameState.nextPiece?.shape, modifier = Modifier.size(44.dp))
+                    GameBoard(
+                        board = gameState.board,
+                        currentPiece = gameState.currentPiece,
+                        ghostY = gameState.ghostY,
+                        showGhost = ghostPieceEnabled,
+                        clearingLines = clearingLines,
+                        animationStyle = animationStyle,
+                        animationDuration = animationDuration,
+                        modifier = Modifier.aspectRatio(0.5f).fillMaxHeight()
+                    )
+                    
+                    Spacer(modifier = Modifier.width(2.dp).fillMaxHeight().background(theme.pixelOn.copy(alpha = 0.2f)))
+                    
+                    Column(
+                        modifier = Modifier.width(70.dp).fillMaxHeight().padding(6.dp),
+                        verticalArrangement = Arrangement.SpaceEvenly,
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        InfoBlock("SCORE", gameState.score.toString().padStart(6, '0'))
+                        InfoBlock("LEVEL", gameState.level.toString())
+                        InfoBlock("LINES", gameState.lines.toString())
+                        Text("NEXT", fontSize = 12.sp, color = theme.pixelOn.copy(alpha = 0.6f), fontWeight = FontWeight.Bold)
+                        NextPiecePreview(shape = gameState.nextPiece?.shape, modifier = Modifier.size(44.dp))
+                    }
                 }
             }
             
@@ -171,18 +178,25 @@ private fun ModernLayout(
         
         Spacer(modifier = Modifier.height(10.dp))
         
-        // Game board
-        Box(modifier = Modifier.weight(1f).aspectRatio(0.5f).clip(RoundedCornerShape(10.dp)).background(theme.screenBackground), contentAlignment = Alignment.Center) {
-            GameBoard(
-                board = gameState.board,
-                currentPiece = gameState.currentPiece,
-                ghostY = gameState.ghostY,
-                showGhost = ghostPieceEnabled,
-                clearingLines = clearingLines,
-                animationStyle = animationStyle,
-                animationDuration = animationDuration,
-                modifier = Modifier.fillMaxSize().padding(6.dp)
-            )
+        // Game board - centered
+        Box(
+            modifier = Modifier.weight(1f).fillMaxWidth(),
+            contentAlignment = Alignment.Center
+        ) {
+            Box(
+                modifier = Modifier.aspectRatio(0.5f).fillMaxHeight().clip(RoundedCornerShape(10.dp)).background(theme.screenBackground)
+            ) {
+                GameBoard(
+                    board = gameState.board,
+                    currentPiece = gameState.currentPiece,
+                    ghostY = gameState.ghostY,
+                    showGhost = ghostPieceEnabled,
+                    clearingLines = clearingLines,
+                    animationStyle = animationStyle,
+                    animationDuration = animationDuration,
+                    modifier = Modifier.fillMaxSize().padding(6.dp)
+                )
+            }
         }
         
         Spacer(modifier = Modifier.height(12.dp))
@@ -232,34 +246,57 @@ private fun FullscreenLayout(
             }
         }
         
-        // Game board - maximum space
-        GameBoard(
-            board = gameState.board,
-            currentPiece = gameState.currentPiece,
-            ghostY = gameState.ghostY,
-            showGhost = ghostPieceEnabled,
-            clearingLines = clearingLines,
-            animationStyle = animationStyle,
-            animationDuration = animationDuration,
-            modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 12.dp)
-        )
-        
-        Spacer(modifier = Modifier.height(6.dp))
-        
-        // Action buttons - same style as Classic/Modern
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
-            ActionButton("START", onStartGame)
-            Spacer(modifier = Modifier.width(12.dp))
-            ActionButton("PAUSE", onPauseGame, enabled = gameState.status == GameStatus.PLAYING)
-            Spacer(modifier = Modifier.width(12.dp))
-            ActionButton("MENU", onOpenSettings)
+        // Game board - centered with proper aspect ratio
+        Box(
+            modifier = Modifier.weight(1f).fillMaxWidth(),
+            contentAlignment = Alignment.Center
+        ) {
+            GameBoard(
+                board = gameState.board,
+                currentPiece = gameState.currentPiece,
+                ghostY = gameState.ghostY,
+                showGhost = ghostPieceEnabled,
+                clearingLines = clearingLines,
+                animationStyle = animationStyle,
+                animationDuration = animationDuration,
+                modifier = Modifier.aspectRatio(0.5f).fillMaxHeight()
+            )
         }
         
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(4.dp))
         
-        // Controls
-        Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            DPad(onUpPress = onHardDrop, onDownPress = onMoveDown, onDownRelease = onMoveDownRelease, onLeftPress = onMoveLeft, onLeftRelease = onMoveLeftRelease, onRightPress = onMoveRight, onRightRelease = onMoveRightRelease, buttonSize = 50.dp)
+        // Controls row - D-pad on left, small buttons in middle-top area, Rotate on right
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.Top
+        ) {
+            // D-pad
+            DPad(
+                onUpPress = onHardDrop, 
+                onDownPress = onMoveDown, 
+                onDownRelease = onMoveDownRelease, 
+                onLeftPress = onMoveLeft, 
+                onLeftRelease = onMoveLeftRelease, 
+                onRightPress = onMoveRight, 
+                onRightRelease = onMoveRightRelease, 
+                buttonSize = 50.dp
+            )
+            
+            // Small action buttons - positioned in the space between Up and Rotate
+            Column(
+                modifier = Modifier.padding(top = 4.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    SmallActionButton("▶", onStartGame, 32.dp)
+                    SmallActionButton("⏸", onPauseGame, 32.dp, enabled = gameState.status == GameStatus.PLAYING)
+                }
+                SmallActionButton("☰", onOpenSettings, 32.dp)
+            }
+            
+            // Rotate button
             RotateButton(onClick = onRotate, size = 60.dp)
         }
         
@@ -288,6 +325,21 @@ private fun ActionButton(text: String, onClick: () -> Unit, enabled: Boolean = t
         contentAlignment = Alignment.Center
     ) {
         Text(text, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = if (enabled) theme.textPrimary else theme.textPrimary.copy(alpha = 0.3f))
+    }
+}
+
+@Composable
+private fun SmallActionButton(text: String, onClick: () -> Unit, size: Dp, enabled: Boolean = true) {
+    val theme = LocalGameTheme.current
+    Box(
+        modifier = Modifier
+            .size(size)
+            .clip(CircleShape)
+            .background(if (enabled) theme.buttonSecondary else theme.buttonSecondary.copy(alpha = 0.3f))
+            .clickable(enabled = enabled, onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(text, fontSize = (size.value * 0.45f).sp, color = if (enabled) theme.textPrimary else theme.textPrimary.copy(alpha = 0.3f), fontWeight = FontWeight.Medium)
     }
 }
 
