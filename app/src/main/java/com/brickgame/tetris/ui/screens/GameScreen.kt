@@ -3,7 +3,6 @@ package com.brickgame.tetris.ui.screens
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
@@ -265,7 +264,7 @@ private fun FullscreenLayout(
         
         Spacer(modifier = Modifier.height(4.dp))
         
-        // Controls row - D-pad on left, small buttons in middle-top area, Rotate on right
+        // Controls row - D-pad on left, small squared buttons in middle, Rotate on right
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -283,17 +282,17 @@ private fun FullscreenLayout(
                 buttonSize = 50.dp
             )
             
-            // Small action buttons - positioned in the space between Up and Rotate
+            // Small squared action buttons - START and PAUSE on top row, MENU below
             Column(
                 modifier = Modifier.padding(top = 4.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(6.dp)
+                verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    SmallActionButton("▶", onStartGame, 32.dp)
-                    SmallActionButton("⏸", onPauseGame, 32.dp, enabled = gameState.status == GameStatus.PLAYING)
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    CompactButton("START", onStartGame, width = 52.dp, height = 28.dp)
+                    CompactButton("PAUSE", onPauseGame, width = 52.dp, height = 28.dp, enabled = gameState.status == GameStatus.PLAYING)
                 }
-                SmallActionButton("☰", onOpenSettings, 32.dp)
+                CompactButton("MENU", onOpenSettings, width = 108.dp, height = 28.dp)
             }
             
             // Rotate button
@@ -329,17 +328,24 @@ private fun ActionButton(text: String, onClick: () -> Unit, enabled: Boolean = t
 }
 
 @Composable
-private fun SmallActionButton(text: String, onClick: () -> Unit, size: Dp, enabled: Boolean = true) {
+private fun CompactButton(text: String, onClick: () -> Unit, width: Dp, height: Dp, enabled: Boolean = true) {
     val theme = LocalGameTheme.current
     Box(
         modifier = Modifier
-            .size(size)
-            .clip(CircleShape)
+            .width(width)
+            .height(height)
+            .clip(RoundedCornerShape(6.dp))
             .background(if (enabled) theme.buttonSecondary else theme.buttonSecondary.copy(alpha = 0.3f))
             .clickable(enabled = enabled, onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
-        Text(text, fontSize = (size.value * 0.45f).sp, color = if (enabled) theme.textPrimary else theme.textPrimary.copy(alpha = 0.3f), fontWeight = FontWeight.Medium)
+        Text(
+            text, 
+            fontSize = 10.sp, 
+            fontWeight = FontWeight.Bold, 
+            color = if (enabled) theme.textPrimary else theme.textPrimary.copy(alpha = 0.3f),
+            letterSpacing = 0.5.sp
+        )
     }
 }
 
