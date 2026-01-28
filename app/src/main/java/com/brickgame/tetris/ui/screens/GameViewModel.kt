@@ -179,11 +179,17 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         startGameLoop()
     }
     
-    fun togglePauseResume() {
-        when (game.state.value.status) {
-            GameStatus.PLAYING -> { game.pauseGame(); stopGameLoop() }
-            GameStatus.PAUSED -> { game.resumeGame(); startGameLoop() }
-            GameStatus.MENU, GameStatus.GAME_OVER -> startGame()
+    fun pauseGame() {
+        if (game.state.value.status == GameStatus.PLAYING) {
+            game.pauseGame()
+            stopGameLoop()
+        }
+    }
+    
+    fun resumeGame() {
+        if (game.state.value.status == GameStatus.PAUSED) {
+            game.resumeGame()
+            startGameLoop()
         }
     }
     
