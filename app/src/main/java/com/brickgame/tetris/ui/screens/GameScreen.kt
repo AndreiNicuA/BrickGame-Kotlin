@@ -30,7 +30,7 @@ enum class LayoutMode { CLASSIC, MODERN, FULLSCREEN }
 fun GameScreen(
     gameState: GameState,
     clearingLines: List<Int>,
-    @Suppress("unused") vibrationEnabled: Boolean,
+    @Suppress("UNUSED_PARAMETER") vibrationEnabled: Boolean,
     ghostPieceEnabled: Boolean,
     animationEnabled: Boolean,
     animationStyle: AnimationStyle,
@@ -48,7 +48,7 @@ fun GameScreen(
     onMoveDownRelease: () -> Unit,
     onHardDrop: () -> Unit,
     onRotate: () -> Unit,
-    @Suppress("unused") onRotateCCW: () -> Unit = {},
+    @Suppress("UNUSED_PARAMETER") onRotateCCW: () -> Unit = {},
     onHold: () -> Unit = {},
     onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier
