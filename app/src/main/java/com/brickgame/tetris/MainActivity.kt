@@ -15,7 +15,7 @@ import com.brickgame.tetris.ui.theme.BrickGameTheme
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
-        enableEdgeToEdge() // needed for systemBarsPadding to work properly
+        enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         setContent {
             val vm: GameViewModel = viewModel()
@@ -35,6 +35,11 @@ class MainActivity : ComponentActivity() {
             val name by vm.playerName.collectAsState()
             val hs by vm.highScore.collectAsState()
             val history by vm.scoreHistory.collectAsState()
+            val customThemes by vm.customThemes.collectAsState()
+            val editingTheme by vm.editingTheme.collectAsState()
+            val customLayouts by vm.customLayouts.collectAsState()
+            val editingLayout by vm.editingLayout.collectAsState()
+            val activeCustomLayout by vm.activeCustomLayout.collectAsState()
 
             val config = LocalConfiguration.current
             val isLandscape = config.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
@@ -42,8 +47,12 @@ class MainActivity : ComponentActivity() {
 
             BrickGameTheme(gameTheme = theme) {
                 BackHandler(enabled = ui.showSettings) {
-                    if (ui.settingsPage != GameViewModel.SettingsPage.MAIN) vm.navigateSettings(GameViewModel.SettingsPage.MAIN)
-                    else vm.closeSettings()
+                    when (ui.settingsPage) {
+                        GameViewModel.SettingsPage.MAIN -> vm.closeSettings()
+                        GameViewModel.SettingsPage.THEME_EDITOR -> vm.navigateSettings(GameViewModel.SettingsPage.THEME)
+                        GameViewModel.SettingsPage.LAYOUT_EDITOR -> vm.navigateSettings(GameViewModel.SettingsPage.LAYOUT)
+                        else -> vm.navigateSettings(GameViewModel.SettingsPage.MAIN)
+                    }
                 }
 
                 if (ui.showSettings) {
@@ -54,19 +63,37 @@ class MainActivity : ComponentActivity() {
                         animationStyle = anim, animationDuration = animDur,
                         soundEnabled = sound, vibrationEnabled = vib,
                         playerName = name, highScore = hs, scoreHistory = history,
+                        customThemes = customThemes, editingTheme = editingTheme,
+                        customLayouts = customLayouts, editingLayout = editingLayout,
+                        activeCustomLayout = activeCustomLayout,
                         onNavigate = vm::navigateSettings,
-                        onBack = { if (ui.settingsPage != GameViewModel.SettingsPage.MAIN) vm.navigateSettings(GameViewModel.SettingsPage.MAIN) else vm.closeSettings() },
+                        onBack = {
+                            when (ui.settingsPage) {
+                                GameViewModel.SettingsPage.MAIN -> vm.closeSettings()
+                                GameViewModel.SettingsPage.THEME_EDITOR -> vm.navigateSettings(GameViewModel.SettingsPage.THEME)
+                                GameViewModel.SettingsPage.LAYOUT_EDITOR -> vm.navigateSettings(GameViewModel.SettingsPage.LAYOUT)
+                                else -> vm.navigateSettings(GameViewModel.SettingsPage.MAIN)
+                            }
+                        },
                         onSetTheme = vm::setTheme, onSetPortraitLayout = vm::setPortraitLayout,
                         onSetLandscapeLayout = vm::setLandscapeLayout, onSetDPadStyle = vm::setDPadStyle,
                         onSetDifficulty = vm::setDifficulty, onSetGameMode = vm::setGameMode,
                         onSetGhostEnabled = vm::setGhostPieceEnabled, onSetAnimationStyle = vm::setAnimationStyle,
                         onSetAnimationDuration = vm::setAnimationDuration, onSetSoundEnabled = vm::setSoundEnabled,
-                        onSetVibrationEnabled = vm::setVibrationEnabled, onSetPlayerName = vm::setPlayerName
+                        onSetVibrationEnabled = vm::setVibrationEnabled, onSetPlayerName = vm::setPlayerName,
+                        onNewTheme = vm::startNewTheme, onEditTheme = vm::editTheme,
+                        onUpdateEditingTheme = vm::updateEditingTheme, onSaveTheme = vm::saveEditingTheme,
+                        onDeleteTheme = vm::deleteCustomTheme,
+                        onNewLayout = vm::startNewLayout, onEditLayout = vm::editLayout,
+                        onUpdateEditingLayout = vm::updateEditingLayout, onSaveLayout = vm::saveEditingLayout,
+                        onSelectCustomLayout = vm::selectCustomLayout, onClearCustomLayout = vm::clearCustomLayout,
+                        onDeleteLayout = vm::deleteCustomLayout
                     )
                 } else {
                     GameScreen(
                         gameState = gs.copy(highScore = hs), layoutPreset = activeLayout, dpadStyle = dpadStyle,
                         ghostEnabled = ghost, animationStyle = anim, animationDuration = animDur,
+                        customLayout = activeCustomLayout,
                         onStartGame = vm::startGame, onPause = vm::pauseGame, onResume = vm::resumeGame,
                         onRotate = vm::rotate, onRotateCCW = vm::rotateCounterClockwise,
                         onHardDrop = vm::hardDrop, onHold = vm::holdPiece,

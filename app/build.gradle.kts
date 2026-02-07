@@ -13,8 +13,8 @@ android {
         applicationId = "com.brickgame.tetris"
         minSdk = 26
         targetSdk = 35
-        versionCode = 10
-        versionName = "3.0.0"
+        versionCode = 12
+        versionName = "3.2.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }

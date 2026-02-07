@@ -5,16 +5,14 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.brickgame.tetris.audio.SoundManager
 import com.brickgame.tetris.audio.VibrationManager
-import com.brickgame.tetris.data.PlayerRepository
-import com.brickgame.tetris.data.SettingsRepository
+import com.brickgame.tetris.data.*
 import com.brickgame.tetris.game.*
 import com.brickgame.tetris.ui.layout.DPadStyle
 import com.brickgame.tetris.ui.layout.LayoutPreset
 import com.brickgame.tetris.ui.styles.AnimationStyle
 import com.brickgame.tetris.ui.styles.SoundStyle
 import com.brickgame.tetris.ui.styles.VibrationStyle
-import com.brickgame.tetris.ui.theme.GameTheme
-import com.brickgame.tetris.ui.theme.GameThemes
+import com.brickgame.tetris.ui.theme.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 
@@ -22,6 +20,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
     private val settingsRepo = SettingsRepository(application)
     private val playerRepo = PlayerRepository(application)
+    private val customThemeRepo = CustomThemeRepository(application)
+    private val customLayoutRepo = CustomLayoutRepository(application)
     val soundManager = SoundManager(application)
     val vibrationManager = VibrationManager(application)
 
@@ -29,7 +29,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     val gameState: StateFlow<GameState> = game.state
 
     data class UiState(val showSettings: Boolean = false, val settingsPage: SettingsPage = SettingsPage.MAIN)
-    enum class SettingsPage { MAIN, PROFILE, THEME, LAYOUT, GAMEPLAY, EXPERIENCE, ABOUT }
+    enum class SettingsPage { MAIN, PROFILE, THEME, THEME_EDITOR, LAYOUT, LAYOUT_EDITOR, GAMEPLAY, EXPERIENCE, ABOUT }
     private val _uiState = MutableStateFlow(UiState())
     val uiState: StateFlow<UiState> = _uiState.asStateFlow()
 
@@ -60,6 +60,19 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private val _highScore = MutableStateFlow(0)
     val highScore: StateFlow<Int> = _highScore.asStateFlow()
 
+    // Custom themes & layouts
+    private val _customThemes = MutableStateFlow<List<GameTheme>>(emptyList())
+    val customThemes: StateFlow<List<GameTheme>> = _customThemes.asStateFlow()
+    private val _editingTheme = MutableStateFlow<GameTheme?>(null)
+    val editingTheme: StateFlow<GameTheme?> = _editingTheme.asStateFlow()
+
+    private val _customLayouts = MutableStateFlow<List<CustomLayoutData>>(emptyList())
+    val customLayouts: StateFlow<List<CustomLayoutData>> = _customLayouts.asStateFlow()
+    private val _editingLayout = MutableStateFlow<CustomLayoutData?>(null)
+    val editingLayout: StateFlow<CustomLayoutData?> = _editingLayout.asStateFlow()
+    private val _activeCustomLayout = MutableStateFlow<CustomLayoutData?>(null)
+    val activeCustomLayout: StateFlow<CustomLayoutData?> = _activeCustomLayout.asStateFlow()
+
     private var gravityJob: Job? = null
     private var lockDelayJob: Job? = null
     private var dasJob: Job? = null
@@ -83,6 +96,10 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch { settingsRepo.portraitLayout.collect { name -> _portraitLayout.value = LayoutPreset.entries.find { it.name == name } ?: LayoutPreset.PORTRAIT_CLASSIC } }
         viewModelScope.launch { settingsRepo.landscapeLayout.collect { name -> _landscapeLayout.value = LayoutPreset.entries.find { it.name == name } ?: LayoutPreset.LANDSCAPE_DEFAULT } }
         viewModelScope.launch { settingsRepo.dpadStyle.collect { name -> _dpadStyle.value = DPadStyle.entries.find { it.name == name } ?: DPadStyle.STANDARD } }
+        // Custom themes
+        viewModelScope.launch { customThemeRepo.customThemes.collect { list -> val themes = list.map { it.toGameTheme() }; _customThemes.value = themes; GameThemes.updateCustomThemes(themes) } }
+        // Custom layouts
+        viewModelScope.launch { customLayoutRepo.customLayouts.collect { _customLayouts.value = it } }
     }
 
     fun startGame() { game.setDifficulty(_difficulty.value); game.setGameMode(_gameMode.value); game.startGame(); handlingLineClear = false; startGameLoop() }
@@ -103,49 +120,31 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     fun startDownDAS() { stopDAS(); softDrop(); dasJob = viewModelScope.launch { delay(60); while (isActive) { softDrop(); delay(30) } } }
     fun stopDAS() { dasJob?.cancel(); dasJob = null }
 
-    // ===== TWO-JOB GAME LOOP =====
-    // Job 1: Gravity — moves piece down at the proper speed
-    // Job 2: Lock delay + line clear checker — runs at 60fps
-
     private fun startGameLoop() {
-        gravityJob?.cancel()
-        lockDelayJob?.cancel()
-        handlingLineClear = false
-
-        // GRAVITY: move piece down at drop speed intervals
+        gravityJob?.cancel(); lockDelayJob?.cancel(); handlingLineClear = false
         gravityJob = viewModelScope.launch {
             while (isActive && gameState.value.status == GameStatus.PLAYING) {
-                if (game.isGameActive()) {
-                    game.moveDown()
-                }
+                if (game.isGameActive()) game.moveDown()
                 delay(game.getDropSpeed())
             }
         }
-
-        // LOCK DELAY + LINE CLEAR: check at 60fps
         lockDelayJob = viewModelScope.launch {
             while (isActive && gameState.value.status == GameStatus.PLAYING) {
-                // Handle pending line clear
                 if (game.isPendingLineClear() && !handlingLineClear) {
                     handlingLineClear = true
-                    val prevLevel = gameState.value.level
-                    val lc = gameState.value.linesCleared
+                    val prevLevel = gameState.value.level; val lc = gameState.value.linesCleared
                     if (lc > 0) { soundManager.playClear(); vibrationManager.vibrateClear(lc) }
                     delay((_animationDuration.value * 500).toLong().coerceAtLeast(200))
-                    game.completePendingLineClear()
-                    handlingLineClear = false
+                    game.completePendingLineClear(); handlingLineClear = false
                     if (gameState.value.level > prevLevel) { soundManager.playLevelUp(); vibrationManager.vibrateLevelUp() }
                     if (gameState.value.status == GameStatus.GAME_OVER) { onGameOver(); break }
                     continue
                 }
-
-                // Check lock delay
                 if (game.checkLockDelay()) {
                     if (gameState.value.status == GameStatus.GAME_OVER) { onGameOver(); break }
                     continue
                 }
-
-                delay(16L) // 60fps
+                delay(16L)
             }
             if (gameState.value.status == GameStatus.GAME_OVER) onGameOver()
         }
@@ -159,6 +158,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch { if (s.score > _highScore.value) settingsRepo.setHighScore(s.score); playerRepo.addScore(playerName.value, s.score, s.level, s.lines) }
     }
 
+    // ===== Settings navigation =====
     fun openSettings() { if (gameState.value.status == GameStatus.PLAYING) pauseGame(); _uiState.update { it.copy(showSettings = true, settingsPage = SettingsPage.MAIN) } }
     fun closeSettings() { _uiState.update { it.copy(showSettings = false) } }
     fun navigateSettings(p: SettingsPage) { _uiState.update { it.copy(settingsPage = p) } }
@@ -173,9 +173,48 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     fun setVibrationEnabled(v: Boolean) { _vibrationEnabled.value = v; vibrationManager.setEnabled(v); viewModelScope.launch { settingsRepo.setVibrationEnabled(v) } }
     fun setPlayerName(n: String) { viewModelScope.launch { playerRepo.setPlayerName(n) } }
     fun toggleSound() { setSoundEnabled(!_soundEnabled.value) }
-    fun setPortraitLayout(p: LayoutPreset) { _portraitLayout.value = p; viewModelScope.launch { settingsRepo.setPortraitLayout(p.name) } }
+    fun setPortraitLayout(p: LayoutPreset) { _portraitLayout.value = p; _activeCustomLayout.value = null; viewModelScope.launch { settingsRepo.setPortraitLayout(p.name) } }
     fun setLandscapeLayout(p: LayoutPreset) { _landscapeLayout.value = p; viewModelScope.launch { settingsRepo.setLandscapeLayout(p.name) } }
     fun setDPadStyle(s: DPadStyle) { _dpadStyle.value = s; viewModelScope.launch { settingsRepo.setDpadStyle(s.name) } }
+
+    // ===== Custom Theme =====
+    fun startNewTheme() {
+        val base = _currentTheme.value
+        _editingTheme.value = base.copy(id = "custom_${System.currentTimeMillis()}", name = "My Theme", isBuiltIn = false)
+        navigateSettings(SettingsPage.THEME_EDITOR)
+    }
+    fun editTheme(theme: GameTheme) { _editingTheme.value = theme; navigateSettings(SettingsPage.THEME_EDITOR) }
+    fun updateEditingTheme(theme: GameTheme) { _editingTheme.value = theme }
+    fun saveEditingTheme() {
+        val t = _editingTheme.value ?: return
+        viewModelScope.launch { customThemeRepo.saveTheme(t.toCustomData()) }
+        setTheme(t)
+        navigateSettings(SettingsPage.THEME)
+    }
+    fun deleteCustomTheme(id: String) {
+        viewModelScope.launch { customThemeRepo.deleteTheme(id) }
+        if (_currentTheme.value.id == id) setTheme(GameThemes.ClassicGreen)
+    }
+
+    // ===== Custom Layout =====
+    fun startNewLayout() {
+        _editingLayout.value = CustomLayoutData(id = "layout_${System.currentTimeMillis()}", name = "My Layout")
+        navigateSettings(SettingsPage.LAYOUT_EDITOR)
+    }
+    fun editLayout(layout: CustomLayoutData) { _editingLayout.value = layout; navigateSettings(SettingsPage.LAYOUT_EDITOR) }
+    fun updateEditingLayout(layout: CustomLayoutData) { _editingLayout.value = layout }
+    fun saveEditingLayout() {
+        val l = _editingLayout.value ?: return
+        viewModelScope.launch { customLayoutRepo.saveLayout(l) }
+        _activeCustomLayout.value = l
+        navigateSettings(SettingsPage.LAYOUT)
+    }
+    fun selectCustomLayout(layout: CustomLayoutData) { _activeCustomLayout.value = layout }
+    fun clearCustomLayout() { _activeCustomLayout.value = null }
+    fun deleteCustomLayout(id: String) {
+        viewModelScope.launch { customLayoutRepo.deleteLayout(id) }
+        if (_activeCustomLayout.value?.id == id) _activeCustomLayout.value = null
+    }
 
     override fun onCleared() { super.onCleared(); stopGameLoop(); soundManager.release() }
 }

@@ -1,9 +1,9 @@
 package com.brickgame.tetris.ui.screens
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -23,6 +23,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.brickgame.tetris.data.CustomLayoutData
 import com.brickgame.tetris.data.ScoreEntry
 import com.brickgame.tetris.game.Difficulty
 import com.brickgame.tetris.game.GameMode
@@ -43,20 +44,31 @@ fun SettingsScreen(
     animationStyle: AnimationStyle, animationDuration: Float,
     soundEnabled: Boolean, vibrationEnabled: Boolean,
     playerName: String, highScore: Int, scoreHistory: List<ScoreEntry>,
+    customThemes: List<GameTheme>, editingTheme: GameTheme?,
+    customLayouts: List<CustomLayoutData>, editingLayout: CustomLayoutData?,
+    activeCustomLayout: CustomLayoutData?,
     onNavigate: (GameViewModel.SettingsPage) -> Unit, onBack: () -> Unit,
     onSetTheme: (GameTheme) -> Unit, onSetPortraitLayout: (LayoutPreset) -> Unit,
     onSetLandscapeLayout: (LayoutPreset) -> Unit, onSetDPadStyle: (DPadStyle) -> Unit,
     onSetDifficulty: (Difficulty) -> Unit, onSetGameMode: (GameMode) -> Unit,
     onSetGhostEnabled: (Boolean) -> Unit, onSetAnimationStyle: (AnimationStyle) -> Unit,
     onSetAnimationDuration: (Float) -> Unit, onSetSoundEnabled: (Boolean) -> Unit,
-    onSetVibrationEnabled: (Boolean) -> Unit, onSetPlayerName: (String) -> Unit
+    onSetVibrationEnabled: (Boolean) -> Unit, onSetPlayerName: (String) -> Unit,
+    onNewTheme: () -> Unit, onEditTheme: (GameTheme) -> Unit,
+    onUpdateEditingTheme: (GameTheme) -> Unit, onSaveTheme: () -> Unit, onDeleteTheme: (String) -> Unit,
+    onNewLayout: () -> Unit, onEditLayout: (CustomLayoutData) -> Unit,
+    onUpdateEditingLayout: (CustomLayoutData) -> Unit, onSaveLayout: () -> Unit,
+    onSelectCustomLayout: (CustomLayoutData) -> Unit, onClearCustomLayout: () -> Unit,
+    onDeleteLayout: (String) -> Unit
 ) {
     Box(Modifier.fillMaxSize().background(BG).systemBarsPadding()) {
         when (page) {
             GameViewModel.SettingsPage.MAIN -> MainPage(onNavigate, onBack)
             GameViewModel.SettingsPage.PROFILE -> ProfilePage(playerName, highScore, scoreHistory, onSetPlayerName) { onNavigate(GameViewModel.SettingsPage.MAIN) }
-            GameViewModel.SettingsPage.THEME -> ThemePage(currentTheme, onSetTheme) { onNavigate(GameViewModel.SettingsPage.MAIN) }
-            GameViewModel.SettingsPage.LAYOUT -> LayoutPage(portraitLayout, landscapeLayout, dpadStyle, onSetPortraitLayout, onSetLandscapeLayout, onSetDPadStyle) { onNavigate(GameViewModel.SettingsPage.MAIN) }
+            GameViewModel.SettingsPage.THEME -> ThemePage(currentTheme, customThemes, onSetTheme, onNewTheme, onEditTheme, onDeleteTheme) { onNavigate(GameViewModel.SettingsPage.MAIN) }
+            GameViewModel.SettingsPage.THEME_EDITOR -> if (editingTheme != null) ThemeEditorPage(editingTheme, onUpdateEditingTheme, onSaveTheme) { onNavigate(GameViewModel.SettingsPage.THEME) }
+            GameViewModel.SettingsPage.LAYOUT -> LayoutPage(portraitLayout, landscapeLayout, dpadStyle, customLayouts, activeCustomLayout, onSetPortraitLayout, onSetLandscapeLayout, onSetDPadStyle, onNewLayout, onEditLayout, onSelectCustomLayout, onClearCustomLayout, onDeleteLayout) { onNavigate(GameViewModel.SettingsPage.MAIN) }
+            GameViewModel.SettingsPage.LAYOUT_EDITOR -> if (editingLayout != null) LayoutEditorPage(editingLayout, onUpdateEditingLayout, onSaveLayout) { onNavigate(GameViewModel.SettingsPage.LAYOUT) }
             GameViewModel.SettingsPage.GAMEPLAY -> GameplayPage(difficulty, gameMode, ghostEnabled, onSetDifficulty, onSetGameMode, onSetGhostEnabled) { onNavigate(GameViewModel.SettingsPage.MAIN) }
             GameViewModel.SettingsPage.EXPERIENCE -> ExperiencePage(animationStyle, animationDuration, soundEnabled, vibrationEnabled, onSetAnimationStyle, onSetAnimationDuration, onSetSoundEnabled, onSetVibrationEnabled) { onNavigate(GameViewModel.SettingsPage.MAIN) }
             GameViewModel.SettingsPage.ABOUT -> AboutPage { onNavigate(GameViewModel.SettingsPage.MAIN) }
@@ -64,6 +76,7 @@ fun SettingsScreen(
     }
 }
 
+// ===== MAIN =====
 @Composable private fun MainPage(onNav: (GameViewModel.SettingsPage) -> Unit, onBack: () -> Unit) {
     Column(Modifier.fillMaxSize().padding(20.dp)) {
         Header("Settings", onBack); Spacer(Modifier.height(16.dp))
@@ -76,65 +89,284 @@ fun SettingsScreen(
     }
 }
 
+// ===== PROFILE =====
 @Composable private fun ProfilePage(name: String, hs: Int, history: List<ScoreEntry>, onName: (String) -> Unit, onBack: () -> Unit) {
     var editName by remember { mutableStateOf(name) }
     LaunchedEffect(name) { editName = name }
-
     LazyColumn(Modifier.fillMaxSize().padding(20.dp)) {
         item { Header("Profile", onBack); Spacer(Modifier.height(16.dp)) }
-        item {
-            Card {
-                Text("Player Name", color = DIM, fontSize = 12.sp)
-                Spacer(Modifier.height(4.dp))
-                BasicTextField(
-                    value = editName,
-                    onValueChange = { editName = it; onName(it) },
-                    textStyle = TextStyle(color = TX, fontSize = 18.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace),
-                    cursorBrush = SolidColor(ACC),
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(Color(0xFF252525))
-                        .padding(12.dp)
-                )
-            }
-        }
+        item { Card { Text("Player Name", color = DIM, fontSize = 12.sp); Spacer(Modifier.height(4.dp)); EditField(editName) { editName = it; onName(it) } } }
         item { Card { Text("High Score", color = DIM, fontSize = 12.sp); Text(hs.toString(), color = ACC, fontSize = 24.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace) } }
         item { Lbl("Score History") }
         if (history.isEmpty()) { item { Card { Text("No games yet", color = DIM) } } }
-        items(history.size.coerceAtMost(20)) { i ->
-            val e = history[i]
-            Card { Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween) { Text("${i+1}.", color = DIM); Text("${e.score}", color = ACC, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold); Text("Lv${e.level}", color = DIM, fontSize = 12.sp); Text("${e.lines}L", color = DIM, fontSize = 12.sp) } }
-        }
+        items(history.size.coerceAtMost(20)) { i -> val e = history[i]; Card { Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween) { Text("${i+1}.", color = DIM); Text("${e.score}", color = ACC, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold); Text("Lv${e.level}", color = DIM, fontSize = 12.sp); Text("${e.lines}L", color = DIM, fontSize = 12.sp) } } }
         item { Spacer(Modifier.height(16.dp)); Card { Text("Export / Import — v3.1.0", color = DIM, fontSize = 13.sp) } }
     }
 }
 
-@Composable private fun ThemePage(current: GameTheme, onSet: (GameTheme) -> Unit, onBack: () -> Unit) {
+// ===== THEME =====
+@Composable private fun ThemePage(current: GameTheme, custom: List<GameTheme>, onSet: (GameTheme) -> Unit, onNew: () -> Unit, onEdit: (GameTheme) -> Unit, onDelete: (String) -> Unit, onBack: () -> Unit) {
     LazyColumn(Modifier.fillMaxSize().padding(20.dp)) {
         item { Header("Theme", onBack); Spacer(Modifier.height(16.dp)) }
-        items(GameThemes.allThemes.size) { i ->
-            val t = GameThemes.allThemes[i]; val sel = t.id == current.id
-            Row(Modifier.fillMaxWidth().padding(vertical = 4.dp).clip(RoundedCornerShape(12.dp)).background(if (sel) ACC.copy(0.15f) else CARD).clickable { onSet(t) }.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) { Box(Modifier.size(24.dp).clip(CircleShape).background(t.screenBackground)); Box(Modifier.size(24.dp).clip(CircleShape).background(t.pixelOn)); Box(Modifier.size(24.dp).clip(CircleShape).background(t.buttonPrimary)) }
-                Spacer(Modifier.width(16.dp)); Text(t.name, color = TX, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                if (sel) Text("✓", color = ACC, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+        item { Lbl("Built-in") }
+        items(GameThemes.builtInThemes.size) { i -> val t = GameThemes.builtInThemes[i]; ThemeRow(t, t.id == current.id) { onSet(t) } }
+        if (custom.isNotEmpty()) {
+            item { Lbl("Custom") }
+            items(custom.size) { i ->
+                val t = custom[i]; val sel = t.id == current.id
+                Row(Modifier.fillMaxWidth().padding(vertical = 4.dp).clip(RoundedCornerShape(12.dp)).background(if (sel) ACC.copy(0.15f) else CARD).clickable { onSet(t) }.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    ThemeSwatches(t); Spacer(Modifier.width(12.dp)); Text(t.name, color = TX, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                    Text("EDIT", color = ACC, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { onEdit(t) }.padding(8.dp))
+                    Text("✕", color = Color(0xFFFF4444), fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { onDelete(t.id) }.padding(8.dp))
+                    if (sel) Text("✓", color = ACC, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                }
             }
         }
-        item { Spacer(Modifier.height(16.dp)); Card { Text("+ Custom Theme Builder — v3.2.0", color = DIM, fontSize = 13.sp) } }
+        item { Spacer(Modifier.height(16.dp)); ActionCard("+ Create Custom Theme", onNew) }
     }
 }
 
-@Composable private fun LayoutPage(p: LayoutPreset, l: LayoutPreset, d: DPadStyle, onP: (LayoutPreset) -> Unit, onL: (LayoutPreset) -> Unit, onD: (DPadStyle) -> Unit, onBack: () -> Unit) {
+@Composable private fun ThemeRow(t: GameTheme, sel: Boolean, onClick: () -> Unit) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp).clip(RoundedCornerShape(12.dp)).background(if (sel) ACC.copy(0.15f) else CARD).clickable { onClick() }.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+        ThemeSwatches(t); Spacer(Modifier.width(12.dp)); Text(t.name, color = TX, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+        if (sel) Text("✓", color = ACC, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+    }
+}
+
+@Composable private fun ThemeSwatches(t: GameTheme) {
+    Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+        Box(Modifier.size(22.dp).clip(CircleShape).background(t.screenBackground).border(1.dp, DIM.copy(0.3f), CircleShape))
+        Box(Modifier.size(22.dp).clip(CircleShape).background(t.pixelOn).border(1.dp, DIM.copy(0.3f), CircleShape))
+        Box(Modifier.size(22.dp).clip(CircleShape).background(t.accentColor).border(1.dp, DIM.copy(0.3f), CircleShape))
+    }
+}
+
+// ===== THEME EDITOR =====
+@Composable private fun ThemeEditorPage(theme: GameTheme, onUpdate: (GameTheme) -> Unit, onSave: () -> Unit, onBack: () -> Unit) {
+    var name by remember(theme.id) { mutableStateOf(theme.name) }
+
+    LazyColumn(Modifier.fillMaxSize().padding(20.dp)) {
+        item { Header("Theme Editor", onBack); Spacer(Modifier.height(12.dp)) }
+        // Name
+        item { Card { Text("Theme Name", color = DIM, fontSize = 12.sp); Spacer(Modifier.height(4.dp)); EditField(name) { name = it; onUpdate(theme.copy(name = it)) } } }
+        // Live preview strip
+        item {
+            Card {
+                Text("Preview", color = DIM, fontSize = 12.sp); Spacer(Modifier.height(8.dp))
+                Row(Modifier.fillMaxWidth().height(60.dp).clip(RoundedCornerShape(8.dp)).background(theme.backgroundColor).padding(4.dp)) {
+                    Box(Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(6.dp)).background(theme.screenBackground).padding(4.dp)) {
+                        // Mini board preview
+                        Row(Modifier.fillMaxSize(), Arrangement.SpaceEvenly, Alignment.CenterVertically) {
+                            repeat(5) { Box(Modifier.size(12.dp).clip(RoundedCornerShape(2.dp)).background(if (it % 2 == 0) theme.pixelOn else theme.pixelOff)) }
+                        }
+                    }
+                    Spacer(Modifier.width(4.dp))
+                    Column(Modifier.width(40.dp).fillMaxHeight(), Arrangement.SpaceEvenly, Alignment.CenterHorizontally) {
+                        Box(Modifier.size(16.dp).clip(CircleShape).background(theme.buttonPrimary))
+                        Box(Modifier.size(12.dp).clip(RoundedCornerShape(6.dp)).background(theme.buttonSecondary))
+                    }
+                }
+                Spacer(Modifier.height(4.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("Score", color = theme.accentColor, fontSize = 11.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                    Text("Label", color = theme.textPrimary, fontSize = 11.sp)
+                    Text("Info", color = theme.textSecondary, fontSize = 11.sp)
+                }
+            }
+        }
+        // Color editors
+        item { Lbl("Background") }
+        item { ColorEditor("App Background", theme.backgroundColor) { onUpdate(theme.copy(backgroundColor = it)) } }
+        item { ColorEditor("Device Frame", theme.deviceColor) { onUpdate(theme.copy(deviceColor = it)) } }
+        item { Lbl("Board") }
+        item { ColorEditor("Screen Background", theme.screenBackground) { onUpdate(theme.copy(screenBackground = it)) } }
+        item { ColorEditor("Pixel ON (blocks)", theme.pixelOn) { onUpdate(theme.copy(pixelOn = it)) } }
+        item { ColorEditor("Pixel OFF (empty)", theme.pixelOff) { onUpdate(theme.copy(pixelOff = it)) } }
+        item { Lbl("Text") }
+        item { ColorEditor("Text Primary", theme.textPrimary) { onUpdate(theme.copy(textPrimary = it)) } }
+        item { ColorEditor("Text Secondary", theme.textSecondary) { onUpdate(theme.copy(textSecondary = it)) } }
+        item { Lbl("Buttons") }
+        item { ColorEditor("Button Primary", theme.buttonPrimary) { onUpdate(theme.copy(buttonPrimary = it)) } }
+        item { ColorEditor("Button Pressed", theme.buttonPrimaryPressed) { onUpdate(theme.copy(buttonPrimaryPressed = it)) } }
+        item { ColorEditor("Button Secondary", theme.buttonSecondary) { onUpdate(theme.copy(buttonSecondary = it)) } }
+        item { ColorEditor("Sec. Pressed", theme.buttonSecondaryPressed) { onUpdate(theme.copy(buttonSecondaryPressed = it)) } }
+        item { Lbl("Accent") }
+        item { ColorEditor("Accent Color", theme.accentColor) { onUpdate(theme.copy(accentColor = it)) } }
+        // Save
+        item { Spacer(Modifier.height(20.dp)); ActionCard("SAVE THEME", onSave) }
+        item { Spacer(Modifier.height(40.dp)) }
+    }
+}
+
+// ===== COLOR EDITOR =====
+@Composable private fun ColorEditor(label: String, color: Color, onChange: (Color) -> Unit) {
+    var hexText by remember(color) { mutableStateOf(colorToHex(color)) }
+
+    Card {
+        Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
+            Text(label, color = TX, fontSize = 14.sp, modifier = Modifier.weight(1f))
+            Box(Modifier.size(32.dp).clip(CircleShape).background(color).border(2.dp, DIM.copy(0.4f), CircleShape))
+        }
+        Spacer(Modifier.height(8.dp))
+        // Preset swatches
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            val presets = listOf(
+                Color.Black, Color(0xFF1A1A1A), Color(0xFF2A2A2A), Color(0xFF3A3A3A), Color(0xFF4A4A4A),
+                Color(0xFF6A6A6A), Color(0xFF8A8A8A), Color(0xFFAAAAAA), Color(0xFFCCCCCC), Color.White,
+                Color(0xFFFF0000), Color(0xFFFF4444), Color(0xFFFF8800), Color(0xFFFFAA00), Color(0xFFF4D03F),
+                Color(0xFFFFFF00), Color(0xFF88FF00), Color(0xFF00FF00), Color(0xFF00FF88), Color(0xFF00FFFF),
+                Color(0xFF0088FF), Color(0xFF0000FF), Color(0xFF4400FF), Color(0xFF8800FF), Color(0xFFFF00FF),
+                Color(0xFF8AB4F8), Color(0xFF9B59B6), Color(0xFFE07030), Color(0xFF2ECC71), Color(0xFF1ABC9C),
+                Color(0xFF3D4A32), Color(0xFFB8C4A8), Color(0xFFA8B498), Color(0xFF4A5A3A), Color(0xFFD4C896),
+                Color(0xFF201800), Color(0xFF1A1200), Color(0xFF080810), Color(0xFF0A0F0A), Color(0xFFFAF6F0)
+            )
+            items(presets.size) { i ->
+                val p = presets[i]
+                Box(
+                    Modifier.size(28.dp).clip(CircleShape)
+                        .background(p).border(if (colorsClose(p, color)) 2.dp else 1.dp, if (colorsClose(p, color)) ACC else DIM.copy(0.3f), CircleShape)
+                        .clickable { onChange(p); hexText = colorToHex(p) }
+                )
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+        // Hex input
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("#", color = DIM, fontSize = 14.sp, fontFamily = FontFamily.Monospace)
+            BasicTextField(
+                value = hexText, onValueChange = { v ->
+                    val clean = v.filter { it.isLetterOrDigit() }.take(8)
+                    hexText = clean
+                    hexFromString(clean)?.let { onChange(it) }
+                },
+                textStyle = TextStyle(color = TX, fontSize = 14.sp, fontFamily = FontFamily.Monospace),
+                cursorBrush = SolidColor(ACC), singleLine = true,
+                modifier = Modifier.width(100.dp).clip(RoundedCornerShape(6.dp)).background(Color(0xFF252525)).padding(8.dp)
+            )
+        }
+        Spacer(Modifier.height(6.dp))
+        // RGB sliders
+        val r = (color.red * 255).toInt(); val g = (color.green * 255).toInt(); val b = (color.blue * 255).toInt()
+        ColorSlider("R", r, Color.Red) { onChange(Color(it / 255f, color.green, color.blue, color.alpha)); hexText = colorToHex(Color(it / 255f, color.green, color.blue, color.alpha)) }
+        ColorSlider("G", g, Color.Green) { onChange(Color(color.red, it / 255f, color.blue, color.alpha)); hexText = colorToHex(Color(color.red, it / 255f, color.blue, color.alpha)) }
+        ColorSlider("B", b, Color(0xFF4488FF)) { onChange(Color(color.red, color.green, it / 255f, color.alpha)); hexText = colorToHex(Color(color.red, color.green, it / 255f, color.alpha)) }
+    }
+}
+
+@Composable private fun ColorSlider(label: String, value: Int, trackColor: Color, onChange: (Int) -> Unit) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Text(label, color = DIM, fontSize = 11.sp, fontFamily = FontFamily.Monospace, modifier = Modifier.width(16.dp))
+        Slider(value.toFloat(), { onChange(it.toInt()) }, valueRange = 0f..255f, modifier = Modifier.weight(1f).height(24.dp),
+            colors = SliderDefaults.colors(thumbColor = trackColor, activeTrackColor = trackColor.copy(0.7f), inactiveTrackColor = trackColor.copy(0.15f)))
+        Text(value.toString().padStart(3), color = DIM, fontSize = 11.sp, fontFamily = FontFamily.Monospace, modifier = Modifier.width(28.dp))
+    }
+}
+
+private fun colorToHex(c: Color): String {
+    val r = (c.red * 255).toInt(); val g = (c.green * 255).toInt(); val b = (c.blue * 255).toInt()
+    return "%02X%02X%02X".format(r, g, b)
+}
+
+private fun hexFromString(hex: String): Color? {
+    return try {
+        when (hex.length) {
+            6 -> Color(("FF$hex").toLong(16))
+            8 -> Color(hex.toLong(16))
+            else -> null
+        }
+    } catch (_: Exception) { null }
+}
+
+private fun colorsClose(a: Color, b: Color): Boolean {
+    val dr = a.red - b.red; val dg = a.green - b.green; val db = a.blue - b.blue
+    return (dr * dr + dg * dg + db * db) < 0.002f
+}
+
+// ===== LAYOUT =====
+@Composable private fun LayoutPage(p: LayoutPreset, l: LayoutPreset, d: DPadStyle, custom: List<CustomLayoutData>, active: CustomLayoutData?,
+                                    onP: (LayoutPreset) -> Unit, onL: (LayoutPreset) -> Unit, onD: (DPadStyle) -> Unit,
+                                    onNew: () -> Unit, onEdit: (CustomLayoutData) -> Unit, onSelect: (CustomLayoutData) -> Unit, onClear: () -> Unit, onDelete: (String) -> Unit, onBack: () -> Unit) {
     LazyColumn(Modifier.fillMaxSize().padding(20.dp)) {
         item { Header("Layout", onBack) }
-        item { Lbl("Portrait") }; items(LayoutPreset.portraitPresets().size) { i -> val x = LayoutPreset.portraitPresets()[i]; Sel(x.displayName, x == p) { onP(x) } }
+        item { Lbl("Portrait") }
+        items(LayoutPreset.portraitPresets().size) { i -> val x = LayoutPreset.portraitPresets()[i]; Sel(x.displayName, x == p && active == null) { onClear(); onP(x) } }
+        if (custom.isNotEmpty()) {
+            item { Lbl("Custom Layouts") }
+            items(custom.size) { i ->
+                val cl = custom[i]; val sel = active?.id == cl.id
+                Row(Modifier.fillMaxWidth().padding(vertical = 2.dp).clip(RoundedCornerShape(8.dp)).background(if (sel) ACC.copy(0.15f) else CARD).clickable { onSelect(cl) }.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) { Text(cl.name, color = TX, fontSize = 14.sp, fontWeight = FontWeight.Bold); Text("${cl.infoPosition} · ${cl.controlSize}", color = DIM, fontSize = 11.sp) }
+                    Text("EDIT", color = ACC, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { onEdit(cl) }.padding(8.dp))
+                    Text("✕", color = Color(0xFFFF4444), fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { onDelete(cl.id) }.padding(8.dp))
+                    if (sel) Text("✓", color = ACC, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
         item { Lbl("Landscape") }; items(LayoutPreset.landscapePresets().size) { i -> val x = LayoutPreset.landscapePresets()[i]; Sel(x.displayName, x == l) { onL(x) } }
         item { Lbl("D-Pad Style") }; items(DPadStyle.entries.size) { i -> val x = DPadStyle.entries[i]; Sel(x.displayName, x == d) { onD(x) } }
-        item { Spacer(Modifier.height(16.dp)); Card { Text("+ Custom Layout Editor — v3.3.0", color = DIM, fontSize = 13.sp) } }
+        item { Spacer(Modifier.height(16.dp)); ActionCard("+ Create Custom Layout", onNew) }
     }
 }
 
+// ===== LAYOUT EDITOR =====
+@Composable private fun LayoutEditorPage(layout: CustomLayoutData, onUpdate: (CustomLayoutData) -> Unit, onSave: () -> Unit, onBack: () -> Unit) {
+    var name by remember(layout.id) { mutableStateOf(layout.name) }
+
+    LazyColumn(Modifier.fillMaxSize().padding(20.dp)) {
+        item { Header("Layout Editor", onBack); Spacer(Modifier.height(12.dp)) }
+        // Name
+        item { Card { Text("Layout Name", color = DIM, fontSize = 12.sp); Spacer(Modifier.height(4.dp)); EditField(name) { name = it; onUpdate(layout.copy(name = it)) } } }
+        // Board
+        item { Lbl("Board") }
+        item { Card {
+            Text("Board Width", color = TX, fontSize = 14.sp)
+            Slider(layout.boardWidthPercent, { onUpdate(layout.copy(boardWidthPercent = it)) }, valueRange = 0.5f..1f, colors = sliderColors())
+            Text("${(layout.boardWidthPercent * 100).toInt()}%", color = DIM, fontSize = 12.sp)
+        } }
+        item { Card {
+            Text("Board Position", color = TX, fontSize = 14.sp); Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf("TOP", "CENTER", "BOTTOM").forEach { pos -> Chip(pos, layout.boardPosition == pos) { onUpdate(layout.copy(boardPosition = pos)) } }
+            }
+        } }
+        // Info
+        item { Lbl("Information") }
+        item { Card {
+            Text("Info Position", color = TX, fontSize = 14.sp); Spacer(Modifier.height(8.dp))
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                listOf("TOP_BAR" to "Top Bar", "LEFT_SIDE" to "Left Side", "RIGHT_SIDE" to "Right Side", "BOTTOM_STRIP" to "Bottom Strip", "HIDDEN" to "Hidden").forEach { (v, l) ->
+                    Sel(l, layout.infoPosition == v) { onUpdate(layout.copy(infoPosition = v)) }
+                }
+            }
+        } }
+        item { Card {
+            Toggle("Show Score", layout.showScore) { onUpdate(layout.copy(showScore = it)) }; Spacer(Modifier.height(4.dp))
+            Toggle("Show Level", layout.showLevel) { onUpdate(layout.copy(showLevel = it)) }; Spacer(Modifier.height(4.dp))
+            Toggle("Show Lines", layout.showLines) { onUpdate(layout.copy(showLines = it)) }; Spacer(Modifier.height(4.dp))
+            Toggle("Show Hold", layout.showHold) { onUpdate(layout.copy(showHold = it)) }; Spacer(Modifier.height(4.dp))
+            Toggle("Show Next", layout.showNext) { onUpdate(layout.copy(showNext = it)) }
+        } }
+        item { Card {
+            Text("Next Queue Size", color = TX, fontSize = 14.sp); Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { (1..3).forEach { n -> Chip("$n", layout.nextQueueSize == n) { onUpdate(layout.copy(nextQueueSize = n)) } } }
+        } }
+        // Controls
+        item { Lbl("Controls") }
+        item { Card {
+            Text("Control Size", color = TX, fontSize = 14.sp); Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { listOf("SMALL", "MEDIUM", "LARGE").forEach { s -> Chip(s, layout.controlSize == s) { onUpdate(layout.copy(controlSize = s)) } } }
+        } }
+        item { Card {
+            Toggle("Show Hold Button", layout.showHoldButton) { onUpdate(layout.copy(showHoldButton = it)) }; Spacer(Modifier.height(4.dp))
+            Toggle("Show Pause Button", layout.showPauseButton) { onUpdate(layout.copy(showPauseButton = it)) }
+        } }
+        // Save
+        item { Spacer(Modifier.height(20.dp)); ActionCard("SAVE LAYOUT", onSave) }
+        item { Spacer(Modifier.height(40.dp)) }
+    }
+}
+
+// ===== GAMEPLAY =====
 @Composable private fun GameplayPage(diff: Difficulty, mode: GameMode, ghost: Boolean, onD: (Difficulty) -> Unit, onM: (GameMode) -> Unit, onG: (Boolean) -> Unit, onBack: () -> Unit) {
     LazyColumn(Modifier.fillMaxSize().padding(20.dp)) {
         item { Header("Gameplay", onBack) }
@@ -144,45 +376,36 @@ fun SettingsScreen(
     }
 }
 
+// ===== EXPERIENCE =====
 @Composable private fun ExperiencePage(aS: AnimationStyle, aD: Float, s: Boolean, v: Boolean, onAS: (AnimationStyle) -> Unit, onAD: (Float) -> Unit, onS: (Boolean) -> Unit, onV: (Boolean) -> Unit, onBack: () -> Unit) {
     LazyColumn(Modifier.fillMaxSize().padding(20.dp)) {
         item { Header("Experience", onBack) }
         item { Lbl("Animation") }; items(AnimationStyle.entries.size) { i -> val x = AnimationStyle.entries[i]; Sel("${x.displayName} — ${x.description}", x == aS) { onAS(x) } }
-        item { Card { Text("Speed", color = TX, fontSize = 14.sp); Slider(aD, onAD, valueRange = 0.1f..2f, colors = SliderDefaults.colors(thumbColor = ACC, activeTrackColor = ACC)); Text("${(aD*1000).toInt()}ms", color = DIM, fontSize = 12.sp) } }
+        item { Card { Text("Speed", color = TX, fontSize = 14.sp); Slider(aD, onAD, valueRange = 0.1f..2f, colors = sliderColors()); Text("${(aD*1000).toInt()}ms", color = DIM, fontSize = 12.sp) } }
         item { Lbl("Sound & Vibration") }; item { Card { Toggle("Sound", s, onS); Spacer(Modifier.height(8.dp)); Toggle("Vibration", v, onV) } }
-        item { Spacer(Modifier.height(16.dp)); Card { Text("Visual Evolution — v3.4.0", color = DIM, fontSize = 13.sp) } }
     }
 }
 
+// ===== ABOUT =====
 @Composable private fun AboutPage(onBack: () -> Unit) {
     Column(Modifier.fillMaxSize().padding(20.dp)) {
         Header("About", onBack); Spacer(Modifier.height(24.dp))
         Card { Text("BRICK GAME", color = ACC, fontSize = 24.sp, fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace); Text("Kotlin Edition", color = TX, fontSize = 16.sp) }
-        Card { Info("Version", "3.0.0"); Info("Build", "10"); Info("Min Android", "8.0 (API 26)") }
+        Card { Info("Version", "3.2.0"); Info("Build", "12"); Info("Min Android", "8.0 (API 26)") }
         Card { Text("Developer", color = DIM, fontSize = 12.sp); Text("Andrei Anton", color = TX, fontSize = 16.sp, fontWeight = FontWeight.Bold) }
-        Card { Text("v3.0.0 — Fresh start", color = ACC, fontSize = 14.sp, fontWeight = FontWeight.Bold); Text("Core engine (SRS, T-Spin, B2B, Combos)", color = TX, fontSize = 12.sp); Text("5 themes, 5 layouts, 2 D-Pad styles", color = TX, fontSize = 12.sp); Text("Full settings with profile & experience", color = TX, fontSize = 12.sp) }
+        Card { Text("v3.2.0 — Custom Theme & Layout", color = ACC, fontSize = 14.sp, fontWeight = FontWeight.Bold); Text("Theme editor with RGB sliders, hex, presets", color = TX, fontSize = 12.sp); Text("Layout editor with board/info/control config", color = TX, fontSize = 12.sp) }
     }
 }
 
-// Reusable
-@Composable private fun Header(title: String, onBack: () -> Unit) {
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Text("←", color = ACC, fontSize = 24.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { onBack() }.padding(8.dp))
-        Spacer(Modifier.width(12.dp)); Text(title, color = TX, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-    }
-}
-@Composable private fun MenuItem(title: String, sub: String, onClick: () -> Unit) {
-    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp).clip(RoundedCornerShape(12.dp)).background(CARD).clickable { onClick() }.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f)) { Text(title, color = TX, fontWeight = FontWeight.Bold, fontSize = 16.sp); Text(sub, color = DIM, fontSize = 12.sp) }
-        Text("›", color = DIM, fontSize = 20.sp)
-    }
-}
+// ===== REUSABLE =====
+@Composable private fun Header(t: String, onBack: () -> Unit) { Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { Text("←", color = ACC, fontSize = 24.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { onBack() }.padding(8.dp)); Spacer(Modifier.width(12.dp)); Text(t, color = TX, fontSize = 22.sp, fontWeight = FontWeight.Bold) } }
+@Composable private fun MenuItem(t: String, sub: String, onClick: () -> Unit) { Row(Modifier.fillMaxWidth().padding(vertical = 4.dp).clip(RoundedCornerShape(12.dp)).background(CARD).clickable { onClick() }.padding(16.dp), verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text(t, color = TX, fontWeight = FontWeight.Bold, fontSize = 16.sp); Text(sub, color = DIM, fontSize = 12.sp) }; Text("›", color = DIM, fontSize = 20.sp) } }
 @Composable private fun Card(content: @Composable ColumnScope.() -> Unit) { Column(Modifier.fillMaxWidth().padding(vertical = 4.dp).clip(RoundedCornerShape(12.dp)).background(CARD).padding(16.dp), content = content) }
 @Composable private fun Lbl(t: String) { Text(t, color = ACC, fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)) }
-@Composable private fun Sel(text: String, sel: Boolean, onClick: () -> Unit) {
-    Row(Modifier.fillMaxWidth().padding(vertical = 2.dp).clip(RoundedCornerShape(8.dp)).background(if (sel) ACC.copy(0.15f) else CARD).clickable { onClick() }.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(text, color = TX, fontSize = 14.sp, modifier = Modifier.weight(1f)); if (sel) Text("✓", color = ACC, fontWeight = FontWeight.Bold)
-    }
-}
-@Composable private fun Toggle(label: String, v: Boolean, on: (Boolean) -> Unit) { Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) { Text(label, color = TX, fontSize = 16.sp); Switch(v, on, colors = SwitchDefaults.colors(checkedTrackColor = ACC)) } }
+@Composable private fun Sel(text: String, sel: Boolean, onClick: () -> Unit) { Row(Modifier.fillMaxWidth().padding(vertical = 2.dp).clip(RoundedCornerShape(8.dp)).background(if (sel) ACC.copy(0.15f) else CARD).clickable { onClick() }.padding(12.dp), verticalAlignment = Alignment.CenterVertically) { Text(text, color = TX, fontSize = 14.sp, modifier = Modifier.weight(1f)); if (sel) Text("✓", color = ACC, fontWeight = FontWeight.Bold) } }
+@Composable private fun Toggle(label: String, v: Boolean, on: (Boolean) -> Unit) { Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) { Text(label, color = TX, fontSize = 14.sp); Switch(v, on, colors = SwitchDefaults.colors(checkedTrackColor = ACC)) } }
 @Composable private fun Info(l: String, v: String) { Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), Arrangement.SpaceBetween) { Text(l, color = DIM, fontSize = 14.sp); Text(v, color = TX, fontSize = 14.sp, fontFamily = FontFamily.Monospace) } }
+@Composable private fun ActionCard(text: String, onClick: () -> Unit) { Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(ACC.copy(0.15f)).clickable { onClick() }.padding(16.dp), Arrangement.Center) { Text(text, color = ACC, fontWeight = FontWeight.Bold, fontSize = 16.sp) } }
+@Composable private fun Chip(text: String, sel: Boolean, onClick: () -> Unit) { Box(Modifier.clip(RoundedCornerShape(8.dp)).background(if (sel) ACC.copy(0.2f) else CARD).border(1.dp, if (sel) ACC else DIM.copy(0.3f), RoundedCornerShape(8.dp)).clickable { onClick() }.padding(horizontal = 14.dp, vertical = 8.dp)) { Text(text, color = if (sel) ACC else TX, fontSize = 13.sp, fontWeight = if (sel) FontWeight.Bold else FontWeight.Normal) } }
+@Composable private fun EditField(value: String, onChange: (String) -> Unit) { BasicTextField(value, onChange, textStyle = TextStyle(color = TX, fontSize = 18.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace), cursorBrush = SolidColor(ACC), singleLine = true, modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(Color(0xFF252525)).padding(12.dp)) }
+private fun sliderColors() = SliderDefaults.colors(thumbColor = ACC, activeTrackColor = ACC, inactiveTrackColor = ACC.copy(0.15f))

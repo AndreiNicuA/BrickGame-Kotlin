@@ -19,6 +19,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 import com.brickgame.tetris.game.*
+import com.brickgame.tetris.data.CustomLayoutData
 import com.brickgame.tetris.ui.components.*
 import com.brickgame.tetris.ui.layout.DPadStyle
 import com.brickgame.tetris.ui.layout.LayoutPreset
@@ -33,6 +34,7 @@ fun GameScreen(
     ghostEnabled: Boolean,
     animationStyle: AnimationStyle,
     animationDuration: Float,
+    customLayout: CustomLayoutData? = null,
     onStartGame: () -> Unit, onPause: () -> Unit, onResume: () -> Unit,
     onRotate: () -> Unit, onRotateCCW: () -> Unit,
     onHardDrop: () -> Unit, onHold: () -> Unit,
@@ -47,7 +49,9 @@ fun GameScreen(
         when {
             gameState.status == GameStatus.MENU -> MenuOverlay(gameState.highScore, onStartGame, onOpenSettings)
             else -> {
-                when (layoutPreset) {
+                if (customLayout != null) {
+                    CustomLayout(gameState, dpadStyle, ghostEnabled, animationStyle, animationDuration, customLayout, onRotate, onHardDrop, onHold, onLeftPress, onLeftRelease, onRightPress, onRightRelease, onDownPress, onDownRelease, onPause, onOpenSettings, onStartGame)
+                } else when (layoutPreset) {
                     LayoutPreset.PORTRAIT_CLASSIC -> ClassicLayout(gameState, dpadStyle, ghostEnabled, animationStyle, animationDuration, onRotate, onHardDrop, onHold, onLeftPress, onLeftRelease, onRightPress, onRightRelease, onDownPress, onDownRelease, onPause, onOpenSettings, onStartGame)
                     LayoutPreset.PORTRAIT_MODERN -> ModernLayout(gameState, dpadStyle, ghostEnabled, animationStyle, animationDuration, onRotate, onHardDrop, onHold, onLeftPress, onLeftRelease, onRightPress, onRightRelease, onDownPress, onDownRelease, onPause, onOpenSettings, onStartGame)
                     LayoutPreset.PORTRAIT_FULLSCREEN -> FullscreenLayout(gameState, dpadStyle, ghostEnabled, animationStyle, animationDuration, onRotate, onHardDrop, onHold, onLeftPress, onLeftRelease, onRightPress, onRightRelease, onDownPress, onDownRelease, onPause, onOpenSettings, onStartGame)
@@ -205,6 +209,82 @@ fun GameScreen(
         }
         // Rotate
         if (dp == DPadStyle.STANDARD) RotateButton(onRotate, 66.dp) else Spacer(Modifier.size(66.dp))
+    }
+}
+
+// === CUSTOM LAYOUT: Dynamically configured by user ===
+@Composable private fun CustomLayout(
+    gs: GameState, dp: DPadStyle, ghost: Boolean, anim: AnimationStyle, ad: Float,
+    cl: CustomLayoutData,
+    onRotate: () -> Unit, onHD: () -> Unit, onHold: () -> Unit,
+    onLP: () -> Unit, onLR: () -> Unit, onRP: () -> Unit, onRR: () -> Unit,
+    onDP: () -> Unit, onDR: () -> Unit, onPause: () -> Unit, onSet: () -> Unit, onStart: () -> Unit
+) {
+    val theme = LocalGameTheme.current
+    val btnSize = when (cl.controlSize) { "SMALL" -> 44.dp; "LARGE" -> 62.dp; else -> 54.dp }
+    val rotSize = when (cl.controlSize) { "SMALL" -> 52.dp; "LARGE" -> 74.dp; else -> 66.dp }
+
+    @Composable fun InfoBar(modifier: Modifier = Modifier, horizontal: Boolean = true) {
+        if (horizontal) {
+            Row(modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(theme.deviceColor).padding(horizontal = 8.dp, vertical = 4.dp),
+                Arrangement.SpaceBetween, Alignment.CenterVertically) {
+                if (cl.showHold) { Column(horizontalAlignment = Alignment.CenterHorizontally) { Tag("HOLD"); HoldPiecePreview(gs.holdPiece?.shape, gs.holdUsed, Modifier.size(30.dp)) } }
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    if (cl.showScore) Text(gs.score.toString().padStart(7, '0'), fontSize = 16.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, color = theme.pixelOn)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { if (cl.showLevel) Tag("LV${gs.level}"); if (cl.showLines) Tag("${gs.lines}L") }
+                }
+                if (cl.showNext) { Column(horizontalAlignment = Alignment.CenterHorizontally) { Tag("NEXT"); gs.nextPieces.take(cl.nextQueueSize).forEachIndexed { i, p -> NextPiecePreview(p.shape, Modifier.size(if (i == 0) 30.dp else 22.dp), if (i == 0) 1f else 0.5f) } } }
+            }
+        } else {
+            Column(modifier.width(56.dp).fillMaxHeight(), Arrangement.SpaceEvenly, Alignment.CenterHorizontally) {
+                if (cl.showHold) { Column(horizontalAlignment = Alignment.CenterHorizontally) { Tag("HOLD"); HoldPiecePreview(gs.holdPiece?.shape, gs.holdUsed, Modifier.size(40.dp)) } }
+                if (cl.showScore) ScoreBlock(gs.score, gs.level, gs.lines)
+                if (cl.showNext) { Column(horizontalAlignment = Alignment.CenterHorizontally) { Tag("NEXT"); gs.nextPieces.take(cl.nextQueueSize).forEachIndexed { i, p -> NextPiecePreview(p.shape, Modifier.size(if (i == 0) 36.dp else 26.dp), if (i == 0) 1f else 0.5f) } } }
+            }
+        }
+    }
+
+    Column(Modifier.fillMaxSize().padding(horizontal = 4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        // Top info
+        if (cl.infoPosition == "TOP_BAR") { InfoBar(); Spacer(Modifier.height(4.dp)) }
+
+        // Middle row: optional side info + board
+        Row(Modifier.weight(1f).fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            if (cl.infoPosition == "LEFT_SIDE") { InfoBar(horizontal = false); Spacer(Modifier.width(4.dp)) }
+
+            // Board
+            val boardMod = Modifier.weight(1f).then(
+                if (cl.boardWidthPercent < 0.99f) Modifier.fillMaxWidth(cl.boardWidthPercent) else Modifier.fillMaxWidth()
+            ).then(
+                when (cl.boardPosition) {
+                    "TOP" -> Modifier.fillMaxHeight()
+                    "BOTTOM" -> Modifier.fillMaxHeight()
+                    else -> Modifier.fillMaxHeight()
+                }
+            )
+            Box(Modifier.weight(1f).fillMaxHeight(), when (cl.boardPosition) { "TOP" -> Alignment.TopCenter; "BOTTOM" -> Alignment.BottomCenter; else -> Alignment.Center }) {
+                GameBoard(gs.board, Modifier.fillMaxHeight().aspectRatio(0.5f), gs.currentPiece, gs.ghostY, ghost, gs.clearedLineRows, anim, ad)
+            }
+
+            if (cl.infoPosition == "RIGHT_SIDE") { Spacer(Modifier.width(4.dp)); InfoBar(horizontal = false) }
+        }
+
+        // Bottom info
+        if (cl.infoPosition == "BOTTOM_STRIP") { Spacer(Modifier.height(4.dp)); InfoBar() }
+
+        // Controls
+        Spacer(Modifier.height(4.dp))
+        Row(Modifier.fillMaxWidth().padding(bottom = 4.dp), Arrangement.SpaceBetween, Alignment.CenterVertically) {
+            DPad(btnSize, rotateInCenter = dp == DPadStyle.ROTATE_CENTRE,
+                onUpPress = onHD, onDownPress = onDP, onDownRelease = onDR,
+                onLeftPress = onLP, onLeftRelease = onLR, onRightPress = onRP, onRightRelease = onRR, onRotate = onRotate)
+            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                if (cl.showHoldButton) ActionButton("HOLD", onHold, width = 78.dp, height = 34.dp)
+                if (cl.showPauseButton) ActionButton(if (gs.status == GameStatus.MENU) "START" else "PAUSE", { if (gs.status == GameStatus.MENU) onStart() else onPause() }, width = 78.dp, height = 34.dp)
+                ActionButton("...", onSet, width = 46.dp, height = 24.dp)
+            }
+            if (dp == DPadStyle.STANDARD) RotateButton(onRotate, rotSize) else Spacer(Modifier.size(rotSize))
+        }
     }
 }
 
