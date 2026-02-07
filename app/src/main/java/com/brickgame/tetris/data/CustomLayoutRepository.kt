@@ -14,31 +14,64 @@ import java.io.IOException
 
 private val Context.customLayoutStore: DataStore<Preferences> by preferencesDataStore(name = "custom_layouts")
 
+/**
+ * Normalized position (0..1 range) like RoadTrip's ElementPosition
+ */
+@Serializable
+data class ElementPosition(val x: Float, val y: Float)
+
+/**
+ * Identifiers for every movable/toggleable UI element
+ */
+object LayoutElements {
+    const val BOARD = "BOARD"
+    const val SCORE = "SCORE"
+    const val LEVEL = "LEVEL"
+    const val LINES = "LINES"
+    const val HOLD_PREVIEW = "HOLD_PREVIEW"
+    const val NEXT_PREVIEW = "NEXT_PREVIEW"
+    const val DPAD = "DPAD"
+    const val ROTATE_BTN = "ROTATE_BTN"
+    const val HOLD_BTN = "HOLD_BTN"
+    const val PAUSE_BTN = "PAUSE_BTN"
+    const val MENU_BTN = "MENU_BTN"     // Cannot be hidden
+
+    val allElements = listOf(BOARD, SCORE, LEVEL, LINES, HOLD_PREVIEW, NEXT_PREVIEW, DPAD, ROTATE_BTN, HOLD_BTN, PAUSE_BTN, MENU_BTN)
+    val hideable = allElements - MENU_BTN  // Everything except menu can be hidden
+}
+
+/**
+ * Full custom layout config: positions + visibility + sizes
+ */
 @Serializable
 data class CustomLayoutData(
     val id: String,
     val name: String,
-    // Board
-    val boardWidthPercent: Float = 0.85f,        // 0.5..1.0 — width of board relative to screen
-    val boardPosition: String = "CENTER",         // TOP, CENTER, BOTTOM
-    // Info placement
-    val infoPosition: String = "TOP_BAR",         // TOP_BAR, LEFT_SIDE, RIGHT_SIDE, BOTTOM_STRIP, HIDDEN
-    // What info to show
-    val showScore: Boolean = true,
-    val showLevel: Boolean = true,
-    val showLines: Boolean = true,
-    val showHold: Boolean = true,
-    val showNext: Boolean = true,
-    val nextQueueSize: Int = 1,                   // 1..3
-    // Controls
-    val controlSize: String = "MEDIUM",           // SMALL, MEDIUM, LARGE
-    val showHoldButton: Boolean = true,
-    val showPauseButton: Boolean = true
-)
+    val positions: Map<String, ElementPosition> = defaultPositions(),
+    val visibility: Map<String, Boolean> = LayoutElements.allElements.associateWith { true },
+    val nextQueueSize: Int = 1,
+    val controlSize: String = "MEDIUM"  // SMALL, MEDIUM, LARGE
+) {
+    companion object {
+        fun defaultPositions() = mapOf(
+            LayoutElements.BOARD to ElementPosition(0.5f, 0.38f),
+            LayoutElements.SCORE to ElementPosition(0.5f, 0.02f),
+            LayoutElements.LEVEL to ElementPosition(0.2f, 0.02f),
+            LayoutElements.LINES to ElementPosition(0.8f, 0.02f),
+            LayoutElements.HOLD_PREVIEW to ElementPosition(0.08f, 0.08f),
+            LayoutElements.NEXT_PREVIEW to ElementPosition(0.92f, 0.08f),
+            LayoutElements.DPAD to ElementPosition(0.18f, 0.85f),
+            LayoutElements.ROTATE_BTN to ElementPosition(0.85f, 0.85f),
+            LayoutElements.HOLD_BTN to ElementPosition(0.5f, 0.80f),
+            LayoutElements.PAUSE_BTN to ElementPosition(0.5f, 0.87f),
+            LayoutElements.MENU_BTN to ElementPosition(0.5f, 0.94f)
+        )
+    }
+}
 
 class CustomLayoutRepository(private val context: Context) {
     companion object {
-        private val LAYOUTS_JSON = stringPreferencesKey("custom_layouts_json")
+        private val LAYOUTS_JSON = stringPreferencesKey("custom_layouts_json_v2")
     }
 
     private val json = Json { ignoreUnknownKeys = true }

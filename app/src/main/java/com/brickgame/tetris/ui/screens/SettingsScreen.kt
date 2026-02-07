@@ -66,9 +66,9 @@ fun SettingsScreen(
             GameViewModel.SettingsPage.MAIN -> MainPage(onNavigate, onBack)
             GameViewModel.SettingsPage.PROFILE -> ProfilePage(playerName, highScore, scoreHistory, onSetPlayerName) { onNavigate(GameViewModel.SettingsPage.MAIN) }
             GameViewModel.SettingsPage.THEME -> ThemePage(currentTheme, customThemes, onSetTheme, onNewTheme, onEditTheme, onDeleteTheme) { onNavigate(GameViewModel.SettingsPage.MAIN) }
-            GameViewModel.SettingsPage.THEME_EDITOR -> if (editingTheme != null) ThemeEditorPage(editingTheme, onUpdateEditingTheme, onSaveTheme) { onNavigate(GameViewModel.SettingsPage.THEME) }
+            GameViewModel.SettingsPage.THEME_EDITOR -> if (editingTheme != null) ThemeEditorScreen(editingTheme, onUpdateEditingTheme, onSaveTheme) { onNavigate(GameViewModel.SettingsPage.THEME) }
             GameViewModel.SettingsPage.LAYOUT -> LayoutPage(portraitLayout, landscapeLayout, dpadStyle, customLayouts, activeCustomLayout, onSetPortraitLayout, onSetLandscapeLayout, onSetDPadStyle, onNewLayout, onEditLayout, onSelectCustomLayout, onClearCustomLayout, onDeleteLayout) { onNavigate(GameViewModel.SettingsPage.MAIN) }
-            GameViewModel.SettingsPage.LAYOUT_EDITOR -> if (editingLayout != null) LayoutEditorPage(editingLayout, onUpdateEditingLayout, onSaveLayout) { onNavigate(GameViewModel.SettingsPage.LAYOUT) }
+            GameViewModel.SettingsPage.LAYOUT_EDITOR -> if (editingLayout != null) LayoutEditorScreen(editingLayout, currentTheme, onUpdateEditingLayout, onSaveLayout) { onNavigate(GameViewModel.SettingsPage.LAYOUT) }
             GameViewModel.SettingsPage.GAMEPLAY -> GameplayPage(difficulty, gameMode, ghostEnabled, onSetDifficulty, onSetGameMode, onSetGhostEnabled) { onNavigate(GameViewModel.SettingsPage.MAIN) }
             GameViewModel.SettingsPage.EXPERIENCE -> ExperiencePage(animationStyle, animationDuration, soundEnabled, vibrationEnabled, onSetAnimationStyle, onSetAnimationDuration, onSetSoundEnabled, onSetVibrationEnabled) { onNavigate(GameViewModel.SettingsPage.MAIN) }
             GameViewModel.SettingsPage.ABOUT -> AboutPage { onNavigate(GameViewModel.SettingsPage.MAIN) }
@@ -141,146 +141,6 @@ fun SettingsScreen(
     }
 }
 
-// ===== THEME EDITOR =====
-@Composable private fun ThemeEditorPage(theme: GameTheme, onUpdate: (GameTheme) -> Unit, onSave: () -> Unit, onBack: () -> Unit) {
-    var name by remember(theme.id) { mutableStateOf(theme.name) }
-
-    LazyColumn(Modifier.fillMaxSize().padding(20.dp)) {
-        item { Header("Theme Editor", onBack); Spacer(Modifier.height(12.dp)) }
-        // Name
-        item { Card { Text("Theme Name", color = DIM, fontSize = 12.sp); Spacer(Modifier.height(4.dp)); EditField(name) { name = it; onUpdate(theme.copy(name = it)) } } }
-        // Live preview strip
-        item {
-            Card {
-                Text("Preview", color = DIM, fontSize = 12.sp); Spacer(Modifier.height(8.dp))
-                Row(Modifier.fillMaxWidth().height(60.dp).clip(RoundedCornerShape(8.dp)).background(theme.backgroundColor).padding(4.dp)) {
-                    Box(Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(6.dp)).background(theme.screenBackground).padding(4.dp)) {
-                        // Mini board preview
-                        Row(Modifier.fillMaxSize(), Arrangement.SpaceEvenly, Alignment.CenterVertically) {
-                            repeat(5) { Box(Modifier.size(12.dp).clip(RoundedCornerShape(2.dp)).background(if (it % 2 == 0) theme.pixelOn else theme.pixelOff)) }
-                        }
-                    }
-                    Spacer(Modifier.width(4.dp))
-                    Column(Modifier.width(40.dp).fillMaxHeight(), Arrangement.SpaceEvenly, Alignment.CenterHorizontally) {
-                        Box(Modifier.size(16.dp).clip(CircleShape).background(theme.buttonPrimary))
-                        Box(Modifier.size(12.dp).clip(RoundedCornerShape(6.dp)).background(theme.buttonSecondary))
-                    }
-                }
-                Spacer(Modifier.height(4.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("Score", color = theme.accentColor, fontSize = 11.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
-                    Text("Label", color = theme.textPrimary, fontSize = 11.sp)
-                    Text("Info", color = theme.textSecondary, fontSize = 11.sp)
-                }
-            }
-        }
-        // Color editors
-        item { Lbl("Background") }
-        item { ColorEditor("App Background", theme.backgroundColor) { onUpdate(theme.copy(backgroundColor = it)) } }
-        item { ColorEditor("Device Frame", theme.deviceColor) { onUpdate(theme.copy(deviceColor = it)) } }
-        item { Lbl("Board") }
-        item { ColorEditor("Screen Background", theme.screenBackground) { onUpdate(theme.copy(screenBackground = it)) } }
-        item { ColorEditor("Pixel ON (blocks)", theme.pixelOn) { onUpdate(theme.copy(pixelOn = it)) } }
-        item { ColorEditor("Pixel OFF (empty)", theme.pixelOff) { onUpdate(theme.copy(pixelOff = it)) } }
-        item { Lbl("Text") }
-        item { ColorEditor("Text Primary", theme.textPrimary) { onUpdate(theme.copy(textPrimary = it)) } }
-        item { ColorEditor("Text Secondary", theme.textSecondary) { onUpdate(theme.copy(textSecondary = it)) } }
-        item { Lbl("Buttons") }
-        item { ColorEditor("Button Primary", theme.buttonPrimary) { onUpdate(theme.copy(buttonPrimary = it)) } }
-        item { ColorEditor("Button Pressed", theme.buttonPrimaryPressed) { onUpdate(theme.copy(buttonPrimaryPressed = it)) } }
-        item { ColorEditor("Button Secondary", theme.buttonSecondary) { onUpdate(theme.copy(buttonSecondary = it)) } }
-        item { ColorEditor("Sec. Pressed", theme.buttonSecondaryPressed) { onUpdate(theme.copy(buttonSecondaryPressed = it)) } }
-        item { Lbl("Accent") }
-        item { ColorEditor("Accent Color", theme.accentColor) { onUpdate(theme.copy(accentColor = it)) } }
-        // Save
-        item { Spacer(Modifier.height(20.dp)); ActionCard("SAVE THEME", onSave) }
-        item { Spacer(Modifier.height(40.dp)) }
-    }
-}
-
-// ===== COLOR EDITOR =====
-@Composable private fun ColorEditor(label: String, color: Color, onChange: (Color) -> Unit) {
-    var hexText by remember(color) { mutableStateOf(colorToHex(color)) }
-
-    Card {
-        Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
-            Text(label, color = TX, fontSize = 14.sp, modifier = Modifier.weight(1f))
-            Box(Modifier.size(32.dp).clip(CircleShape).background(color).border(2.dp, DIM.copy(0.4f), CircleShape))
-        }
-        Spacer(Modifier.height(8.dp))
-        // Preset swatches
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            val presets = listOf(
-                Color.Black, Color(0xFF1A1A1A), Color(0xFF2A2A2A), Color(0xFF3A3A3A), Color(0xFF4A4A4A),
-                Color(0xFF6A6A6A), Color(0xFF8A8A8A), Color(0xFFAAAAAA), Color(0xFFCCCCCC), Color.White,
-                Color(0xFFFF0000), Color(0xFFFF4444), Color(0xFFFF8800), Color(0xFFFFAA00), Color(0xFFF4D03F),
-                Color(0xFFFFFF00), Color(0xFF88FF00), Color(0xFF00FF00), Color(0xFF00FF88), Color(0xFF00FFFF),
-                Color(0xFF0088FF), Color(0xFF0000FF), Color(0xFF4400FF), Color(0xFF8800FF), Color(0xFFFF00FF),
-                Color(0xFF8AB4F8), Color(0xFF9B59B6), Color(0xFFE07030), Color(0xFF2ECC71), Color(0xFF1ABC9C),
-                Color(0xFF3D4A32), Color(0xFFB8C4A8), Color(0xFFA8B498), Color(0xFF4A5A3A), Color(0xFFD4C896),
-                Color(0xFF201800), Color(0xFF1A1200), Color(0xFF080810), Color(0xFF0A0F0A), Color(0xFFFAF6F0)
-            )
-            items(presets.size) { i ->
-                val p = presets[i]
-                Box(
-                    Modifier.size(28.dp).clip(CircleShape)
-                        .background(p).border(if (colorsClose(p, color)) 2.dp else 1.dp, if (colorsClose(p, color)) ACC else DIM.copy(0.3f), CircleShape)
-                        .clickable { onChange(p); hexText = colorToHex(p) }
-                )
-            }
-        }
-        Spacer(Modifier.height(8.dp))
-        // Hex input
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("#", color = DIM, fontSize = 14.sp, fontFamily = FontFamily.Monospace)
-            BasicTextField(
-                value = hexText, onValueChange = { v ->
-                    val clean = v.filter { it.isLetterOrDigit() }.take(8)
-                    hexText = clean
-                    hexFromString(clean)?.let { onChange(it) }
-                },
-                textStyle = TextStyle(color = TX, fontSize = 14.sp, fontFamily = FontFamily.Monospace),
-                cursorBrush = SolidColor(ACC), singleLine = true,
-                modifier = Modifier.width(100.dp).clip(RoundedCornerShape(6.dp)).background(Color(0xFF252525)).padding(8.dp)
-            )
-        }
-        Spacer(Modifier.height(6.dp))
-        // RGB sliders
-        val r = (color.red * 255).toInt(); val g = (color.green * 255).toInt(); val b = (color.blue * 255).toInt()
-        ColorSlider("R", r, Color.Red) { onChange(Color(it / 255f, color.green, color.blue, color.alpha)); hexText = colorToHex(Color(it / 255f, color.green, color.blue, color.alpha)) }
-        ColorSlider("G", g, Color.Green) { onChange(Color(color.red, it / 255f, color.blue, color.alpha)); hexText = colorToHex(Color(color.red, it / 255f, color.blue, color.alpha)) }
-        ColorSlider("B", b, Color(0xFF4488FF)) { onChange(Color(color.red, color.green, it / 255f, color.alpha)); hexText = colorToHex(Color(color.red, color.green, it / 255f, color.alpha)) }
-    }
-}
-
-@Composable private fun ColorSlider(label: String, value: Int, trackColor: Color, onChange: (Int) -> Unit) {
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Text(label, color = DIM, fontSize = 11.sp, fontFamily = FontFamily.Monospace, modifier = Modifier.width(16.dp))
-        Slider(value.toFloat(), { onChange(it.toInt()) }, valueRange = 0f..255f, modifier = Modifier.weight(1f).height(24.dp),
-            colors = SliderDefaults.colors(thumbColor = trackColor, activeTrackColor = trackColor.copy(0.7f), inactiveTrackColor = trackColor.copy(0.15f)))
-        Text(value.toString().padStart(3), color = DIM, fontSize = 11.sp, fontFamily = FontFamily.Monospace, modifier = Modifier.width(28.dp))
-    }
-}
-
-private fun colorToHex(c: Color): String {
-    val r = (c.red * 255).toInt(); val g = (c.green * 255).toInt(); val b = (c.blue * 255).toInt()
-    return "%02X%02X%02X".format(r, g, b)
-}
-
-private fun hexFromString(hex: String): Color? {
-    return try {
-        when (hex.length) {
-            6 -> Color(("FF$hex").toLong(16))
-            8 -> Color(hex.toLong(16))
-            else -> null
-        }
-    } catch (_: Exception) { null }
-}
-
-private fun colorsClose(a: Color, b: Color): Boolean {
-    val dr = a.red - b.red; val dg = a.green - b.green; val db = a.blue - b.blue
-    return (dr * dr + dg * dg + db * db) < 0.002f
-}
 
 // ===== LAYOUT =====
 @Composable private fun LayoutPage(p: LayoutPreset, l: LayoutPreset, d: DPadStyle, custom: List<CustomLayoutData>, active: CustomLayoutData?,
@@ -308,63 +168,6 @@ private fun colorsClose(a: Color, b: Color): Boolean {
     }
 }
 
-// ===== LAYOUT EDITOR =====
-@Composable private fun LayoutEditorPage(layout: CustomLayoutData, onUpdate: (CustomLayoutData) -> Unit, onSave: () -> Unit, onBack: () -> Unit) {
-    var name by remember(layout.id) { mutableStateOf(layout.name) }
-
-    LazyColumn(Modifier.fillMaxSize().padding(20.dp)) {
-        item { Header("Layout Editor", onBack); Spacer(Modifier.height(12.dp)) }
-        // Name
-        item { Card { Text("Layout Name", color = DIM, fontSize = 12.sp); Spacer(Modifier.height(4.dp)); EditField(name) { name = it; onUpdate(layout.copy(name = it)) } } }
-        // Board
-        item { Lbl("Board") }
-        item { Card {
-            Text("Board Width", color = TX, fontSize = 14.sp)
-            Slider(layout.boardWidthPercent, { onUpdate(layout.copy(boardWidthPercent = it)) }, valueRange = 0.5f..1f, colors = sliderColors())
-            Text("${(layout.boardWidthPercent * 100).toInt()}%", color = DIM, fontSize = 12.sp)
-        } }
-        item { Card {
-            Text("Board Position", color = TX, fontSize = 14.sp); Spacer(Modifier.height(8.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf("TOP", "CENTER", "BOTTOM").forEach { pos -> Chip(pos, layout.boardPosition == pos) { onUpdate(layout.copy(boardPosition = pos)) } }
-            }
-        } }
-        // Info
-        item { Lbl("Information") }
-        item { Card {
-            Text("Info Position", color = TX, fontSize = 14.sp); Spacer(Modifier.height(8.dp))
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                listOf("TOP_BAR" to "Top Bar", "LEFT_SIDE" to "Left Side", "RIGHT_SIDE" to "Right Side", "BOTTOM_STRIP" to "Bottom Strip", "HIDDEN" to "Hidden").forEach { (v, l) ->
-                    Sel(l, layout.infoPosition == v) { onUpdate(layout.copy(infoPosition = v)) }
-                }
-            }
-        } }
-        item { Card {
-            Toggle("Show Score", layout.showScore) { onUpdate(layout.copy(showScore = it)) }; Spacer(Modifier.height(4.dp))
-            Toggle("Show Level", layout.showLevel) { onUpdate(layout.copy(showLevel = it)) }; Spacer(Modifier.height(4.dp))
-            Toggle("Show Lines", layout.showLines) { onUpdate(layout.copy(showLines = it)) }; Spacer(Modifier.height(4.dp))
-            Toggle("Show Hold", layout.showHold) { onUpdate(layout.copy(showHold = it)) }; Spacer(Modifier.height(4.dp))
-            Toggle("Show Next", layout.showNext) { onUpdate(layout.copy(showNext = it)) }
-        } }
-        item { Card {
-            Text("Next Queue Size", color = TX, fontSize = 14.sp); Spacer(Modifier.height(8.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { (1..3).forEach { n -> Chip("$n", layout.nextQueueSize == n) { onUpdate(layout.copy(nextQueueSize = n)) } } }
-        } }
-        // Controls
-        item { Lbl("Controls") }
-        item { Card {
-            Text("Control Size", color = TX, fontSize = 14.sp); Spacer(Modifier.height(8.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { listOf("SMALL", "MEDIUM", "LARGE").forEach { s -> Chip(s, layout.controlSize == s) { onUpdate(layout.copy(controlSize = s)) } } }
-        } }
-        item { Card {
-            Toggle("Show Hold Button", layout.showHoldButton) { onUpdate(layout.copy(showHoldButton = it)) }; Spacer(Modifier.height(4.dp))
-            Toggle("Show Pause Button", layout.showPauseButton) { onUpdate(layout.copy(showPauseButton = it)) }
-        } }
-        // Save
-        item { Spacer(Modifier.height(20.dp)); ActionCard("SAVE LAYOUT", onSave) }
-        item { Spacer(Modifier.height(40.dp)) }
-    }
-}
 
 // ===== GAMEPLAY =====
 @Composable private fun GameplayPage(diff: Difficulty, mode: GameMode, ghost: Boolean, onD: (Difficulty) -> Unit, onM: (GameMode) -> Unit, onG: (Boolean) -> Unit, onBack: () -> Unit) {
