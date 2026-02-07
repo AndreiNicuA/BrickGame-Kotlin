@@ -1,6 +1,5 @@
 package com.brickgame.tetris
 
-import android.content.res.Configuration
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
@@ -16,12 +15,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.brickgame.tetris.ui.layout.LayoutEditorScreen
 import com.brickgame.tetris.ui.screens.GameScreen
 import com.brickgame.tetris.ui.screens.GameViewModel
 import com.brickgame.tetris.ui.screens.SettingsScreen
@@ -30,46 +27,26 @@ import com.brickgame.tetris.ui.theme.BrickGameTheme
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
         enableEdgeToEdge()
 
         WindowCompat.setDecorFitsSystemWindows(window, false)
-        WindowInsetsControllerCompat(window, window.decorView).let { controller ->
-            controller.hide(WindowInsetsCompat.Type.systemBars())
-            controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        WindowInsetsControllerCompat(window, window.decorView).let { c ->
+            c.hide(WindowInsetsCompat.Type.systemBars())
+            c.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         }
 
         setContent {
             val viewModel: GameViewModel = viewModel()
-
             val gameState by viewModel.gameState.collectAsState()
             val uiState by viewModel.uiState.collectAsState()
             val currentTheme by viewModel.currentTheme.collectAsState()
             val scoreHistory by viewModel.scoreHistory.collectAsState()
             val clearingLines by viewModel.clearingLines.collectAsState()
 
-            // Layout state
-            val showLayoutEditor by viewModel.showLayoutEditor.collectAsState()
-            val editorProfile by viewModel.editorProfile.collectAsState()
-            val allLayoutProfiles by viewModel.allLayoutProfiles.collectAsState()
-            val snapToGrid by viewModel.snapToGrid.collectAsState()
-            val activeLandscape by viewModel.activeLandscapeProfile.collectAsState()
-            val activePortrait by viewModel.activePortraitProfile.collectAsState()
-
-            val configuration = LocalConfiguration.current
-            val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
-            val activeProfile = if (isLandscape) activeLandscape else activePortrait
-
-            BackHandler(enabled = true) {
-                when {
-                    showLayoutEditor -> viewModel.hideLayoutEditor()
-                    uiState.showSettings -> viewModel.hideSettings()
-                    else -> { }
-                }
-            }
+            BackHandler(enabled = uiState.showSettings) { viewModel.hideSettings() }
 
             BrickGameTheme(gameTheme = currentTheme) {
-                Box(modifier = Modifier.fillMaxSize()) {
+                Box(Modifier.fillMaxSize()) {
                     GameScreen(
                         gameState = gameState.copy(highScore = uiState.highScore),
                         clearingLines = clearingLines,
@@ -79,7 +56,7 @@ class MainActivity : ComponentActivity() {
                         animationStyle = uiState.animationStyle,
                         animationDuration = uiState.animationDuration,
                         layoutMode = uiState.layoutMode,
-                        activeProfile = activeProfile,
+                        landscapeMode = uiState.landscapeMode,
                         onStartGame = viewModel::startGame,
                         onPauseGame = viewModel::pauseGame,
                         onResumeGame = viewModel::resumeGame,
@@ -98,7 +75,6 @@ class MainActivity : ComponentActivity() {
                         modifier = Modifier.fillMaxSize()
                     )
 
-                    // Settings overlay
                     AnimatedVisibility(
                         visible = uiState.showSettings,
                         enter = fadeIn() + slideInVertically { it },
@@ -107,6 +83,7 @@ class MainActivity : ComponentActivity() {
                         SettingsScreen(
                             currentThemeName = currentTheme.name,
                             layoutMode = uiState.layoutMode,
+                            landscapeMode = uiState.landscapeMode,
                             vibrationEnabled = uiState.vibrationEnabled,
                             vibrationIntensity = uiState.vibrationIntensity,
                             vibrationStyle = uiState.vibrationStyle,
@@ -124,6 +101,7 @@ class MainActivity : ComponentActivity() {
                             scoreHistory = scoreHistory,
                             onThemeChange = viewModel::setTheme,
                             onLayoutModeChange = viewModel::setLayoutMode,
+                            onLandscapeModeChange = viewModel::setLandscapeMode,
                             onVibrationEnabledChange = viewModel::setVibrationEnabled,
                             onVibrationIntensityChange = viewModel::setVibrationIntensity,
                             onVibrationStyleChange = viewModel::setVibrationStyle,
@@ -138,36 +116,7 @@ class MainActivity : ComponentActivity() {
                             onDifficultyChange = viewModel::setDifficulty,
                             onPlayerNameChange = viewModel::setPlayerName,
                             onClearHistory = viewModel::clearScoreHistory,
-                            onClose = viewModel::hideSettings,
-                            onOpenLayoutEditor = {
-                                viewModel.hideSettings()
-                                viewModel.showLayoutEditor(isLandscape)
-                            },
-                            allLayoutProfiles = allLayoutProfiles,
-                            activeLandscapeId = activeLandscape.id,
-                            activePortraitId = activePortrait.id,
-                            onSelectProfile = viewModel::selectActiveProfile,
-                            onDeleteProfile = viewModel::deleteLayoutProfile
-                        )
-                    }
-
-                    // Layout Editor overlay
-                    AnimatedVisibility(
-                        visible = showLayoutEditor,
-                        enter = fadeIn() + slideInVertically { it },
-                        exit = fadeOut() + slideOutVertically { it }
-                    ) {
-                        LayoutEditorScreen(
-                            initialProfile = editorProfile,
-                            allProfiles = allLayoutProfiles,
-                            snapToGrid = snapToGrid,
-                            onSave = { profile ->
-                                viewModel.saveLayoutProfile(profile)
-                                viewModel.hideLayoutEditor()
-                            },
-                            onSelectPreset = viewModel::setEditorProfile,
-                            onToggleSnap = viewModel::setSnapToGrid,
-                            onClose = viewModel::hideLayoutEditor
+                            onClose = viewModel::hideSettings
                         )
                     }
                 }

@@ -15,9 +15,6 @@ import com.brickgame.tetris.ui.styles.StylePreset
 import com.brickgame.tetris.ui.styles.VibrationStyle
 import com.brickgame.tetris.ui.theme.GameTheme
 import com.brickgame.tetris.ui.theme.GameThemes
-import com.brickgame.tetris.ui.layout.LayoutPresets
-import com.brickgame.tetris.ui.layout.LayoutProfile
-import com.brickgame.tetris.ui.layout.LayoutRepository
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -490,111 +487,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     fun setDasDelay(ms: Long) { dasDelay = ms.coerceIn(50, 300) }
     fun setArrSpeed(ms: Long) { arrSpeed = ms.coerceIn(0, 100) }
 
-    // ===== Layout Editor =====
-
-    private val layoutRepository = LayoutRepository(getApplication())
-
-    private val _showLayoutEditor = MutableStateFlow(false)
-    val showLayoutEditor: StateFlow<Boolean> = _showLayoutEditor.asStateFlow()
-
-    // The profile currently being edited in the editor
-    private val _editorProfile = MutableStateFlow(LayoutPresets.getDefaultLandscape())
-    val editorProfile: StateFlow<LayoutProfile> = _editorProfile.asStateFlow()
-
-    // Active profiles for gameplay
-    private val _activeLandscapeProfile = MutableStateFlow(LayoutPresets.getDefaultLandscape())
-    val activeLandscapeProfile: StateFlow<LayoutProfile> = _activeLandscapeProfile.asStateFlow()
-
-    private val _activePortraitProfile = MutableStateFlow(LayoutPresets.getClassicPortrait())
-    val activePortraitProfile: StateFlow<LayoutProfile> = _activePortraitProfile.asStateFlow()
-
-    private val _allLayoutProfiles = MutableStateFlow(LayoutPresets.getAllPresets())
-    val allLayoutProfiles: StateFlow<List<LayoutProfile>> = _allLayoutProfiles.asStateFlow()
-
-    private val _snapToGrid = MutableStateFlow(true)
-    val snapToGrid: StateFlow<Boolean> = _snapToGrid.asStateFlow()
-
-    init {
-        viewModelScope.launch {
-            layoutRepository.getAllProfiles().collect { profiles ->
-                _allLayoutProfiles.value = profiles
-                // Re-resolve active profiles when profile list changes
-                resolveActiveProfiles(profiles)
-            }
-        }
-        viewModelScope.launch {
-            layoutRepository.snapToGrid.collect { _snapToGrid.value = it }
-        }
-        viewModelScope.launch {
-            layoutRepository.activeLandscapeProfileId.collect { id ->
-                _activeLandscapeProfile.value = _allLayoutProfiles.value.find { it.id == id }
-                    ?: LayoutPresets.getDefaultLandscape()
-            }
-        }
-        viewModelScope.launch {
-            layoutRepository.activePortraitProfileId.collect { id ->
-                _activePortraitProfile.value = _allLayoutProfiles.value.find { it.id == id }
-                    ?: LayoutPresets.getClassicPortrait()
-            }
-        }
-    }
-
-    private fun resolveActiveProfiles(all: List<LayoutProfile>) {
-        // landscape
-        val lId = _activeLandscapeProfile.value.id
-        _activeLandscapeProfile.value = all.find { it.id == lId } ?: LayoutPresets.getDefaultLandscape()
-        // portrait
-        val pId = _activePortraitProfile.value.id
-        _activePortraitProfile.value = all.find { it.id == pId } ?: LayoutPresets.getClassicPortrait()
-    }
-
-    fun showLayoutEditor(isLandscape: Boolean = true) {
-        if (game.state.value.status == GameStatus.PLAYING) {
-            game.pauseGame()
-            stopGameLoop()
-        }
-        _editorProfile.value = if (isLandscape) _activeLandscapeProfile.value
-            else _activePortraitProfile.value
-        _showLayoutEditor.value = true
-    }
-
-    fun hideLayoutEditor() {
-        _showLayoutEditor.value = false
-    }
-
-    fun setEditorProfile(profileId: String) {
-        val profile = _allLayoutProfiles.value.find { it.id == profileId } ?: return
-        _editorProfile.value = profile
-    }
-
-    fun saveLayoutProfile(profile: LayoutProfile) {
-        viewModelScope.launch {
-            layoutRepository.saveProfile(profile)
-            if (profile.isLandscape) layoutRepository.setActiveLandscapeProfile(profile.id)
-            else layoutRepository.setActivePortraitProfile(profile.id)
-        }
-    }
-
-    fun selectActiveProfile(profileId: String) {
-        val profile = _allLayoutProfiles.value.find { it.id == profileId } ?: return
-        viewModelScope.launch {
-            if (profile.isLandscape) {
-                layoutRepository.setActiveLandscapeProfile(profileId)
-                _activeLandscapeProfile.value = profile
-            } else {
-                layoutRepository.setActivePortraitProfile(profileId)
-                _activePortraitProfile.value = profile
-            }
-        }
-    }
-
-    fun deleteLayoutProfile(profileId: String) {
-        viewModelScope.launch { layoutRepository.deleteProfile(profileId) }
-    }
-
-    fun setSnapToGrid(enabled: Boolean) {
-        _snapToGrid.value = enabled
-        viewModelScope.launch { layoutRepository.setSnapToGrid(enabled) }
+    fun setLandscapeMode(mode: LandscapeMode) {
+        _uiState.update { it.copy(landscapeMode = mode) }
+        viewModelScope.launch { settingsRepository.setLayoutMode("landscape_${mode.name}") }
     }
 
     override fun onCleared() {
@@ -608,7 +503,6 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
 data class UiState(
     val showSettings: Boolean = false,
-    val showLayoutEditor: Boolean = false,
     val vibrationEnabled: Boolean = true,
     val vibrationIntensity: Float = 0.7f,
     val vibrationStyle: VibrationStyle = VibrationStyle.CLASSIC,
@@ -622,6 +516,7 @@ data class UiState(
     val highScore: Int = 0,
     val playerName: String = "Player",
     val layoutMode: LayoutMode = LayoutMode.CLASSIC,
+    val landscapeMode: LandscapeMode = LandscapeMode.DEFAULT,
     val ghostPieceEnabled: Boolean = true,
     val difficulty: Difficulty = Difficulty.NORMAL,
     val gameMode: GameMode = GameMode.MARATHON
