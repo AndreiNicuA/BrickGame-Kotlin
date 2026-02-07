@@ -155,7 +155,7 @@ fun SettingsScreen(
             items(custom.size) { i ->
                 val cl = custom[i]; val sel = active?.id == cl.id
                 Row(Modifier.fillMaxWidth().padding(vertical = 2.dp).clip(RoundedCornerShape(8.dp)).background(if (sel) ACC.copy(0.15f) else CARD).clickable { onSelect(cl) }.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) { Text(cl.name, color = TX, fontSize = 14.sp, fontWeight = FontWeight.Bold); Text("${cl.infoPosition} · ${cl.controlSize}", color = DIM, fontSize = 11.sp) }
+                    Column(Modifier.weight(1f)) { Text(cl.name, color = TX, fontSize = 14.sp, fontWeight = FontWeight.Bold); Text("${cl.controlSize} · ${cl.visibility.count { it.value }} elements", color = DIM, fontSize = 11.sp) }
                     Text("EDIT", color = ACC, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { onEdit(cl) }.padding(8.dp))
                     Text("✕", color = Color(0xFFFF4444), fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { onDelete(cl.id) }.padding(8.dp))
                     if (sel) Text("✓", color = ACC, fontWeight = FontWeight.Bold)

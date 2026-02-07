@@ -20,6 +20,8 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 import com.brickgame.tetris.game.*
 import com.brickgame.tetris.data.CustomLayoutData
+import com.brickgame.tetris.data.ElementPosition
+import com.brickgame.tetris.data.LayoutElements
 import com.brickgame.tetris.ui.components.*
 import com.brickgame.tetris.ui.layout.DPadStyle
 import com.brickgame.tetris.ui.layout.LayoutPreset
@@ -212,7 +214,7 @@ fun GameScreen(
     }
 }
 
-// === CUSTOM LAYOUT: Dynamically configured by user ===
+// === CUSTOM LAYOUT: Position-based, uses normalized coordinates ===
 @Composable private fun CustomLayout(
     gs: GameState, dp: DPadStyle, ghost: Boolean, anim: AnimationStyle, ad: Float,
     cl: CustomLayoutData,
@@ -223,73 +225,86 @@ fun GameScreen(
     val theme = LocalGameTheme.current
     val btnSize = when (cl.controlSize) { "SMALL" -> 44.dp; "LARGE" -> 62.dp; else -> 54.dp }
     val rotSize = when (cl.controlSize) { "SMALL" -> 52.dp; "LARGE" -> 74.dp; else -> 66.dp }
+    val vis = cl.visibility
+    val pos = cl.positions
 
-    @Composable fun InfoBar(modifier: Modifier = Modifier, horizontal: Boolean = true) {
-        if (horizontal) {
-            Row(modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(theme.deviceColor).padding(horizontal = 8.dp, vertical = 4.dp),
-                Arrangement.SpaceBetween, Alignment.CenterVertically) {
-                if (cl.showHold) { Column(horizontalAlignment = Alignment.CenterHorizontally) { Tag("HOLD"); HoldPiecePreview(gs.holdPiece?.shape, gs.holdUsed, Modifier.size(30.dp)) } }
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    if (cl.showScore) Text(gs.score.toString().padStart(7, '0'), fontSize = 16.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, color = theme.pixelOn)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { if (cl.showLevel) Tag("LV${gs.level}"); if (cl.showLines) Tag("${gs.lines}L") }
-                }
-                if (cl.showNext) { Column(horizontalAlignment = Alignment.CenterHorizontally) { Tag("NEXT"); gs.nextPieces.take(cl.nextQueueSize).forEachIndexed { i, p -> NextPiecePreview(p.shape, Modifier.size(if (i == 0) 30.dp else 22.dp), if (i == 0) 1f else 0.5f) } } }
-            }
-        } else {
-            Column(modifier.width(56.dp).fillMaxHeight(), Arrangement.SpaceEvenly, Alignment.CenterHorizontally) {
-                if (cl.showHold) { Column(horizontalAlignment = Alignment.CenterHorizontally) { Tag("HOLD"); HoldPiecePreview(gs.holdPiece?.shape, gs.holdUsed, Modifier.size(40.dp)) } }
-                if (cl.showScore) ScoreBlock(gs.score, gs.level, gs.lines)
-                if (cl.showNext) { Column(horizontalAlignment = Alignment.CenterHorizontally) { Tag("NEXT"); gs.nextPieces.take(cl.nextQueueSize).forEachIndexed { i, p -> NextPiecePreview(p.shape, Modifier.size(if (i == 0) 36.dp else 26.dp), if (i == 0) 1f else 0.5f) } } }
+    fun isVisible(elem: String) = vis.getOrDefault(elem, true)
+
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val maxW = maxWidth; val maxH = maxHeight
+
+        // Board — centered, takes most space
+        if (isVisible(LayoutElements.BOARD)) {
+            val bp = pos[LayoutElements.BOARD] ?: ElementPosition(0.5f, 0.38f)
+            Box(Modifier.size(maxW * 0.85f, maxH * 0.6f).offset(x = maxW * bp.x - maxW * 0.425f, y = maxH * bp.y - maxH * 0.3f)) {
+                GameBoard(gs.board, Modifier.fillMaxSize(), gs.currentPiece, gs.ghostY, ghost, gs.clearedLineRows, anim, ad)
             }
         }
-    }
-
-    Column(Modifier.fillMaxSize().padding(horizontal = 4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        // Top info
-        if (cl.infoPosition == "TOP_BAR") { InfoBar(); Spacer(Modifier.height(4.dp)) }
-
-        // Middle row: optional side info + board
-        Row(Modifier.weight(1f).fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            if (cl.infoPosition == "LEFT_SIDE") { InfoBar(horizontal = false); Spacer(Modifier.width(4.dp)) }
-
-            // Board
-            val boardMod = Modifier.weight(1f).then(
-                if (cl.boardWidthPercent < 0.99f) Modifier.fillMaxWidth(cl.boardWidthPercent) else Modifier.fillMaxWidth()
-            ).then(
-                when (cl.boardPosition) {
-                    "TOP" -> Modifier.fillMaxHeight()
-                    "BOTTOM" -> Modifier.fillMaxHeight()
-                    else -> Modifier.fillMaxHeight()
-                }
-            )
-            Box(Modifier.weight(1f).fillMaxHeight(), when (cl.boardPosition) { "TOP" -> Alignment.TopCenter; "BOTTOM" -> Alignment.BottomCenter; else -> Alignment.Center }) {
-                GameBoard(gs.board, Modifier.fillMaxHeight().aspectRatio(0.5f), gs.currentPiece, gs.ghostY, ghost, gs.clearedLineRows, anim, ad)
-            }
-
-            if (cl.infoPosition == "RIGHT_SIDE") { Spacer(Modifier.width(4.dp)); InfoBar(horizontal = false) }
+        // Score
+        if (isVisible(LayoutElements.SCORE)) {
+            val sp = pos[LayoutElements.SCORE] ?: ElementPosition(0.5f, 0.02f)
+            Text(gs.score.toString().padStart(7, '0'), Modifier.offset(x = maxW * sp.x - 40.dp, y = maxH * sp.y),
+                fontSize = 16.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, color = theme.accentColor)
         }
-
-        // Bottom info
-        if (cl.infoPosition == "BOTTOM_STRIP") { Spacer(Modifier.height(4.dp)); InfoBar() }
-
-        // Controls
-        Spacer(Modifier.height(4.dp))
-        Row(Modifier.fillMaxWidth().padding(bottom = 4.dp), Arrangement.SpaceBetween, Alignment.CenterVertically) {
-            DPad(btnSize, rotateInCenter = dp == DPadStyle.ROTATE_CENTRE,
-                onUpPress = onHD, onDownPress = onDP, onDownRelease = onDR,
-                onLeftPress = onLP, onLeftRelease = onLR, onRightPress = onRP, onRightRelease = onRR, onRotate = onRotate)
-            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                if (cl.showHoldButton) ActionButton("HOLD", onHold, width = 78.dp, height = 34.dp)
-                if (cl.showPauseButton) ActionButton(if (gs.status == GameStatus.MENU) "START" else "PAUSE", { if (gs.status == GameStatus.MENU) onStart() else onPause() }, width = 78.dp, height = 34.dp)
-                ActionButton("...", onSet, width = 46.dp, height = 24.dp)
-            }
-            if (dp == DPadStyle.STANDARD) RotateButton(onRotate, rotSize) else Spacer(Modifier.size(rotSize))
+        // Level
+        if (isVisible(LayoutElements.LEVEL)) {
+            val lp = pos[LayoutElements.LEVEL] ?: ElementPosition(0.15f, 0.02f)
+            Tag("LV${gs.level}", Modifier.offset(x = maxW * lp.x - 16.dp, y = maxH * lp.y))
         }
+        // Lines
+        if (isVisible(LayoutElements.LINES)) {
+            val lp = pos[LayoutElements.LINES] ?: ElementPosition(0.85f, 0.02f)
+            Tag("${gs.lines}L", Modifier.offset(x = maxW * lp.x - 16.dp, y = maxH * lp.y))
+        }
+        // Hold preview
+        if (isVisible(LayoutElements.HOLD_PREVIEW)) {
+            val hp = pos[LayoutElements.HOLD_PREVIEW] ?: ElementPosition(0.08f, 0.08f)
+            Column(Modifier.offset(x = maxW * hp.x - 24.dp, y = maxH * hp.y - 12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Tag("HOLD"); HoldPiecePreview(gs.holdPiece?.shape, gs.holdUsed, Modifier.size(40.dp))
+            }
+        }
+        // Next preview
+        if (isVisible(LayoutElements.NEXT_PREVIEW)) {
+            val np = pos[LayoutElements.NEXT_PREVIEW] ?: ElementPosition(0.92f, 0.08f)
+            Column(Modifier.offset(x = maxW * np.x - 24.dp, y = maxH * np.y - 12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Tag("NEXT"); gs.nextPieces.take(cl.nextQueueSize).forEachIndexed { i, p -> NextPiecePreview(p.shape, Modifier.size(if (i == 0) 34.dp else 24.dp), if (i == 0) 1f else 0.5f) }
+            }
+        }
+        // D-Pad
+        if (isVisible(LayoutElements.DPAD)) {
+            val dp2 = pos[LayoutElements.DPAD] ?: ElementPosition(0.18f, 0.85f)
+            Box(Modifier.offset(x = maxW * dp2.x - 70.dp, y = maxH * dp2.y - 70.dp)) {
+                DPad(btnSize, rotateInCenter = dp == DPadStyle.ROTATE_CENTRE,
+                    onUpPress = onHD, onDownPress = onDP, onDownRelease = onDR,
+                    onLeftPress = onLP, onLeftRelease = onLR, onRightPress = onRP, onRightRelease = onRR, onRotate = onRotate)
+            }
+        }
+        // Rotate
+        if (isVisible(LayoutElements.ROTATE_BTN) && dp == DPadStyle.STANDARD) {
+            val rp = pos[LayoutElements.ROTATE_BTN] ?: ElementPosition(0.85f, 0.85f)
+            Box(Modifier.offset(x = maxW * rp.x - rotSize / 2, y = maxH * rp.y - rotSize / 2)) { RotateButton(onRotate, rotSize) }
+        }
+        // Hold button
+        if (isVisible(LayoutElements.HOLD_BTN)) {
+            val hb = pos[LayoutElements.HOLD_BTN] ?: ElementPosition(0.5f, 0.80f)
+            Box(Modifier.offset(x = maxW * hb.x - 39.dp, y = maxH * hb.y - 17.dp)) { ActionButton("HOLD", onHold, width = 78.dp, height = 34.dp) }
+        }
+        // Pause
+        if (isVisible(LayoutElements.PAUSE_BTN)) {
+            val pb = pos[LayoutElements.PAUSE_BTN] ?: ElementPosition(0.5f, 0.87f)
+            Box(Modifier.offset(x = maxW * pb.x - 39.dp, y = maxH * pb.y - 17.dp)) {
+                ActionButton(if (gs.status == GameStatus.MENU) "START" else "PAUSE",
+                    { if (gs.status == GameStatus.MENU) onStart() else onPause() }, width = 78.dp, height = 34.dp)
+            }
+        }
+        // Menu (always visible — sandwich icon style)
+        val mp = pos[LayoutElements.MENU_BTN] ?: ElementPosition(0.5f, 0.94f)
+        Box(Modifier.offset(x = maxW * mp.x - 23.dp, y = maxH * mp.y - 12.dp)) { ActionButton("≡", onSet, width = 46.dp, height = 24.dp) }
     }
 }
 
 // === Helpers ===
-@Composable private fun Tag(t: String) { Text(t, fontSize = 9.sp, color = LocalGameTheme.current.textSecondary, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, letterSpacing = 0.5.sp) }
+@Composable private fun Tag(t: String, modifier: Modifier = Modifier) { Text(t, modifier = modifier, fontSize = 9.sp, color = LocalGameTheme.current.textSecondary, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, letterSpacing = 0.5.sp) }
 @Composable private fun ScoreBlock(score: Int, level: Int, lines: Int) {
     val theme = LocalGameTheme.current
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
