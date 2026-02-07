@@ -58,6 +58,11 @@ fun SettingsScreen(
     onGhostPieceChange: (Boolean) -> Unit, onDifficultyChange: (Difficulty) -> Unit,
     onPlayerNameChange: (String) -> Unit, onClearHistory: () -> Unit, onClose: () -> Unit,
     onOpenLayoutEditor: () -> Unit = {},
+    allLayoutProfiles: List<com.brickgame.tetris.ui.layout.LayoutProfile> = emptyList(),
+    activeLandscapeId: String = "",
+    activePortraitId: String = "",
+    onSelectProfile: (String) -> Unit = {},
+    onDeleteProfile: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var currentPage by remember { mutableStateOf(SettingsPage.MAIN) }
@@ -71,7 +76,7 @@ fun SettingsScreen(
                 SettingsPage.MAIN -> MainPage({ currentPage = it }, onClose)
                 SettingsPage.PROFILE -> ProfilePage(playerName, highScore, scoreHistory, onPlayerNameChange, onClearHistory) { currentPage = SettingsPage.MAIN }
                 SettingsPage.THEMES -> ThemesPage(currentThemeName, onThemeChange) { currentPage = SettingsPage.MAIN }
-                SettingsPage.LAYOUT -> LayoutPage(layoutMode, onLayoutModeChange, onOpenLayoutEditor) { currentPage = SettingsPage.MAIN }
+                SettingsPage.LAYOUT -> LayoutPage(layoutMode, onLayoutModeChange, onOpenLayoutEditor, allLayoutProfiles, activeLandscapeId, activePortraitId, onSelectProfile, onDeleteProfile) { currentPage = SettingsPage.MAIN }
                 SettingsPage.GAMEPLAY -> GameplayPage(ghostPieceEnabled, difficulty, onGhostPieceChange, onDifficultyChange) { currentPage = SettingsPage.MAIN }
                 SettingsPage.FEEDBACK -> FeedbackPage(vibrationEnabled, vibrationIntensity, soundEnabled, soundVolume, onVibrationEnabledChange, onVibrationIntensityChange, onSoundEnabledChange, onSoundVolumeChange) { currentPage = SettingsPage.MAIN }
                 SettingsPage.STYLES -> StylesPage(stylePreset, animationEnabled, animationStyle, animationDuration, vibrationStyle, soundStyle, onStylePresetChange, onAnimationEnabledChange, onAnimationStyleChange, onAnimationDurationChange, onVibrationStyleChange, onSoundStyleChange) { currentPage = SettingsPage.MAIN }
@@ -260,42 +265,99 @@ private fun ThemesPage(currentThemeName: String, onThemeChange: (String) -> Unit
 }
 
 @Composable
-private fun LayoutPage(layoutMode: LayoutMode, onLayoutModeChange: (LayoutMode) -> Unit, onOpenLayoutEditor: () -> Unit, onBack: () -> Unit) {
-    Column(modifier = Modifier.fillMaxSize().padding(20.dp)) {
-        PageHeader("Layout", onBack)
-        Spacer(modifier = Modifier.height(24.dp))
-        
-        Text("PORTRAIT MODE", fontSize = 11.sp, color = Color(0xFF888888), 
-            fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
-        Spacer(modifier = Modifier.height(8.dp))
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            SelectableRow("Classic", "Device frame with LCD", layoutMode == LayoutMode.CLASSIC) { onLayoutModeChange(LayoutMode.CLASSIC) }
-            SelectableRow("Modern", "Clean with status bar", layoutMode == LayoutMode.MODERN) { onLayoutModeChange(LayoutMode.MODERN) }
-            SelectableRow("Fullscreen", "Maximum game area", layoutMode == LayoutMode.FULLSCREEN) { onLayoutModeChange(LayoutMode.FULLSCREEN) }
+private fun LayoutPage(
+    layoutMode: LayoutMode, onLayoutModeChange: (LayoutMode) -> Unit,
+    onOpenLayoutEditor: () -> Unit,
+    allProfiles: List<com.brickgame.tetris.ui.layout.LayoutProfile>,
+    activeLandscapeId: String, activePortraitId: String,
+    onSelectProfile: (String) -> Unit,
+    onDeleteProfile: (String) -> Unit,
+    onBack: () -> Unit
+) {
+    LazyColumn(modifier = Modifier.fillMaxSize().padding(20.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        item { PageHeader("Layout", onBack) }
+
+        // Portrait layouts
+        item {
+            Spacer(Modifier.height(12.dp))
+            Text("PORTRAIT", fontSize = 11.sp, color = Color(0xFF888888),
+                fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
         }
-        
-        Spacer(modifier = Modifier.height(28.dp))
-        Text("LANDSCAPE MODE", fontSize = 11.sp, color = Color(0xFF888888),
-            fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
-        Spacer(modifier = Modifier.height(8.dp))
-        
-        // Layout Editor button
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(12.dp))
-                .background(Color(0xFFF4D03F))
-                .clickable(onClick = onOpenLayoutEditor)
-                .padding(vertical = 14.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Text("✎ EDIT LAYOUT (Drag & Drop)", fontSize = 15.sp,
-                fontWeight = FontWeight.Bold, color = Color.Black)
+        val portraits = allProfiles.filter { !it.isLandscape }
+        items(portraits.size) { i ->
+            val p = portraits[i]
+            LayoutProfileRow(p, p.id == activePortraitId,
+                onSelect = { onSelectProfile(p.id) },
+                onDelete = if (!p.isBuiltIn) {{ onDeleteProfile(p.id) }} else null)
         }
-        
-        Spacer(modifier = Modifier.height(8.dp))
-        Text("Drag controls to customize your landscape layout.\nRotate your device to landscape to play with custom layout.",
-            fontSize = 11.sp, color = Color(0xFF666666), lineHeight = 16.sp)
+
+        // Landscape layouts
+        item {
+            Spacer(Modifier.height(12.dp))
+            Text("LANDSCAPE", fontSize = 11.sp, color = Color(0xFF888888),
+                fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
+        }
+        val landscapes = allProfiles.filter { it.isLandscape }
+        items(landscapes.size) { i ->
+            val p = landscapes[i]
+            LayoutProfileRow(p, p.id == activeLandscapeId,
+                onSelect = { onSelectProfile(p.id) },
+                onDelete = if (!p.isBuiltIn) {{ onDeleteProfile(p.id) }} else null)
+        }
+
+        // Edit Layout button
+        item {
+            Spacer(Modifier.height(16.dp))
+            Box(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
+                    .background(AccentColor).clickable(onClick = onOpenLayoutEditor)
+                    .padding(vertical = 14.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("✎ EDIT LAYOUT (Drag & Drop)", fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold, color = Color.Black)
+            }
+            Spacer(Modifier.height(4.dp))
+            Text("Start from any preset, drag elements to reposition, then save with a custom name.\nSaved layouts appear in this menu and can be exported for use on another device.",
+                fontSize = 11.sp, color = Color(0xFF666666), lineHeight = 16.sp)
+        }
+    }
+}
+
+@Composable
+private fun LayoutProfileRow(
+    profile: com.brickgame.tetris.ui.layout.LayoutProfile,
+    isActive: Boolean,
+    onSelect: () -> Unit,
+    onDelete: (() -> Unit)?
+) {
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
+            .background(if (isActive) CardBackgroundSelected else CardBackground)
+            .clickable(onClick = onSelect).padding(horizontal = 16.dp, vertical = 14.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(profile.name, fontSize = BodySize, color = TextPrimary)
+                if (profile.isBuiltIn) {
+                    Spacer(Modifier.width(8.dp))
+                    Text("Built-in", fontSize = SmallSize, color = TextTertiary)
+                }
+            }
+            Text("${profile.elements.count { it.isVisible }} elements", fontSize = LabelSize, color = TextTertiary)
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            if (onDelete != null) {
+                Box(Modifier.clip(RoundedCornerShape(6.dp)).background(Color(0xFF333333))
+                    .clickable(onClick = onDelete).padding(horizontal = 10.dp, vertical = 6.dp)) {
+                    Text("✕", fontSize = 14.sp, color = Color(0xFFE57373))
+                }
+            }
+            if (isActive) Text("✓", fontSize = 20.sp, color = AccentColor)
+        }
     }
 }
 

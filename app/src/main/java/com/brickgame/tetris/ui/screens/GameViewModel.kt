@@ -497,8 +497,16 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private val _showLayoutEditor = MutableStateFlow(false)
     val showLayoutEditor: StateFlow<Boolean> = _showLayoutEditor.asStateFlow()
 
-    private val _currentLayoutProfile = MutableStateFlow(LayoutPresets.getDefaultLandscape())
-    val currentLayoutProfile: StateFlow<LayoutProfile> = _currentLayoutProfile.asStateFlow()
+    // The profile currently being edited in the editor
+    private val _editorProfile = MutableStateFlow(LayoutPresets.getDefaultLandscape())
+    val editorProfile: StateFlow<LayoutProfile> = _editorProfile.asStateFlow()
+
+    // Active profiles for gameplay
+    private val _activeLandscapeProfile = MutableStateFlow(LayoutPresets.getDefaultLandscape())
+    val activeLandscapeProfile: StateFlow<LayoutProfile> = _activeLandscapeProfile.asStateFlow()
+
+    private val _activePortraitProfile = MutableStateFlow(LayoutPresets.getClassicPortrait())
+    val activePortraitProfile: StateFlow<LayoutProfile> = _activePortraitProfile.asStateFlow()
 
     private val _allLayoutProfiles = MutableStateFlow(LayoutPresets.getAllPresets())
     val allLayoutProfiles: StateFlow<List<LayoutProfile>> = _allLayoutProfiles.asStateFlow()
@@ -507,10 +515,11 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     val snapToGrid: StateFlow<Boolean> = _snapToGrid.asStateFlow()
 
     init {
-        // Load layout profiles
         viewModelScope.launch {
             layoutRepository.getAllProfiles().collect { profiles ->
                 _allLayoutProfiles.value = profiles
+                // Re-resolve active profiles when profile list changes
+                resolveActiveProfiles(profiles)
             }
         }
         viewModelScope.launch {
@@ -518,18 +527,34 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         }
         viewModelScope.launch {
             layoutRepository.activeLandscapeProfileId.collect { id ->
-                val profile = _allLayoutProfiles.value.find { it.id == id }
+                _activeLandscapeProfile.value = _allLayoutProfiles.value.find { it.id == id }
                     ?: LayoutPresets.getDefaultLandscape()
-                _currentLayoutProfile.value = profile
+            }
+        }
+        viewModelScope.launch {
+            layoutRepository.activePortraitProfileId.collect { id ->
+                _activePortraitProfile.value = _allLayoutProfiles.value.find { it.id == id }
+                    ?: LayoutPresets.getClassicPortrait()
             }
         }
     }
 
-    fun showLayoutEditor() {
+    private fun resolveActiveProfiles(all: List<LayoutProfile>) {
+        // landscape
+        val lId = _activeLandscapeProfile.value.id
+        _activeLandscapeProfile.value = all.find { it.id == lId } ?: LayoutPresets.getDefaultLandscape()
+        // portrait
+        val pId = _activePortraitProfile.value.id
+        _activePortraitProfile.value = all.find { it.id == pId } ?: LayoutPresets.getClassicPortrait()
+    }
+
+    fun showLayoutEditor(isLandscape: Boolean = true) {
         if (game.state.value.status == GameStatus.PLAYING) {
             game.pauseGame()
             stopGameLoop()
         }
+        _editorProfile.value = if (isLandscape) _activeLandscapeProfile.value
+            else _activePortraitProfile.value
         _showLayoutEditor.value = true
     }
 
@@ -537,20 +562,34 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         _showLayoutEditor.value = false
     }
 
+    fun setEditorProfile(profileId: String) {
+        val profile = _allLayoutProfiles.value.find { it.id == profileId } ?: return
+        _editorProfile.value = profile
+    }
+
     fun saveLayoutProfile(profile: LayoutProfile) {
         viewModelScope.launch {
             layoutRepository.saveProfile(profile)
-            layoutRepository.setActiveLandscapeProfile(profile.id)
+            if (profile.isLandscape) layoutRepository.setActiveLandscapeProfile(profile.id)
+            else layoutRepository.setActivePortraitProfile(profile.id)
         }
     }
 
-    fun selectLayoutProfile(profileId: String) {
-        val profile = _allLayoutProfiles.value.find { it.id == profileId }
-            ?: return
-        _currentLayoutProfile.value = profile
+    fun selectActiveProfile(profileId: String) {
+        val profile = _allLayoutProfiles.value.find { it.id == profileId } ?: return
         viewModelScope.launch {
-            layoutRepository.setActiveLandscapeProfile(profileId)
+            if (profile.isLandscape) {
+                layoutRepository.setActiveLandscapeProfile(profileId)
+                _activeLandscapeProfile.value = profile
+            } else {
+                layoutRepository.setActivePortraitProfile(profileId)
+                _activePortraitProfile.value = profile
+            }
         }
+    }
+
+    fun deleteLayoutProfile(profileId: String) {
+        viewModelScope.launch { layoutRepository.deleteProfile(profileId) }
     }
 
     fun setSnapToGrid(enabled: Boolean) {

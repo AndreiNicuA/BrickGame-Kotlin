@@ -1,316 +1,236 @@
 package com.brickgame.tetris.ui.layout
 
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.spring
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.*
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderDefaults
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.zIndex
 
 private val ACCENT = Color(0xFFF4D03F)
-private val BG_DARK = Color(0xFF0D0D0D)
-private val BG_CARD = Color(0xFF1A1A1A)
-private val BG_BUTTON = Color(0xFF2A2A2A)
-private val TEXT_DIM = Color(0xFF888888)
+private val BG = Color(0xFF0D0D0D)
+private val BAR_BG = Color(0xFF1A1A1A)
+private val CARD = Color(0xFF2A2A2A)
+private val ERR = Color(0xFFE74C3C)
 
-/**
- * Drag-and-drop layout editor.
- * - Long-press to pick up an element, then drag to reposition.
- * - Tap to select an element and see its controls in the bottom panel.
- * - Menu button cannot be hidden.
- * - Elements snap to grid when enabled.
- * - Large touch targets and clear visual feedback.
- */
 @Composable
 fun LayoutEditorScreen(
-    currentProfile: LayoutProfile,
+    initialProfile: LayoutProfile,
     allProfiles: List<LayoutProfile>,
     snapToGrid: Boolean,
-    onSaveProfile: (LayoutProfile) -> Unit,
-    onSelectProfile: (String) -> Unit,
+    onSave: (LayoutProfile) -> Unit,
+    onSelectPreset: (String) -> Unit,
     onToggleSnap: (Boolean) -> Unit,
     onClose: () -> Unit
 ) {
     val density = LocalDensity.current
-
-    var editingElements by remember(currentProfile.id) {
-        mutableStateOf(currentProfile.elements.toList())
-    }
+    var elements by remember(initialProfile.id) { mutableStateOf(initialProfile.elements.toList()) }
     var selectedId by remember { mutableStateOf<String?>(null) }
-    var draggingId by remember { mutableStateOf<String?>(null) }
     var canvasSize by remember { mutableStateOf(IntSize(0, 0)) }
     var hasChanges by remember { mutableStateOf(false) }
-    val gridStep = 0.05f  // 5% grid for easier snapping
+    var showNameDialog by remember { mutableStateOf(false) }
+    var overlapping by remember { mutableStateOf(emptySet<String>()) }
+    val gridStep = 0.025f
 
-    Column(modifier = Modifier.fillMaxSize().background(BG_DARK)) {
+    // Recompute overlaps whenever elements change
+    LaunchedEffect(elements) {
+        val profile = LayoutProfile(id = "", name = "", elements = elements)
+        val pairs = profile.findOverlaps()
+        overlapping = pairs.flatMap { listOf(it.first, it.second) }.toSet()
+    }
 
-        // ===== TOP BAR =====
+    Column(modifier = Modifier.fillMaxSize().background(BG)) {
+        // ── TOP BAR ──
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(BG_CARD)
-                .padding(horizontal = 16.dp, vertical = 10.dp),
+            Modifier.fillMaxWidth().background(BAR_BG).padding(horizontal = 12.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Close
-            Box(
-                modifier = Modifier
-                    .size(40.dp).clip(CircleShape).background(BG_BUTTON)
-                    .clickable(onClick = onClose),
-                contentAlignment = Alignment.Center
-            ) { Text("✕", fontSize = 18.sp, color = Color.White, fontWeight = FontWeight.Bold) }
-
-            Text("LAYOUT EDITOR", fontSize = 15.sp, fontWeight = FontWeight.Bold,
+            Box(Modifier.size(36.dp).clip(CircleShape).background(CARD).clickable(onClick = onClose),
+                contentAlignment = Alignment.Center) {
+                Text("✕", fontSize = 16.sp, color = Color.White, fontWeight = FontWeight.Bold)
+            }
+            Text("LAYOUT EDITOR", fontSize = 14.sp, fontWeight = FontWeight.Bold,
                 color = ACCENT, letterSpacing = 2.sp)
-
-            // Save
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(if (hasChanges) Color(0xFF27AE60) else BG_BUTTON)
-                    .clickable(enabled = hasChanges) {
-                        val updated = currentProfile.copy(
-                            elements = editingElements,
-                            isBuiltIn = false,
-                            id = if (currentProfile.isBuiltIn) "custom_${System.currentTimeMillis()}" else currentProfile.id,
-                            name = if (currentProfile.isBuiltIn) "${currentProfile.name} (Custom)" else currentProfile.name
-                        )
-                        onSaveProfile(updated)
-                        hasChanges = false
-                    }
-                    .padding(horizontal = 20.dp, vertical = 10.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text("SAVE", fontSize = 13.sp, fontWeight = FontWeight.Bold,
-                    color = if (hasChanges) Color.White else TEXT_DIM)
+            // Save button
+            val canSave = hasChanges && overlapping.isEmpty()
+            Box(Modifier.clip(RoundedCornerShape(8.dp))
+                .background(if (canSave) Color(0xFF27AE60) else Color(0xFF333333))
+                .clickable(enabled = canSave) { showNameDialog = true }
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+                contentAlignment = Alignment.Center) {
+                Text("SAVE", fontSize = 12.sp, fontWeight = FontWeight.Bold,
+                    color = if (canSave) Color.White else Color.Gray)
             }
         }
 
-        // ===== PRESET SELECTOR =====
+        // ── PRESET / SNAP BAR ──
         LazyRow(
-            modifier = Modifier.fillMaxWidth().background(Color(0xFF121212)).padding(8.dp),
+            Modifier.fillMaxWidth().background(Color(0xFF141414)).padding(horizontal = 8.dp, vertical = 6.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            items(allProfiles.filter { it.isLandscape }) { profile ->
-                val isSel = profile.id == currentProfile.id
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(if (isSel) ACCENT else BG_BUTTON)
-                        .clickable { onSelectProfile(profile.id) }
-                        .padding(horizontal = 14.dp, vertical = 8.dp)
-                ) {
-                    Text(profile.name, fontSize = 12.sp,
-                        fontWeight = if (isSel) FontWeight.Bold else FontWeight.Normal,
-                        color = if (isSel) Color.Black else Color.White)
+            items(allProfiles.filter { it.isLandscape == initialProfile.isLandscape }) { p ->
+                val sel = p.id == initialProfile.id
+                Box(Modifier.clip(RoundedCornerShape(6.dp))
+                    .background(if (sel) ACCENT else CARD)
+                    .clickable { onSelectPreset(p.id) }
+                    .padding(horizontal = 12.dp, vertical = 6.dp)) {
+                    Text(p.name, fontSize = 11.sp,
+                        fontWeight = if (sel) FontWeight.Bold else FontWeight.Normal,
+                        color = if (sel) Color.Black else Color.White)
                 }
             }
             item {
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(if (snapToGrid) Color(0xFF2980B9) else BG_BUTTON)
-                        .clickable { onToggleSnap(!snapToGrid) }
-                        .padding(horizontal = 14.dp, vertical = 8.dp)
-                ) {
+                Box(Modifier.clip(RoundedCornerShape(6.dp))
+                    .background(if (snapToGrid) Color(0xFF2980B9) else CARD)
+                    .clickable { onToggleSnap(!snapToGrid) }
+                    .padding(horizontal = 12.dp, vertical = 6.dp)) {
                     Text(if (snapToGrid) "⊞ Snap ON" else "⊞ Snap OFF",
-                        fontSize = 12.sp, color = Color.White)
+                        fontSize = 11.sp, color = Color.White)
                 }
             }
         }
 
-        // ===== HINT =====
-        Text(
-            "Long-press and drag to move  •  Tap to select",
-            fontSize = 11.sp, color = TEXT_DIM,
-            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-            textAlign = TextAlign.Center
-        )
+        // Overlap warning
+        if (overlapping.isNotEmpty()) {
+            Text("⚠ Elements overlap — fix before saving", fontSize = 11.sp,
+                color = ERR, fontWeight = FontWeight.Bold,
+                modifier = Modifier.fillMaxWidth().background(ERR.copy(alpha = 0.15f))
+                    .padding(horizontal = 12.dp, vertical = 4.dp))
+        }
 
-        // ===== CANVAS =====
+        // ── CANVAS ──
         Box(
-            modifier = Modifier
-                .weight(1f).fillMaxWidth()
-                .padding(horizontal = 6.dp)
-                .clip(RoundedCornerShape(8.dp))
-                .background(Color(0xFF151515))
-                .border(1.dp, Color(0xFF2A2A2A), RoundedCornerShape(8.dp))
+            Modifier.weight(1f).fillMaxWidth().padding(4.dp)
+                .clip(RoundedCornerShape(8.dp)).background(BAR_BG)
+                .border(1.dp, Color(0xFF333333), RoundedCornerShape(8.dp))
                 .onGloballyPositioned { canvasSize = it.size }
         ) {
-            if (canvasSize.width > 0) {
-                // Grid
-                if (snapToGrid) GridOverlay(canvasSize, gridStep)
+            if (snapToGrid && canvasSize.width > 0) GridLines(canvasSize)
 
-                // Board placeholder
-                val bw = 0.32f; val bh = 0.82f
-                val bl = (1f - bw) / 2; val bt = (1f - bh) / 2
-                Box(
-                    modifier = Modifier
-                        .offset(
-                            x = with(density) { (canvasSize.width * bl).toDp() },
-                            y = with(density) { (canvasSize.height * bt).toDp() }
-                        )
-                        .size(
-                            width = with(density) { (canvasSize.width * bw).toDp() },
-                            height = with(density) { (canvasSize.height * bh).toDp() }
-                        )
-                        .border(2.dp, Color(0xFF2A2A2A), RoundedCornerShape(4.dp))
-                        .background(Color(0xFF0A0A0A)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text("GAME BOARD", color = Color(0xFF333333), fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold)
-                }
-
-                // Elements
-                editingElements.forEachIndexed { index, element ->
-                    if (element.isVisible) {
-                        DraggableElement(
-                            element = element,
-                            isSelected = selectedId == element.id,
-                            isDragging = draggingId == element.id,
-                            canvasSize = canvasSize,
-                            snapToGrid = snapToGrid,
-                            gridStep = gridStep,
-                            onTap = { selectedId = element.id },
-                            onDragStart = {
-                                selectedId = element.id
-                                draggingId = element.id
-                            },
-                            onDrag = { newX, newY ->
-                                editingElements = editingElements.toMutableList().apply {
-                                    this[index] = element.copy(
-                                        offsetX = newX.coerceIn(0f, 1f - element.widthFraction),
-                                        offsetY = newY.coerceIn(0f, 1f - element.heightFraction)
-                                    )
-                                }
-                                hasChanges = true
-                            },
-                            onDragEnd = { draggingId = null }
-                        )
-                    }
+            elements.forEachIndexed { index, elem ->
+                if (elem.isVisible && canvasSize.width > 0) {
+                    DraggableElement(
+                        element = elem,
+                        isSelected = selectedId == elem.id,
+                        isOverlapping = elem.id in overlapping,
+                        canvasSize = canvasSize,
+                        snapToGrid = snapToGrid,
+                        gridStep = gridStep,
+                        onSelect = { selectedId = elem.id },
+                        onMoved = { newX, newY ->
+                            elements = elements.toMutableList().apply {
+                                this[index] = elem.copy(x = newX, y = newY).clampToScreen()
+                            }
+                            hasChanges = true
+                        }
+                    )
                 }
             }
         }
 
-        // ===== BOTTOM CONTROL PANEL =====
-        val selectedElement = editingElements.find { it.id == selectedId }
-        BottomControlPanel(
-            element = selectedElement,
-            onWidthChange = { newW ->
-                selectedId?.let { id ->
-                    editingElements = editingElements.map {
-                        if (it.id == id) it.copy(widthFraction = newW.coerceIn(0.06f, 0.45f)) else it
+        // ── BOTTOM CONTROLS ──
+        val sel = selectedId?.let { id -> elements.find { it.id == id } }
+        if (sel != null) {
+            ElementControls(
+                element = sel,
+                onResize = { dw, dh ->
+                    elements = elements.map {
+                        if (it.id == sel.id) it.copy(w = it.w + dw, h = it.h + dh).clampSize().clampToScreen()
+                        else it
                     }
                     hasChanges = true
-                }
-            },
-            onHeightChange = { newH ->
-                selectedId?.let { id ->
-                    editingElements = editingElements.map {
-                        if (it.id == id) it.copy(heightFraction = newH.coerceIn(0.06f, 0.45f)) else it
+                },
+                onToggleVisible = {
+                    elements = elements.map {
+                        if (it.id == sel.id) it.copy(isVisible = !it.isVisible) else it
                     }
                     hasChanges = true
+                },
+                onDeselect = { selectedId = null }
+            )
+        } else {
+            Box(Modifier.fillMaxWidth().background(BAR_BG).padding(12.dp),
+                contentAlignment = Alignment.Center) {
+                Text("Tap an element to select · Drag to move · Use controls to resize",
+                    fontSize = 11.sp, color = Color(0xFF666666))
+            }
+        }
+    }
+
+    // ── SAVE NAME DIALOG ──
+    if (showNameDialog) {
+        SaveNameDialog(
+            defaultName = if (initialProfile.isBuiltIn) "" else initialProfile.name,
+            onSave = { name ->
+                val profile = if (initialProfile.isBuiltIn) {
+                    LayoutPresets.fromTemplate(
+                        initialProfile.copy(elements = elements),
+                        name
+                    )
+                } else {
+                    initialProfile.copy(name = name, elements = elements)
                 }
+                onSave(profile)
+                showNameDialog = false
+                hasChanges = false
             },
-            onToggleVisibility = {
-                selectedId?.let { id ->
-                    val el = editingElements.find { it.id == id } ?: return@let
-                    // Prevent hiding menu button
-                    if (el.type == ElementType.MENU_BUTTON) return@let
-                    editingElements = editingElements.map {
-                        if (it.id == id) it.copy(isVisible = !it.isVisible) else it
-                    }
-                    hasChanges = true
-                }
-            },
-            onToggleLock = {
-                selectedId?.let { id ->
-                    editingElements = editingElements.map {
-                        if (it.id == id) it.copy(isLocked = !it.isLocked) else it
-                    }
-                    hasChanges = true
-                }
-            },
-            onDeselect = { selectedId = null }
+            onDismiss = { showNameDialog = false }
         )
     }
 }
 
-// ===== Draggable Element =====
+// ── DRAGGABLE ELEMENT (renders appearance matching its type) ──
 
 @Composable
 private fun DraggableElement(
     element: LayoutElement,
     isSelected: Boolean,
-    isDragging: Boolean,
+    isOverlapping: Boolean,
     canvasSize: IntSize,
     snapToGrid: Boolean,
     gridStep: Float,
-    onTap: () -> Unit,
-    onDragStart: () -> Unit,
-    onDrag: (Float, Float) -> Unit,
-    onDragEnd: () -> Unit
+    onSelect: () -> Unit,
+    onMoved: (Float, Float) -> Unit
 ) {
     val density = LocalDensity.current
-    val haptic = LocalHapticFeedback.current
     var dragOffset by remember { mutableStateOf(Offset.Zero) }
 
-    val elementColor = elementTypeColor(element.type)
+    val xPx = element.x * canvasSize.width + dragOffset.x
+    val yPx = element.y * canvasSize.height + dragOffset.y
+    val wPx = element.w * canvasSize.width
+    val hPx = element.h * canvasSize.height
 
-    val borderColor by animateColorAsState(
-        targetValue = when {
-            isDragging -> Color.White
-            isSelected -> ACCENT
-            else -> elementColor.copy(alpha = 0.5f)
-        },
-        label = "border"
-    )
-
-    val elevation by animateDpAsState(
-        targetValue = if (isDragging) 12.dp else if (isSelected) 4.dp else 0.dp,
-        animationSpec = spring(),
-        label = "elevation"
-    )
-
-    val xPx = element.offsetX * canvasSize.width + dragOffset.x
-    val yPx = element.offsetY * canvasSize.height + dragOffset.y
-    val wPx = element.widthFraction * canvasSize.width
-    val hPx = element.heightFraction * canvasSize.height
+    val borderColor = when {
+        isOverlapping -> ERR
+        isSelected -> Color.White
+        else -> typeColor(element.type).copy(alpha = 0.5f)
+    }
 
     Box(
         modifier = Modifier
-            .zIndex(if (isDragging) 100f else if (isSelected) 10f else 1f)
             .offset(
                 x = with(density) { xPx.toDp() },
                 y = with(density) { yPx.toDp() }
@@ -319,267 +239,225 @@ private fun DraggableElement(
                 width = with(density) { wPx.toDp() },
                 height = with(density) { hPx.toDp() }
             )
-            .shadow(elevation, RoundedCornerShape(8.dp))
-            .clip(RoundedCornerShape(8.dp))
-            .background(
-                if (isDragging) elementColor.copy(alpha = 0.6f)
-                else elementColor.copy(alpha = if (isSelected) 0.4f else 0.25f)
-            )
+            .clip(RoundedCornerShape(4.dp))
+            .background(typeColor(element.type).copy(alpha = if (isSelected) 0.35f else 0.20f))
             .border(
-                width = if (isDragging) 3.dp else if (isSelected) 2.dp else 1.dp,
-                color = borderColor,
-                shape = RoundedCornerShape(8.dp)
+                if (isSelected || isOverlapping) 2.dp else 1.dp,
+                borderColor, RoundedCornerShape(4.dp)
             )
-            .then(
-                if (!element.isLocked) {
-                    Modifier.pointerInput(element.id) {
-                        detectDragGesturesAfterLongPress(
-                            onDragStart = {
-                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                onDragStart()
-                                dragOffset = Offset.Zero
-                            },
-                            onDrag = { change, amount ->
-                                change.consume()
-                                dragOffset += amount
-                            },
-                            onDragEnd = {
-                                var newX = element.offsetX + dragOffset.x / canvasSize.width
-                                var newY = element.offsetY + dragOffset.y / canvasSize.height
-                                if (snapToGrid) {
-                                    newX = (newX / gridStep).toInt() * gridStep
-                                    newY = (newY / gridStep).toInt() * gridStep
-                                }
-                                onDrag(newX, newY)
-                                dragOffset = Offset.Zero
-                                onDragEnd()
-                            },
-                            onDragCancel = {
-                                dragOffset = Offset.Zero
-                                onDragEnd()
-                            }
+            .pointerInput(element.id) {
+                detectDragGestures(
+                    onDragStart = { onSelect(); dragOffset = Offset.Zero },
+                    onDrag = { change, amount -> change.consume(); dragOffset += amount },
+                    onDragEnd = {
+                        var nx = element.x + dragOffset.x / canvasSize.width
+                        var ny = element.y + dragOffset.y / canvasSize.height
+                        if (snapToGrid) {
+                            nx = (nx / gridStep).toInt() * gridStep
+                            ny = (ny / gridStep).toInt() * gridStep
+                        }
+                        onMoved(
+                            nx.coerceIn(0f, (1f - element.w).coerceAtLeast(0f)),
+                            ny.coerceIn(0f, (1f - element.h).coerceAtLeast(0f))
                         )
-                    }
-                } else Modifier
-            )
-            .clickable { onTap() },
+                        dragOffset = Offset.Zero
+                    },
+                    onDragCancel = { dragOffset = Offset.Zero }
+                )
+            }
+            .clickable { onSelect() },
         contentAlignment = Alignment.Center
     ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            // Icon/emoji for element type
-            Text(
-                elementIcon(element.type),
-                fontSize = if (hPx > 80) 20.sp else 14.sp
-            )
-            if (hPx > 50) {
-                Text(
-                    element.label,
-                    fontSize = 10.sp, fontWeight = FontWeight.Bold,
-                    color = Color.White.copy(alpha = 0.9f),
-                    textAlign = TextAlign.Center, maxLines = 1
-                )
+        // Render a miniature representation of the actual element
+        ElementPreview(element.type, element.label, with(density) { wPx.toDp() }, with(density) { hPx.toDp() })
+    }
+}
+
+/** Mini representation inside the editor that matches the real game element */
+@Composable
+private fun ElementPreview(type: ElementType, label: String, widthDp: androidx.compose.ui.unit.Dp, heightDp: androidx.compose.ui.unit.Dp) {
+    val small = minOf(widthDp.value, heightDp.value) < 40f
+    val fontSize = if (small) 7.sp else 9.sp
+    val tc = Color.White
+
+    when (type) {
+        ElementType.GAME_BOARD -> {
+            Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                // Grid hint
+                Box(Modifier.fillMaxSize(0.85f).border(1.dp, Color(0xFF444444), RoundedCornerShape(2.dp)).background(Color(0xFF0A0A0A).copy(alpha = 0.5f)),
+                    contentAlignment = Alignment.Center) {
+                    Text("GAME\nBOARD", fontSize = if (small) 6.sp else 10.sp, color = Color(0xFF555555),
+                        textAlign = TextAlign.Center, fontWeight = FontWeight.Bold, lineHeight = if (small) 8.sp else 12.sp)
+                }
             }
-            if (element.isLocked) {
-                Text("🔒", fontSize = 10.sp)
+        }
+        ElementType.SCORE_PANEL -> {
+            Column(Modifier.fillMaxSize().padding(2.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                Text("000000", fontSize = if (small) 6.sp else 10.sp, fontFamily = FontFamily.Monospace,
+                    color = ACCENT, fontWeight = FontWeight.Bold)
+                if (!small) Text("LV 1 · 0", fontSize = 7.sp, color = Color.Gray)
+            }
+        }
+        ElementType.DPAD -> {
+            Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                val bs = if (small) 10.dp else 16.dp
+                Box(Modifier.size(bs).clip(CircleShape).background(Color.White.copy(alpha = 0.3f)))
+                Row {
+                    Box(Modifier.size(bs).clip(CircleShape).background(Color.White.copy(alpha = 0.3f)))
+                    Spacer(Modifier.width(bs * 0.6f))
+                    Box(Modifier.size(bs).clip(CircleShape).background(Color.White.copy(alpha = 0.3f)))
+                }
+                Box(Modifier.size(bs).clip(CircleShape).background(Color.White.copy(alpha = 0.3f)))
+            }
+        }
+        ElementType.ROTATE_BUTTON -> {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                val s = if (small) 16.dp else 28.dp
+                Box(Modifier.size(s).clip(CircleShape).background(Color.White.copy(alpha = 0.3f)),
+                    contentAlignment = Alignment.Center) {
+                    Text("↻", fontSize = if (small) 8.sp else 14.sp, color = tc)
+                }
+            }
+        }
+        ElementType.HOLD_PREVIEW -> {
+            Column(Modifier.fillMaxSize().padding(1.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                Text("HOLD", fontSize = fontSize, color = tc.copy(alpha = 0.6f), fontWeight = FontWeight.Bold)
+                Box(Modifier.size(if (small) 12.dp else 20.dp).background(Color(0xFF9B59B6).copy(alpha = 0.3f), RoundedCornerShape(2.dp)))
+            }
+        }
+        ElementType.NEXT_PIECE_QUEUE -> {
+            Column(Modifier.fillMaxSize().padding(1.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                Text("NEXT", fontSize = fontSize, color = tc.copy(alpha = 0.6f), fontWeight = FontWeight.Bold)
+                repeat(if (small) 1 else 3) {
+                    Box(Modifier.padding(1.dp).size(if (small) 10.dp else 14.dp).background(Color(0xFF1ABC9C).copy(alpha = 0.3f - it * 0.08f), RoundedCornerShape(2.dp)))
+                }
+            }
+        }
+        else -> {
+            // Buttons: HOLD_BUTTON, START_BUTTON, PAUSE_BUTTON, SOUND_TOGGLE, MENU_BUTTON, ACTION_LABEL
+            Box(Modifier.fillMaxSize().padding(2.dp), contentAlignment = Alignment.Center) {
+                Text(label, fontSize = fontSize, color = tc, fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center, maxLines = 1)
             }
         }
     }
 }
 
-// ===== Bottom Control Panel =====
+// ── BOTTOM ELEMENT CONTROLS ──
 
 @Composable
-private fun BottomControlPanel(
-    element: LayoutElement?,
-    onWidthChange: (Float) -> Unit,
-    onHeightChange: (Float) -> Unit,
-    onToggleVisibility: () -> Unit,
-    onToggleLock: () -> Unit,
+private fun ElementControls(
+    element: LayoutElement,
+    onResize: (Float, Float) -> Unit,
+    onToggleVisible: () -> Unit,
     onDeselect: () -> Unit
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(BG_CARD)
-            .padding(horizontal = 16.dp, vertical = 10.dp)
+    Row(
+        Modifier.fillMaxWidth().background(BAR_BG).padding(horizontal = 10.dp, vertical = 6.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        if (element == null) {
-            Text("Tap an element to select it, then long-press to drag",
-                fontSize = 13.sp, color = TEXT_DIM,
-                modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
-        } else {
-            // Header row
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(elementIcon(element.type), fontSize = 18.sp)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Column {
-                        Text(element.label, fontSize = 14.sp, fontWeight = FontWeight.Bold,
-                            color = Color.White)
-                        Text(
-                            "Position: ${(element.offsetX * 100).toInt()}%, ${(element.offsetY * 100).toInt()}%",
-                            fontSize = 10.sp, color = TEXT_DIM
-                        )
-                    }
-                }
-
-                // Deselect button
-                Box(
-                    modifier = Modifier.size(32.dp).clip(CircleShape).background(BG_BUTTON)
-                        .clickable(onClick = onDeselect),
-                    contentAlignment = Alignment.Center
-                ) { Text("✕", fontSize = 14.sp, color = Color.White) }
-            }
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            // Width slider
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("W", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TEXT_DIM,
-                    modifier = Modifier.width(20.dp))
-                Slider(
-                    value = element.widthFraction,
-                    onValueChange = onWidthChange,
-                    valueRange = 0.06f..0.45f,
-                    modifier = Modifier.weight(1f).height(32.dp),
-                    colors = SliderDefaults.colors(
-                        thumbColor = ACCENT, activeTrackColor = ACCENT,
-                        inactiveTrackColor = BG_BUTTON
-                    )
-                )
-                Text("${(element.widthFraction * 100).toInt()}%", fontSize = 11.sp,
-                    color = ACCENT, modifier = Modifier.width(36.dp), textAlign = TextAlign.End)
-            }
-
-            // Height slider
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("H", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TEXT_DIM,
-                    modifier = Modifier.width(20.dp))
-                Slider(
-                    value = element.heightFraction,
-                    onValueChange = onHeightChange,
-                    valueRange = 0.06f..0.45f,
-                    modifier = Modifier.weight(1f).height(32.dp),
-                    colors = SliderDefaults.colors(
-                        thumbColor = ACCENT, activeTrackColor = ACCENT,
-                        inactiveTrackColor = BG_BUTTON
-                    )
-                )
-                Text("${(element.heightFraction * 100).toInt()}%", fontSize = 11.sp,
-                    color = ACCENT, modifier = Modifier.width(36.dp), textAlign = TextAlign.End)
-            }
-
-            Spacer(modifier = Modifier.height(6.dp))
-
-            // Action buttons row
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // Lock toggle
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(if (element.isLocked) "🔒 Locked" else "🔓 Unlocked",
-                        fontSize = 12.sp, color = Color.White)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Switch(
-                        checked = element.isLocked,
-                        onCheckedChange = { onToggleLock() },
-                        colors = SwitchDefaults.colors(
-                            checkedThumbColor = Color(0xFFE74C3C),
-                            checkedTrackColor = Color(0xFFE74C3C).copy(alpha = 0.4f),
-                            uncheckedThumbColor = Color.Gray,
-                            uncheckedTrackColor = BG_BUTTON
-                        ),
-                        modifier = Modifier.height(28.dp)
-                    )
-                }
-
-                Spacer(modifier = Modifier.weight(1f))
-
-                // Hide button (disabled for menu button)
-                val canHide = element.type != ElementType.MENU_BUTTON
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(if (canHide) BG_BUTTON else BG_BUTTON.copy(alpha = 0.3f))
-                        .clickable(enabled = canHide, onClick = onToggleVisibility)
-                        .padding(horizontal = 14.dp, vertical = 8.dp)
-                ) {
-                    Text(
-                        if (!canHide) "🔒 Always visible"
-                        else if (element.isVisible) "👁 Hide" else "Show",
-                        fontSize = 12.sp,
-                        color = if (canHide) Color.White else TEXT_DIM
-                    )
-                }
-            }
+        Column {
+            Text(element.label, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
+            Text("X:${pct(element.x)} Y:${pct(element.y)}  W:${pct(element.w)} H:${pct(element.h)}",
+                fontSize = 9.sp, color = Color(0xFF888888))
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            CtrlBtn("W-") { onResize(-0.02f, 0f) }
+            CtrlBtn("W+") { onResize(0.02f, 0f) }
+            CtrlBtn("H-") { onResize(0f, -0.02f) }
+            CtrlBtn("H+") { onResize(0f, 0.02f) }
+            CtrlBtn(if (element.isVisible) "👁" else "🚫") { onToggleVisible() }
+            CtrlBtn("✓") { onDeselect() }
         }
     }
 }
-
-// ===== Grid Overlay =====
 
 @Composable
-private fun GridOverlay(canvasSize: IntSize, gridStep: Float) {
-    val density = LocalDensity.current
-    val steps = (1f / gridStep).toInt()
+private fun CtrlBtn(text: String, onClick: () -> Unit) {
+    Box(Modifier.size(30.dp).clip(RoundedCornerShape(6.dp)).background(Color(0xFF333333)).clickable(onClick = onClick),
+        contentAlignment = Alignment.Center) {
+        Text(text, fontSize = 11.sp, color = Color.White)
+    }
+}
 
-    Box(modifier = Modifier.fillMaxSize()) {
-        for (i in 1 until steps) {
-            val frac = i * gridStep
-            // Vertical
-            Box(
-                modifier = Modifier
-                    .offset(x = with(density) { (canvasSize.width * frac).toDp() })
-                    .width(0.5.dp).fillMaxHeight()
-                    .background(Color(0xFF1E1E1E))
-            )
-            // Horizontal
-            Box(
-                modifier = Modifier
-                    .offset(y = with(density) { (canvasSize.height * frac).toDp() })
-                    .height(0.5.dp).fillMaxWidth()
-                    .background(Color(0xFF1E1E1E))
-            )
+// ── SAVE NAME DIALOG ──
+
+@Composable
+private fun SaveNameDialog(defaultName: String, onSave: (String) -> Unit, onDismiss: () -> Unit) {
+    var name by remember { mutableStateOf(defaultName) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Save Layout", color = Color.White) },
+        text = {
+            Column {
+                Text("Enter a name for this layout:", fontSize = 14.sp, color = Color.Gray)
+                Spacer(Modifier.height(12.dp))
+                BasicTextField(
+                    value = name,
+                    onValueChange = { name = it.take(30) },
+                    textStyle = TextStyle(fontSize = 18.sp, color = Color.White),
+                    cursorBrush = SolidColor(ACCENT),
+                    modifier = Modifier.fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color(0xFF2A2A2A))
+                        .padding(12.dp),
+                    decorationBox = { inner ->
+                        if (name.isEmpty()) Text("My Layout", fontSize = 18.sp, color = Color(0xFF555555))
+                        inner()
+                    }
+                )
+                Spacer(Modifier.height(4.dp))
+                Text("This layout will appear in your Layout menu and can be exported.",
+                    fontSize = 11.sp, color = Color(0xFF666666))
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { if (name.isNotBlank()) onSave(name.trim()) },
+                enabled = name.isNotBlank()
+            ) { Text("Save", color = if (name.isNotBlank()) ACCENT else Color.Gray) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel", color = Color.Gray) }
+        },
+        containerColor = Color(0xFF1A1A1A)
+    )
+}
+
+// ── GRID ──
+
+@Composable
+private fun GridLines(canvasSize: IntSize) {
+    val density = LocalDensity.current
+    val n = 20
+    Box(Modifier.fillMaxSize()) {
+        for (i in 1 until n) {
+            val xp = canvasSize.width.toFloat() / n * i
+            Box(Modifier.offset(x = with(density) { xp.toDp() }).width(0.5.dp).fillMaxHeight().background(Color(0xFF1E1E1E)))
+        }
+        for (i in 1 until n) {
+            val yp = canvasSize.height.toFloat() / n * i
+            Box(Modifier.offset(y = with(density) { yp.toDp() }).height(0.5.dp).fillMaxWidth().background(Color(0xFF1E1E1E)))
         }
     }
 }
 
-// ===== Helpers =====
+// ── HELPERS ──
 
-private fun elementTypeColor(type: ElementType): Color = when (type) {
+private fun typeColor(type: ElementType): Color = when (type) {
+    ElementType.GAME_BOARD -> Color(0xFF7F8C8D)
+    ElementType.SCORE_PANEL -> Color(0xFF2ECC71)
+    ElementType.HOLD_PREVIEW -> Color(0xFF9B59B6)
+    ElementType.NEXT_PIECE_QUEUE -> Color(0xFF1ABC9C)
     ElementType.DPAD -> Color(0xFF3498DB)
     ElementType.ROTATE_BUTTON -> Color(0xFFE74C3C)
-    ElementType.HARD_DROP_BUTTON -> Color(0xFFF39C12)
     ElementType.HOLD_BUTTON -> Color(0xFF9B59B6)
-    ElementType.SCORE_PANEL -> Color(0xFF2ECC71)
-    ElementType.NEXT_PIECE_QUEUE -> Color(0xFF1ABC9C)
-    ElementType.START_PAUSE_BUTTONS -> Color(0xFF95A5A6)
+    ElementType.START_BUTTON -> Color(0xFF27AE60)
+    ElementType.PAUSE_BUTTON -> Color(0xFFF39C12)
     ElementType.SOUND_TOGGLE -> Color(0xFF7F8C8D)
     ElementType.MENU_BUTTON -> Color(0xFF7F8C8D)
     ElementType.ACTION_LABEL -> Color(0xFFF4D03F)
 }
 
-private fun elementIcon(type: ElementType): String = when (type) {
-    ElementType.DPAD -> "✛"
-    ElementType.ROTATE_BUTTON -> "↻"
-    ElementType.HARD_DROP_BUTTON -> "▼"
-    ElementType.HOLD_BUTTON -> "◧"
-    ElementType.SCORE_PANEL -> "★"
-    ElementType.NEXT_PIECE_QUEUE -> "▶▶"
-    ElementType.START_PAUSE_BUTTONS -> "▶❚❚"
-    ElementType.SOUND_TOGGLE -> "♪"
-    ElementType.MENU_BUTTON -> "☰"
-    ElementType.ACTION_LABEL -> "💥"
-}
+private fun pct(f: Float): String = "${(f * 100).toInt()}%"
