@@ -278,7 +278,7 @@ private fun ActionPopup(label: String, linesCleared: Int) {
             showPopup = true
             currentLabel = label
             // Auto-dismiss after duration
-            delay(1500L)
+            delay(1000L)
             showPopup = false
         }
     }
@@ -288,21 +288,21 @@ private fun ActionPopup(label: String, linesCleared: Int) {
         val (bgColor, textColor, fontSize) = remember(popupText, popupLines) {
             when {
                 popupText.contains("Tetris", ignoreCase = true) && popupText.contains("B2B", ignoreCase = true) ->
-                    Triple(Color(0xFFFF4400).copy(alpha = 0.85f), Color.White, 38)
+                    Triple(Color(0xFFFF4400).copy(alpha = 0.55f), Color.White, 38)
                 popupText.contains("Tetris", ignoreCase = true) ->
-                    Triple(Color(0xFFFF2222).copy(alpha = 0.8f), Color.White, 36)
+                    Triple(Color(0xFFFF2222).copy(alpha = 0.5f), Color.White, 36)
                 popupText.contains("T-Spin", ignoreCase = true) ->
-                    Triple(Color(0xFF9B59B6).copy(alpha = 0.8f), Color.White, 32)
+                    Triple(Color(0xFF9B59B6).copy(alpha = 0.5f), Color.White, 32)
                 popupText.contains("B2B", ignoreCase = true) ->
-                    Triple(Color(0xFFFF8800).copy(alpha = 0.8f), Color.White, 32)
+                    Triple(Color(0xFFFF8800).copy(alpha = 0.5f), Color.White, 32)
                 popupLines >= 3 ->
-                    Triple(Color(0xFFFF6600).copy(alpha = 0.75f), Color.White, 30)
+                    Triple(Color(0xFFFF6600).copy(alpha = 0.45f), Color.White, 30)
                 popupLines == 2 ->
-                    Triple(Color(0xFFF4D03F).copy(alpha = 0.75f), Color.Black, 28)
+                    Triple(Color(0xFFF4D03F).copy(alpha = 0.45f), Color.Black, 28)
                 popupLines == 1 ->
-                    Triple(Color.White.copy(alpha = 0.7f), Color.Black, 26)
+                    Triple(Color.White.copy(alpha = 0.4f), Color.Black, 26)
                 else -> // Combo, other labels
-                    Triple(Color(0xFF3498DB).copy(alpha = 0.75f), Color.White, 28)
+                    Triple(Color(0xFF3498DB).copy(alpha = 0.45f), Color.White, 28)
             }
         }
 
@@ -315,14 +315,14 @@ private fun ActionPopup(label: String, linesCleared: Int) {
             animScale.snapTo(0.3f)
             animAlpha.snapTo(0f)
             // Quick pop in
-            animScale.animateTo(1.1f, tween(120, easing = FastOutSlowInEasing))
-            animAlpha.animateTo(1f, tween(100))
+            animScale.animateTo(1.1f, tween(100, easing = FastOutSlowInEasing))
+            animAlpha.animateTo(1f, tween(80))
             // Settle
-            animScale.animateTo(1f, tween(80))
+            animScale.animateTo(1f, tween(60))
             // Hold
-            delay(800L)
+            delay(500L)
             // Fade out
-            animAlpha.animateTo(0f, tween(400))
+            animAlpha.animateTo(0f, tween(250))
         }
 
         Box(
