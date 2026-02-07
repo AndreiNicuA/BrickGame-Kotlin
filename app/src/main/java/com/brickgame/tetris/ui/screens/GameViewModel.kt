@@ -28,33 +28,25 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private val game = TetrisGame()
     val gameState: StateFlow<GameState> = game.state
 
-    // UI
     data class UiState(val showSettings: Boolean = false, val settingsPage: SettingsPage = SettingsPage.MAIN)
     enum class SettingsPage { MAIN, PROFILE, THEME, LAYOUT, GAMEPLAY, EXPERIENCE, ABOUT }
     private val _uiState = MutableStateFlow(UiState())
     val uiState: StateFlow<UiState> = _uiState.asStateFlow()
 
-    // Theme
     private val _currentTheme = MutableStateFlow(GameThemes.ClassicGreen)
     val currentTheme: StateFlow<GameTheme> = _currentTheme.asStateFlow()
-
-    // Layout
     private val _portraitLayout = MutableStateFlow(LayoutPreset.PORTRAIT_CLASSIC)
     val portraitLayout: StateFlow<LayoutPreset> = _portraitLayout.asStateFlow()
     private val _landscapeLayout = MutableStateFlow(LayoutPreset.LANDSCAPE_DEFAULT)
     val landscapeLayout: StateFlow<LayoutPreset> = _landscapeLayout.asStateFlow()
     private val _dpadStyle = MutableStateFlow(DPadStyle.STANDARD)
     val dpadStyle: StateFlow<DPadStyle> = _dpadStyle.asStateFlow()
-
-    // Gameplay
     private val _ghostPieceEnabled = MutableStateFlow(true)
     val ghostPieceEnabled: StateFlow<Boolean> = _ghostPieceEnabled.asStateFlow()
     private val _difficulty = MutableStateFlow(Difficulty.NORMAL)
     val difficulty: StateFlow<Difficulty> = _difficulty.asStateFlow()
     private val _gameMode = MutableStateFlow(GameMode.MARATHON)
     val gameMode: StateFlow<GameMode> = _gameMode.asStateFlow()
-
-    // Experience
     private val _animationStyle = MutableStateFlow(AnimationStyle.MODERN)
     val animationStyle: StateFlow<AnimationStyle> = _animationStyle.asStateFlow()
     private val _animationDuration = MutableStateFlow(0.5f)
@@ -63,16 +55,15 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     val soundEnabled: StateFlow<Boolean> = _soundEnabled.asStateFlow()
     private val _vibrationEnabled = MutableStateFlow(true)
     val vibrationEnabled: StateFlow<Boolean> = _vibrationEnabled.asStateFlow()
-
-    // Player
     val playerName = playerRepo.playerName.stateIn(viewModelScope, SharingStarted.Eagerly, "Player")
     val scoreHistory = playerRepo.scoreHistory.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
     private val _highScore = MutableStateFlow(0)
     val highScore: StateFlow<Int> = _highScore.asStateFlow()
 
-    // Jobs
-    private var gameLoopJob: Job? = null
+    private var gravityJob: Job? = null
+    private var lockDelayJob: Job? = null
     private var dasJob: Job? = null
+    @Volatile private var handlingLineClear = false
 
     init { loadSettings() }
 
@@ -94,20 +85,10 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch { settingsRepo.dpadStyle.collect { name -> _dpadStyle.value = DPadStyle.entries.find { it.name == name } ?: DPadStyle.STANDARD } }
     }
 
-    // ===== Game Actions =====
-    fun startGame() {
-        game.setDifficulty(_difficulty.value)
-        game.setGameMode(_gameMode.value)
-        game.startGame()
-        startGameLoop()
-    }
-
+    fun startGame() { game.setDifficulty(_difficulty.value); game.setGameMode(_gameMode.value); game.startGame(); handlingLineClear = false; startGameLoop() }
     fun pauseGame() { game.pauseGame(); stopGameLoop() }
     fun resumeGame() { game.resumeGame(); startGameLoop() }
-    fun togglePause() {
-        if (gameState.value.status == GameStatus.PLAYING) pauseGame()
-        else if (gameState.value.status == GameStatus.PAUSED) resumeGame()
-    }
+    fun togglePause() { if (gameState.value.status == GameStatus.PLAYING) pauseGame() else if (gameState.value.status == GameStatus.PAUSED) resumeGame() }
 
     fun moveLeft() { if (game.moveLeft()) { soundManager.playMove(); vibrationManager.vibrateMove() } }
     fun moveRight() { if (game.moveRight()) { soundManager.playMove(); vibrationManager.vibrateMove() } }
@@ -117,85 +98,70 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     fun rotateCounterClockwise() { if (game.rotateCounterClockwise()) { soundManager.playRotate(); vibrationManager.vibrateRotate() } }
     fun holdPiece() { game.holdCurrentPiece() }
 
-    // DAS
     fun startLeftDAS() { stopDAS(); moveLeft(); dasJob = viewModelScope.launch { delay(170); while (isActive) { moveLeft(); delay(50) } } }
     fun startRightDAS() { stopDAS(); moveRight(); dasJob = viewModelScope.launch { delay(170); while (isActive) { moveRight(); delay(50) } } }
-    fun startDownDAS() { stopDAS(); softDrop(); dasJob = viewModelScope.launch { delay(170); while (isActive) { softDrop(); delay(50) } } }
+    fun startDownDAS() { stopDAS(); softDrop(); dasJob = viewModelScope.launch { delay(60); while (isActive) { softDrop(); delay(30) } } }
     fun stopDAS() { dasJob?.cancel(); dasJob = null }
 
-    // ===== SINGLE UNIFIED GAME LOOP =====
-    // One coroutine handles gravity, lock delay, and line clears sequentially
-    // No race conditions possible because everything is sequential in one coroutine
+    // ===== TWO-JOB GAME LOOP =====
+    // Job 1: Gravity — moves piece down at the proper speed
+    // Job 2: Lock delay + line clear checker — runs at 60fps
 
     private fun startGameLoop() {
-        gameLoopJob?.cancel()
+        gravityJob?.cancel()
+        lockDelayJob?.cancel()
+        handlingLineClear = false
 
-        gameLoopJob = viewModelScope.launch {
+        // GRAVITY: move piece down at drop speed intervals
+        gravityJob = viewModelScope.launch {
             while (isActive && gameState.value.status == GameStatus.PLAYING) {
-                // 1) If a line clear is pending, wait for animation then complete it
-                if (game.isPendingLineClear()) {
-                    val prevLevel = gameState.value.level
-                    val linesCount = gameState.value.linesCleared
-                    if (linesCount > 0) {
-                        soundManager.playClear()
-                        vibrationManager.vibrateClear(linesCount)
-                    }
-                    // Wait for animation to finish
-                    delay((_animationDuration.value * 500).toLong().coerceAtLeast(200))
-                    // Complete the clear (removes rows, spawns next piece)
-                    game.completePendingLineClear()
-
-                    if (gameState.value.level > prevLevel) {
-                        soundManager.playLevelUp(); vibrationManager.vibrateLevelUp()
-                    }
-                    if (gameState.value.status == GameStatus.GAME_OVER) { onGameOver(); break }
-                    continue // restart loop immediately after clearing
+                if (game.isGameActive()) {
+                    game.moveDown()
                 }
+                delay(game.getDropSpeed())
+            }
+        }
 
-                // 2) Check lock delay
-                if (game.checkLockDelay()) {
-                    // Piece was locked. If lines were cleared, isPendingLineClear is now true.
-                    // Loop will handle it on next iteration.
+        // LOCK DELAY + LINE CLEAR: check at 60fps
+        lockDelayJob = viewModelScope.launch {
+            while (isActive && gameState.value.status == GameStatus.PLAYING) {
+                // Handle pending line clear
+                if (game.isPendingLineClear() && !handlingLineClear) {
+                    handlingLineClear = true
+                    val prevLevel = gameState.value.level
+                    val lc = gameState.value.linesCleared
+                    if (lc > 0) { soundManager.playClear(); vibrationManager.vibrateClear(lc) }
+                    delay((_animationDuration.value * 500).toLong().coerceAtLeast(200))
+                    game.completePendingLineClear()
+                    handlingLineClear = false
+                    if (gameState.value.level > prevLevel) { soundManager.playLevelUp(); vibrationManager.vibrateLevelUp() }
                     if (gameState.value.status == GameStatus.GAME_OVER) { onGameOver(); break }
                     continue
                 }
 
-                // 3) Normal gravity: try to move piece down
-                if (game.isGameActive()) {
-                    game.moveDown()
+                // Check lock delay
+                if (game.checkLockDelay()) {
+                    if (gameState.value.status == GameStatus.GAME_OVER) { onGameOver(); break }
+                    continue
                 }
 
-                // 4) Wait for next tick
-                // Use shorter delay when lock delay is active (need responsive lock checking)
-                val tickDelay = if (game.isPendingLineClear()) 16L
-                    else if (gameState.value.status == GameStatus.PLAYING) {
-                        // Poll faster to catch lock delay, but still respect drop speed
-                        minOf(game.getDropSpeed(), 16L)
-                    } else break
-
-                delay(tickDelay)
+                delay(16L) // 60fps
             }
-
             if (gameState.value.status == GameStatus.GAME_OVER) onGameOver()
         }
     }
 
-    private fun stopGameLoop() { gameLoopJob?.cancel() }
+    private fun stopGameLoop() { gravityJob?.cancel(); lockDelayJob?.cancel(); handlingLineClear = false }
 
     private fun onGameOver() {
-        stopGameLoop()
-        soundManager.playGameOver(); vibrationManager.vibrateGameOver()
-        val state = gameState.value
-        viewModelScope.launch {
-            if (state.score > _highScore.value) settingsRepo.setHighScore(state.score)
-            playerRepo.addScore(playerName.value, state.score, state.level, state.lines)
-        }
+        stopGameLoop(); soundManager.playGameOver(); vibrationManager.vibrateGameOver()
+        val s = gameState.value
+        viewModelScope.launch { if (s.score > _highScore.value) settingsRepo.setHighScore(s.score); playerRepo.addScore(playerName.value, s.score, s.level, s.lines) }
     }
 
-    // ===== Settings =====
     fun openSettings() { if (gameState.value.status == GameStatus.PLAYING) pauseGame(); _uiState.update { it.copy(showSettings = true, settingsPage = SettingsPage.MAIN) } }
     fun closeSettings() { _uiState.update { it.copy(showSettings = false) } }
-    fun navigateSettings(page: SettingsPage) { _uiState.update { it.copy(settingsPage = page) } }
+    fun navigateSettings(p: SettingsPage) { _uiState.update { it.copy(settingsPage = p) } }
 
     fun setTheme(t: GameTheme) { _currentTheme.value = t; viewModelScope.launch { settingsRepo.setThemeName(t.name) } }
     fun setGhostPieceEnabled(v: Boolean) { _ghostPieceEnabled.value = v; viewModelScope.launch { settingsRepo.setGhostPieceEnabled(v) } }
