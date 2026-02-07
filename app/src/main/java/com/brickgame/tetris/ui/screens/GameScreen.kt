@@ -1,5 +1,6 @@
 package com.brickgame.tetris.ui.screens
 
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -7,12 +8,16 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.delay
 import com.brickgame.tetris.game.*
 import com.brickgame.tetris.ui.components.*
 import com.brickgame.tetris.ui.layout.DPadStyle
@@ -53,12 +58,8 @@ fun GameScreen(
                 if (gameState.status == GameStatus.GAME_OVER) GameOverOverlay(gameState.score, gameState.level, gameState.lines, onStartGame, onOpenSettings)
             }
         }
-        // Action label
-        if (gameState.lastActionLabel.isNotEmpty() && gameState.status == GameStatus.PLAYING) {
-            Text(gameState.lastActionLabel, Modifier.align(Alignment.TopCenter).padding(top = 8.dp)
-                .clip(RoundedCornerShape(20.dp)).background(theme.accentColor).padding(horizontal = 20.dp, vertical = 6.dp),
-                fontSize = 15.sp, fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace, color = Color.Black)
-        }
+        // Big centered action popup
+        ActionPopup(gameState.lastActionLabel, gameState.linesCleared)
     }
 }
 
@@ -254,6 +255,95 @@ fun GameScreen(
             Text("Level $level · $lines Lines", fontSize = 13.sp, fontFamily = FontFamily.Monospace, color = Color.White.copy(alpha = 0.7f))
             Spacer(Modifier.height(28.dp)); ActionButton("AGAIN", onRestart, width = 160.dp, height = 48.dp, backgroundColor = theme.accentColor)
             Spacer(Modifier.height(12.dp)); ActionButton("MENU", onMenu, width = 160.dp, height = 42.dp)
+        }
+    }
+}
+
+// =============================================================================
+// ACTION POPUP — Big, centered, color-coded, auto-fading
+// =============================================================================
+@Composable
+private fun ActionPopup(label: String, linesCleared: Int) {
+    // Track when label changes to trigger animation
+    var currentLabel by remember { mutableStateOf("") }
+    var showPopup by remember { mutableStateOf(false) }
+    var popupText by remember { mutableStateOf("") }
+    var popupLines by remember { mutableStateOf(0) }
+
+    // Detect label changes
+    LaunchedEffect(label) {
+        if (label.isNotEmpty()) {
+            popupText = label
+            popupLines = linesCleared
+            showPopup = true
+            currentLabel = label
+            // Auto-dismiss after duration
+            delay(1500L)
+            showPopup = false
+        }
+    }
+
+    if (showPopup && popupText.isNotEmpty()) {
+        // Color based on action type
+        val (bgColor, textColor, fontSize) = remember(popupText, popupLines) {
+            when {
+                popupText.contains("Tetris", ignoreCase = true) && popupText.contains("B2B", ignoreCase = true) ->
+                    Triple(Color(0xFFFF4400).copy(alpha = 0.85f), Color.White, 38)
+                popupText.contains("Tetris", ignoreCase = true) ->
+                    Triple(Color(0xFFFF2222).copy(alpha = 0.8f), Color.White, 36)
+                popupText.contains("T-Spin", ignoreCase = true) ->
+                    Triple(Color(0xFF9B59B6).copy(alpha = 0.8f), Color.White, 32)
+                popupText.contains("B2B", ignoreCase = true) ->
+                    Triple(Color(0xFFFF8800).copy(alpha = 0.8f), Color.White, 32)
+                popupLines >= 3 ->
+                    Triple(Color(0xFFFF6600).copy(alpha = 0.75f), Color.White, 30)
+                popupLines == 2 ->
+                    Triple(Color(0xFFF4D03F).copy(alpha = 0.75f), Color.Black, 28)
+                popupLines == 1 ->
+                    Triple(Color.White.copy(alpha = 0.7f), Color.Black, 26)
+                else -> // Combo, other labels
+                    Triple(Color(0xFF3498DB).copy(alpha = 0.75f), Color.White, 28)
+            }
+        }
+
+        // Animate: scale in then fade out
+        val animScale = remember { Animatable(0.3f) }
+        val animAlpha = remember { Animatable(0f) }
+
+        LaunchedEffect(popupText) {
+            // Scale in
+            animScale.snapTo(0.3f)
+            animAlpha.snapTo(0f)
+            // Quick pop in
+            animScale.animateTo(1.1f, tween(120, easing = FastOutSlowInEasing))
+            animAlpha.animateTo(1f, tween(100))
+            // Settle
+            animScale.animateTo(1f, tween(80))
+            // Hold
+            delay(800L)
+            // Fade out
+            animAlpha.animateTo(0f, tween(400))
+        }
+
+        Box(
+            Modifier.fillMaxSize(),
+            Alignment.Center
+        ) {
+            Text(
+                popupText,
+                modifier = Modifier
+                    .scale(animScale.value)
+                    .alpha(animAlpha.value)
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(bgColor)
+                    .padding(horizontal = 36.dp, vertical = 16.dp),
+                fontSize = fontSize.sp,
+                fontWeight = FontWeight.ExtraBold,
+                fontFamily = FontFamily.Monospace,
+                color = textColor,
+                textAlign = TextAlign.Center,
+                letterSpacing = 2.sp
+            )
         }
     }
 }
