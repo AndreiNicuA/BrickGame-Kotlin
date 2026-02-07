@@ -216,8 +216,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         gameLoopJob = viewModelScope.launch {
             while (true) {
                 if (game.state.value.status == GameStatus.PLAYING && !game.isPendingLineClear()) {
-                    val result = game.moveDown()
-                    // If blocked, lock delay is managed by the lock delay loop
+                    game.moveDown()
                 }
                 delay(game.getDropSpeed())
             }

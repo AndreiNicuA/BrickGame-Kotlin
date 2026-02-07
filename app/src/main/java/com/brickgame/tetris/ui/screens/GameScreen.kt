@@ -26,6 +26,7 @@ import com.brickgame.tetris.ui.theme.LocalGameTheme
 
 enum class LayoutMode { CLASSIC, MODERN, FULLSCREEN }
 
+@Suppress("unused")
 @Composable
 fun GameScreen(
     gameState: GameState,
@@ -94,7 +95,7 @@ fun GameScreen(
                     onMoveRightRelease, onMoveDown, onMoveDownRelease, onHardDrop, onRotate,
                     onHold, onOpenSettings
                 )
-                LayoutMode.FULLSCREEN -> ModernPortraitLayout(
+                LayoutMode.FULLSCREEN -> FullscreenPortraitLayout(
                     gameState, clearingLines, ghostPieceEnabled, effectiveStyle, animationDuration,
                     onStartGame, onPauseGame, onMoveLeft, onMoveLeftRelease, onMoveRight,
                     onMoveRightRelease, onMoveDown, onMoveDownRelease, onHardDrop, onRotate,
@@ -592,6 +593,127 @@ private fun ModernPortraitLayout(
         }
 
         Spacer(modifier = Modifier.height(10.dp))
+    }
+}
+
+// ===== FULLSCREEN PORTRAIT - Maximum board, minimal chrome =====
+
+@Composable
+private fun FullscreenPortraitLayout(
+    gameState: GameState, clearingLines: List<Int>,
+    ghostPieceEnabled: Boolean, animationStyle: AnimationStyle, animationDuration: Float,
+    onStartGame: () -> Unit, onPauseGame: () -> Unit,
+    onMoveLeft: () -> Unit, onMoveLeftRelease: () -> Unit,
+    onMoveRight: () -> Unit, onMoveRightRelease: () -> Unit,
+    onMoveDown: () -> Unit, onMoveDownRelease: () -> Unit,
+    onHardDrop: () -> Unit, onRotate: () -> Unit,
+    onHold: () -> Unit, onOpenSettings: () -> Unit
+) {
+    val theme = LocalGameTheme.current
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black)
+            .padding(4.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        // Minimal floating stats - single row
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 4.dp, vertical = 2.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Hold piece (tiny)
+            HoldPiecePreview(
+                shape = gameState.holdPiece?.shape,
+                isUsed = gameState.holdUsed,
+                modifier = Modifier.size(24.dp)
+            )
+
+            // Score
+            Text(
+                gameState.score.toString(),
+                fontSize = 16.sp, fontWeight = FontWeight.Bold,
+                fontFamily = FontFamily.Monospace, color = Color.White
+            )
+
+            // Level/Lines compact
+            Text(
+                "L${gameState.level} · ${gameState.lines}",
+                fontSize = 11.sp, color = Color.Gray
+            )
+
+            // Next piece (tiny, just first)
+            val firstNext = gameState.nextPieces.firstOrNull()
+                ?: gameState.effectiveNextPiece
+            NextPiecePreview(
+                shape = firstNext?.shape,
+                modifier = Modifier.size(24.dp)
+            )
+        }
+
+        // Action label
+        if (gameState.lastActionLabel.isNotEmpty()) {
+            Text(
+                gameState.lastActionLabel,
+                fontSize = 13.sp, fontWeight = FontWeight.Bold,
+                color = actionLabelColor(gameState.lastActionLabel, Color.White)
+            )
+        }
+
+        // Game board - MAXIMUM SIZE
+        Box(
+            modifier = Modifier.weight(1f).fillMaxWidth(),
+            contentAlignment = Alignment.Center
+        ) {
+            GameBoard(
+                board = gameState.board,
+                currentPiece = gameState.currentPiece,
+                ghostY = gameState.ghostY,
+                showGhost = ghostPieceEnabled,
+                clearingLines = clearingLines,
+                animationStyle = animationStyle,
+                animationDuration = animationDuration,
+                modifier = Modifier.aspectRatio(0.5f).fillMaxHeight()
+            )
+        }
+
+        // Controls - compact, edge to edge
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.Bottom
+        ) {
+            // Left: D-Pad with rotate center
+            DPad(
+                buttonSize = 52.dp,
+                rotateInCenter = true,
+                onUpPress = onHardDrop,
+                onDownPress = onMoveDown, onDownRelease = onMoveDownRelease,
+                onLeftPress = onMoveLeft, onLeftRelease = onMoveLeftRelease,
+                onRightPress = onMoveRight, onRightRelease = onMoveRightRelease,
+                onRotate = onRotate
+            )
+
+            // Right: stacked action buttons
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                WideActionButton("HOLD", onHold, width = 64.dp, height = 32.dp)
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    WideActionButton("▶", onStartGame, width = 40.dp, height = 28.dp)
+                    WideActionButton("❚❚", onPauseGame, width = 40.dp, height = 28.dp,
+                        enabled = gameState.status == GameStatus.PLAYING)
+                    WideActionButton("☰", onOpenSettings, width = 40.dp, height = 28.dp)
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(2.dp))
     }
 }
 

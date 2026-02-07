@@ -122,6 +122,10 @@ object SRS {
         
         return if (frontCornersOccupied) {
             TSpinType.FULL
+        } else if (usedKick) {
+            // Per Guideline: if last wall kick was a non-trivial offset (kick 4),
+            // a MINI T-spin is upgraded to FULL
+            TSpinType.FULL
         } else {
             TSpinType.MINI
         }

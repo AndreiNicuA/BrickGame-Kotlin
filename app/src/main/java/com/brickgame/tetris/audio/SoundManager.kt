@@ -9,7 +9,7 @@ import com.brickgame.tetris.ui.styles.SoundStyle
 /**
  * Manages game sound effects with multiple styles
  */
-class SoundManager(context: Context) {
+class SoundManager(@Suppress("unused") private val context: Context) {
     
     companion object {
         private const val TAG = "SoundManager"
