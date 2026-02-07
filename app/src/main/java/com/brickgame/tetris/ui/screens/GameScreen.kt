@@ -26,12 +26,11 @@ import com.brickgame.tetris.ui.theme.LocalGameTheme
 
 enum class LayoutMode { CLASSIC, MODERN, FULLSCREEN }
 
-@Suppress("unused")
 @Composable
 fun GameScreen(
     gameState: GameState,
     clearingLines: List<Int>,
-    vibrationEnabled: Boolean,
+    @Suppress("unused") vibrationEnabled: Boolean,
     ghostPieceEnabled: Boolean,
     animationEnabled: Boolean,
     animationStyle: AnimationStyle,
@@ -49,7 +48,7 @@ fun GameScreen(
     onMoveDownRelease: () -> Unit,
     onHardDrop: () -> Unit,
     onRotate: () -> Unit,
-    onRotateCCW: () -> Unit = {},
+    @Suppress("unused") onRotateCCW: () -> Unit = {},
     onHold: () -> Unit = {},
     onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier
@@ -609,7 +608,6 @@ private fun FullscreenPortraitLayout(
     onHardDrop: () -> Unit, onRotate: () -> Unit,
     onHold: () -> Unit, onOpenSettings: () -> Unit
 ) {
-    val theme = LocalGameTheme.current
 
     Column(
         modifier = Modifier
