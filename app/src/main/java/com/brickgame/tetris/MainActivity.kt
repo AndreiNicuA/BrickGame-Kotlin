@@ -75,6 +75,8 @@ class MainActivity : ComponentActivity() {
                         onMoveDownRelease = viewModel::stopDownRepeat,
                         onHardDrop = viewModel::hardDrop,
                         onRotate = viewModel::rotate,
+                        onRotateCCW = viewModel::rotateCounterClockwise,
+                        onHold = viewModel::holdPiece,
                         onOpenSettings = viewModel::showSettings,
                         modifier = Modifier.fillMaxSize()
                     )

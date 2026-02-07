@@ -1,78 +1,45 @@
-# Brick Game - Improvements Plan
+# BrickGame Kotlin - Improvements Plan
 
-## Version History
-- **v1.0.0** - Initial release with basic Tetris gameplay
-- **v1.1.0** - Line clearing fix, pause/resume, vibration
-- **v1.2.0** - Layout modes, settings menu, game over overlay
-- **v1.3.0** - Style presets, ghost piece, minimalist UI
-- **v1.4.0** - UI scaling, difficulty levels, line clear animations, ergonomic controls
+## Version 2.0 - Major Upgrade
 
----
+### Phase 1: Core Mechanics ✅
+- [x] Hold Piece - store/swap current piece, once per drop
+- [x] Super Rotation System (SRS) - official wall kick tables
+- [x] T-Spin Detection - Mini and Full with proper scoring
+- [x] Lock Delay - 500ms grace period, 15-move reset limit
+- [x] 7-Bag Randomizer - all 7 pieces in every bag
+- [x] Next-3 Queue - preview 3 upcoming pieces
+- [x] Hidden Rows - 4 rows above visible area (Guideline compliant)
+- [x] Official Scoring - 100/300/500/800 x level
+- [x] Back-to-Back Bonus - 1.5x for consecutive difficult clears
+- [x] Combo Counter - 50 x combo x level bonus
+- [x] Game Modes - Marathon, Sprint 40L, Ultra 2min
+- [x] Counter-clockwise Rotation
 
-## Completed Improvements
+### Phase 2: Architecture ✅
+- [x] Lock delay loop (60fps separate coroutine)
+- [x] DAS/ARR configurable input timing
+- [x] Game mode support in ViewModel
 
-### v1.4.0 (Current)
-- [x] Increase text size by ~2x throughout app (except layout structure)
-- [x] Increase button size by 20% with ergonomic arrangement
-- [x] Add difficulty selection (5 levels: Easy, Normal, Hard, Expert, Master)
-- [x] Add line clear animations based on experience style
-- [x] Fix score history to sort by points descending
-- [x] Auto-update version in About section
+### Phase 3: Landscape + UI ✅
+- [x] Full landscape layout (3-zone: controls | board | next/rotate)
+- [x] Automatic orientation detection
+- [x] Hold piece preview (grayed when used)
+- [x] Next-3 queue with size/alpha differentiation
+- [x] Action labels (T-Spin, Tetris, B2B, Combo)
+- [x] Sprint/Ultra timer display on game over
+- [x] Manifest: removed portrait lock, added configChanges
 
----
+### Phase 4: Layout System (Data Models) ✅
+- [x] LayoutElement/LayoutProfile serializable models
+- [x] LayoutPresets (Classic, Lefty, Compact)
+- [x] LayoutRepository with DataStore persistence
+- [x] Export/Import JSON support
 
-## Planned Improvements
-
-### Gameplay
-- [ ] Hold piece feature (save current piece for later)
-- [ ] T-spin detection and bonus scoring
-- [ ] Combo system for consecutive line clears
-- [ ] Speed increase after certain score thresholds
-- [ ] Game modes: Sprint (40 lines), Marathon, Ultra (3 min)
-
-### Visual
-- [ ] Particle effects on line clear
-- [ ] Screen shake on Tetris (4 lines)
-- [ ] Piece lock delay animation
-- [ ] Background themes/wallpapers
-- [ ] Animated piece preview
-
-### Audio
-- [ ] Background music options
-- [ ] Custom sound packs
-- [ ] Volume mixer (separate music/sfx)
-
-### Social
-- [ ] Online leaderboards
-- [ ] Share score to social media
-- [ ] Daily/weekly challenges
-- [ ] Achievement system
-
-### Accessibility
-- [ ] Colorblind mode (different piece shapes/patterns)
-- [ ] One-handed mode
-- [ ] Adjustable control sensitivity
-- [ ] Screen reader support
-
-### Technical
-- [ ] Cloud save/sync
-- [ ] Widget for home screen
-- [ ] Wear OS support
-- [ ] Tablet layout optimization
-
----
-
-## Bug Reports
-*Add bugs here as they are discovered*
-
----
-
-## User Requests
-*Add feature requests from users here*
-
----
-
-## Notes
-- Keep APK size under 15MB
-- Maintain 60fps performance on mid-range devices
-- Test on Android 8.0+ (API 26+)
+### Future Improvements
+- [ ] Drag-and-drop layout editor screen
+- [ ] Unit tests for TetrisGame, SRS, ScoreCalculator
+- [ ] UI tests for GameScreen
+- [ ] Sound engine overhaul
+- [ ] Accessibility (TalkBack, high contrast)
+- [ ] Dependency upgrades (AGP 8.7+, Kotlin 2.1, Compose BOM 2025)
