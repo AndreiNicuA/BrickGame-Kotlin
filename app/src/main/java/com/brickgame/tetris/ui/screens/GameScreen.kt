@@ -454,7 +454,7 @@ private fun LandControls(
     onDownPress: () -> Unit, onDownRelease: () -> Unit,
     onRotate: () -> Unit, onPause: () -> Unit
 ) {
-    Column(Alignment.CenterHorizontally, Arrangement.SpaceEvenly, Modifier.fillMaxHeight().padding(4.dp)) {
+    Column(modifier = Modifier.fillMaxHeight().padding(4.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.SpaceEvenly) {
         WideActionButton("HOLD", onClick = onHold, width = 80.dp, height = 34.dp)
         DPad(50.dp, rotateInCenter = dpadStyle == DPadStyle.ROTATE_CENTRE,
             onUpPress = onHardDrop, onDownPress = onDownPress, onDownRelease = onDownRelease,
