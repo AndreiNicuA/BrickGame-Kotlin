@@ -4,9 +4,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.*
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.brickgame.tetris.ui.screens.GameScreen
@@ -17,107 +15,63 @@ import com.brickgame.tetris.ui.theme.BrickGameTheme
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
         setContent {
-            val viewModel: GameViewModel = viewModel()
-            val gameState by viewModel.gameState.collectAsState()
-            val uiState by viewModel.uiState.collectAsState()
-            val currentTheme by viewModel.currentTheme.collectAsState()
+            val vm: GameViewModel = viewModel()
+            val gs by vm.gameState.collectAsState()
+            val ui by vm.uiState.collectAsState()
+            val theme by vm.currentTheme.collectAsState()
+            val portraitLayout by vm.portraitLayout.collectAsState()
+            val landscapeLayout by vm.landscapeLayout.collectAsState()
+            val dpadStyle by vm.dpadStyle.collectAsState()
+            val ghost by vm.ghostPieceEnabled.collectAsState()
+            val diff by vm.difficulty.collectAsState()
+            val mode by vm.gameMode.collectAsState()
+            val anim by vm.animationStyle.collectAsState()
+            val animDur by vm.animationDuration.collectAsState()
+            val sound by vm.soundEnabled.collectAsState()
+            val vib by vm.vibrationEnabled.collectAsState()
+            val name by vm.playerName.collectAsState()
+            val hs by vm.highScore.collectAsState()
+            val history by vm.scoreHistory.collectAsState()
 
-            // Layout
-            val portraitLayout by viewModel.portraitLayout.collectAsState()
-            val landscapeLayout by viewModel.landscapeLayout.collectAsState()
-            val dpadStyle by viewModel.dpadStyle.collectAsState()
-
-            // Settings
-            val ghostEnabled by viewModel.ghostPieceEnabled.collectAsState()
-            val difficulty by viewModel.difficulty.collectAsState()
-            val gameMode by viewModel.gameMode.collectAsState()
-            val animationStyle by viewModel.animationStyle.collectAsState()
-            val animationDuration by viewModel.animationDuration.collectAsState()
-            val soundEnabled by viewModel.soundEnabled.collectAsState()
-            val vibrationEnabled by viewModel.vibrationEnabled.collectAsState()
-            val playerName by viewModel.playerName.collectAsState()
-            val highScore by viewModel.highScore.collectAsState()
-            val scoreHistory by viewModel.scoreHistory.collectAsState()
-
-            // Orientation detection
             val config = LocalConfiguration.current
             val isLandscape = config.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
             val activeLayout = if (isLandscape) landscapeLayout else portraitLayout
 
-            BrickGameTheme(gameTheme = currentTheme) {
-
-                // Back handler
-                BackHandler(enabled = uiState.showSettings) {
-                    if (uiState.settingsPage != GameViewModel.SettingsPage.MAIN) {
-                        viewModel.navigateSettings(GameViewModel.SettingsPage.MAIN)
-                    } else {
-                        viewModel.closeSettings()
-                    }
+            BrickGameTheme(gameTheme = theme) {
+                BackHandler(enabled = ui.showSettings) {
+                    if (ui.settingsPage != GameViewModel.SettingsPage.MAIN) vm.navigateSettings(GameViewModel.SettingsPage.MAIN)
+                    else vm.closeSettings()
                 }
 
-                if (uiState.showSettings) {
+                if (ui.showSettings) {
                     SettingsScreen(
-                        page = uiState.settingsPage,
-                        currentTheme = currentTheme,
-                        portraitLayout = portraitLayout,
-                        landscapeLayout = landscapeLayout,
-                        dpadStyle = dpadStyle,
-                        difficulty = difficulty,
-                        gameMode = gameMode,
-                        ghostEnabled = ghostEnabled,
-                        animationStyle = animationStyle,
-                        animationDuration = animationDuration,
-                        soundEnabled = soundEnabled,
-                        vibrationEnabled = vibrationEnabled,
-                        playerName = playerName,
-                        highScore = highScore,
-                        scoreHistory = scoreHistory,
-                        onNavigate = viewModel::navigateSettings,
-                        onBack = {
-                            if (uiState.settingsPage != GameViewModel.SettingsPage.MAIN) {
-                                viewModel.navigateSettings(GameViewModel.SettingsPage.MAIN)
-                            } else {
-                                viewModel.closeSettings()
-                            }
-                        },
-                        onSetTheme = viewModel::setTheme,
-                        onSetPortraitLayout = viewModel::setPortraitLayout,
-                        onSetLandscapeLayout = viewModel::setLandscapeLayout,
-                        onSetDPadStyle = viewModel::setDPadStyle,
-                        onSetDifficulty = viewModel::setDifficulty,
-                        onSetGameMode = viewModel::setGameMode,
-                        onSetGhostEnabled = viewModel::setGhostPieceEnabled,
-                        onSetAnimationStyle = viewModel::setAnimationStyle,
-                        onSetAnimationDuration = viewModel::setAnimationDuration,
-                        onSetSoundEnabled = viewModel::setSoundEnabled,
-                        onSetVibrationEnabled = viewModel::setVibrationEnabled,
-                        onSetPlayerName = viewModel::setPlayerName
+                        page = ui.settingsPage, currentTheme = theme,
+                        portraitLayout = portraitLayout, landscapeLayout = landscapeLayout, dpadStyle = dpadStyle,
+                        difficulty = diff, gameMode = mode, ghostEnabled = ghost,
+                        animationStyle = anim, animationDuration = animDur,
+                        soundEnabled = sound, vibrationEnabled = vib,
+                        playerName = name, highScore = hs, scoreHistory = history,
+                        onNavigate = vm::navigateSettings,
+                        onBack = { if (ui.settingsPage != GameViewModel.SettingsPage.MAIN) vm.navigateSettings(GameViewModel.SettingsPage.MAIN) else vm.closeSettings() },
+                        onSetTheme = vm::setTheme, onSetPortraitLayout = vm::setPortraitLayout,
+                        onSetLandscapeLayout = vm::setLandscapeLayout, onSetDPadStyle = vm::setDPadStyle,
+                        onSetDifficulty = vm::setDifficulty, onSetGameMode = vm::setGameMode,
+                        onSetGhostEnabled = vm::setGhostPieceEnabled, onSetAnimationStyle = vm::setAnimationStyle,
+                        onSetAnimationDuration = vm::setAnimationDuration, onSetSoundEnabled = vm::setSoundEnabled,
+                        onSetVibrationEnabled = vm::setVibrationEnabled, onSetPlayerName = vm::setPlayerName
                     )
                 } else {
                     GameScreen(
-                        gameState = gameState.copy(highScore = highScore),
-                        layoutPreset = activeLayout,
-                        dpadStyle = dpadStyle,
-                        ghostEnabled = ghostEnabled,
-                        animationStyle = animationStyle,
-                        animationDuration = animationDuration,
-                        onStartGame = viewModel::startGame,
-                        onPause = viewModel::pauseGame,
-                        onResume = viewModel::resumeGame,
-                        onRotate = viewModel::rotate,
-                        onRotateCCW = viewModel::rotateCounterClockwise,
-                        onHardDrop = viewModel::hardDrop,
-                        onHold = viewModel::holdPiece,
-                        onLeftPress = viewModel::startLeftDAS,
-                        onLeftRelease = viewModel::stopDAS,
-                        onRightPress = viewModel::startRightDAS,
-                        onRightRelease = viewModel::stopDAS,
-                        onDownPress = viewModel::startDownDAS,
-                        onDownRelease = viewModel::stopDAS,
-                        onOpenSettings = viewModel::openSettings,
-                        onToggleSound = viewModel::toggleSound
+                        gameState = gs.copy(highScore = hs), layoutPreset = activeLayout, dpadStyle = dpadStyle,
+                        ghostEnabled = ghost, animationStyle = anim, animationDuration = animDur,
+                        onStartGame = vm::startGame, onPause = vm::pauseGame, onResume = vm::resumeGame,
+                        onRotate = vm::rotate, onRotateCCW = vm::rotateCounterClockwise,
+                        onHardDrop = vm::hardDrop, onHold = vm::holdPiece,
+                        onLeftPress = vm::startLeftDAS, onLeftRelease = vm::stopDAS,
+                        onRightPress = vm::startRightDAS, onRightRelease = vm::stopDAS,
+                        onDownPress = vm::startDownDAS, onDownRelease = vm::stopDAS,
+                        onOpenSettings = vm::openSettings, onToggleSound = vm::toggleSound
                     )
                 }
             }

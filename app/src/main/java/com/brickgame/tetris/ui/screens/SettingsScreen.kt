@@ -1,6 +1,5 @@
 package com.brickgame.tetris.ui.screens
 
-import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -30,10 +29,8 @@ import com.brickgame.tetris.ui.styles.AnimationStyle
 import com.brickgame.tetris.ui.theme.GameTheme
 import com.brickgame.tetris.ui.theme.GameThemes
 
-// ===== Colour Constants =====
 private val BG = Color(0xFF0D0D0D)
 private val CARD = Color(0xFF1A1A1A)
-private val CARD_HOVER = Color(0xFF252525)
 private val ACCENT = Color(0xFFF4D03F)
 private val TEXT = Color(0xFFE8E8E8)
 private val TEXT_DIM = Color(0xFF888888)
@@ -70,445 +67,192 @@ fun SettingsScreen(
     onSetVibrationEnabled: (Boolean) -> Unit,
     onSetPlayerName: (String) -> Unit
 ) {
-    Box(
-        modifier = Modifier.fillMaxSize().background(BG)
-    ) {
+    Box(Modifier.fillMaxSize().background(BG)) {
         when (page) {
-            GameViewModel.SettingsPage.MAIN -> MainSettingsPage(onNavigate, onBack)
-            GameViewModel.SettingsPage.PROFILE -> ProfilePage(playerName, highScore, scoreHistory, onSetPlayerName, { onNavigate(GameViewModel.SettingsPage.MAIN) })
-            GameViewModel.SettingsPage.THEME -> ThemePage(currentTheme, onSetTheme, { onNavigate(GameViewModel.SettingsPage.MAIN) })
-            GameViewModel.SettingsPage.LAYOUT -> LayoutPage(portraitLayout, landscapeLayout, dpadStyle, onSetPortraitLayout, onSetLandscapeLayout, onSetDPadStyle, { onNavigate(GameViewModel.SettingsPage.MAIN) })
-            GameViewModel.SettingsPage.GAMEPLAY -> GameplayPage(difficulty, gameMode, ghostEnabled, onSetDifficulty, onSetGameMode, onSetGhostEnabled, { onNavigate(GameViewModel.SettingsPage.MAIN) })
-            GameViewModel.SettingsPage.EXPERIENCE -> ExperiencePage(animationStyle, animationDuration, soundEnabled, vibrationEnabled, onSetAnimationStyle, onSetAnimationDuration, onSetSoundEnabled, onSetVibrationEnabled, { onNavigate(GameViewModel.SettingsPage.MAIN) })
+            GameViewModel.SettingsPage.MAIN -> MainPage(onNavigate, onBack)
+            GameViewModel.SettingsPage.PROFILE -> ProfilePage(playerName, highScore, scoreHistory, onSetPlayerName) { onNavigate(GameViewModel.SettingsPage.MAIN) }
+            GameViewModel.SettingsPage.THEME -> ThemePage(currentTheme, onSetTheme) { onNavigate(GameViewModel.SettingsPage.MAIN) }
+            GameViewModel.SettingsPage.LAYOUT -> LayoutPage(portraitLayout, landscapeLayout, dpadStyle, onSetPortraitLayout, onSetLandscapeLayout, onSetDPadStyle) { onNavigate(GameViewModel.SettingsPage.MAIN) }
+            GameViewModel.SettingsPage.GAMEPLAY -> GameplayPage(difficulty, gameMode, ghostEnabled, onSetDifficulty, onSetGameMode, onSetGhostEnabled) { onNavigate(GameViewModel.SettingsPage.MAIN) }
+            GameViewModel.SettingsPage.EXPERIENCE -> ExperiencePage(animationStyle, animationDuration, soundEnabled, vibrationEnabled, onSetAnimationStyle, onSetAnimationDuration, onSetSoundEnabled, onSetVibrationEnabled) { onNavigate(GameViewModel.SettingsPage.MAIN) }
             GameViewModel.SettingsPage.ABOUT -> AboutPage { onNavigate(GameViewModel.SettingsPage.MAIN) }
         }
     }
 }
 
-// ===== Main Settings Page =====
-
-@Composable
-private fun MainSettingsPage(
-    onNavigate: (GameViewModel.SettingsPage) -> Unit,
-    onBack: () -> Unit
-) {
-    Column(modifier = Modifier.fillMaxSize().padding(20.dp)) {
-        PageHeader("Settings", onBack = onBack)
+@Composable private fun MainPage(onNav: (GameViewModel.SettingsPage) -> Unit, onBack: () -> Unit) {
+    Column(Modifier.fillMaxSize().padding(20.dp)) {
+        Header("Settings", onBack)
         Spacer(Modifier.height(16.dp))
-
-        SettingsMenuItem("👤", "Profile", "Name, scores, export/import") { onNavigate(GameViewModel.SettingsPage.PROFILE) }
-        SettingsMenuItem("🎨", "Theme", "Colours and visual style") { onNavigate(GameViewModel.SettingsPage.THEME) }
-        SettingsMenuItem("📐", "Layout", "Screen arrangement") { onNavigate(GameViewModel.SettingsPage.LAYOUT) }
-        SettingsMenuItem("🎮", "Gameplay", "Difficulty, mode, controls") { onNavigate(GameViewModel.SettingsPage.GAMEPLAY) }
-        SettingsMenuItem("✨", "Experience", "Animation, sound, vibration") { onNavigate(GameViewModel.SettingsPage.EXPERIENCE) }
-        SettingsMenuItem("ℹ️", "About", "Version, credits") { onNavigate(GameViewModel.SettingsPage.ABOUT) }
+        MenuItem("👤", "Profile", "Name, scores") { onNav(GameViewModel.SettingsPage.PROFILE) }
+        MenuItem("🎨", "Theme", "Colours and style") { onNav(GameViewModel.SettingsPage.THEME) }
+        MenuItem("📐", "Layout", "Screen arrangement") { onNav(GameViewModel.SettingsPage.LAYOUT) }
+        MenuItem("🎮", "Gameplay", "Difficulty, mode") { onNav(GameViewModel.SettingsPage.GAMEPLAY) }
+        MenuItem("✨", "Experience", "Animation, sound") { onNav(GameViewModel.SettingsPage.EXPERIENCE) }
+        MenuItem("ℹ️", "About", "Version, credits") { onNav(GameViewModel.SettingsPage.ABOUT) }
     }
 }
 
-// ===== Profile Page =====
-
-@Composable
-private fun ProfilePage(
-    playerName: String,
-    highScore: Int,
-    scoreHistory: List<ScoreEntry>,
-    onSetPlayerName: (String) -> Unit,
-    onBack: () -> Unit
-) {
-    LazyColumn(modifier = Modifier.fillMaxSize().padding(20.dp)) {
-        item { PageHeader("Profile", onBack = onBack) }
-        item { Spacer(Modifier.height(16.dp)) }
-        item {
-            SettingsCard {
-                Text("Player Name", color = TEXT_DIM, fontSize = 12.sp)
-                Text(playerName, color = TEXT, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-            }
+@Composable private fun ProfilePage(name: String, hs: Int, history: List<ScoreEntry>, onName: (String) -> Unit, onBack: () -> Unit) {
+    LazyColumn(Modifier.fillMaxSize().padding(20.dp)) {
+        item { Header("Profile", onBack); Spacer(Modifier.height(16.dp)) }
+        item { Card { Text("Player Name", color = TEXT_DIM, fontSize = 12.sp); Text(name, color = TEXT, fontSize = 18.sp, fontWeight = FontWeight.Bold) } }
+        item { Card { Text("High Score", color = TEXT_DIM, fontSize = 12.sp); Text(hs.toString(), color = ACCENT, fontSize = 24.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace) } }
+        item { Label("Score History") }
+        if (history.isEmpty()) { item { Card { Text("No games yet", color = TEXT_DIM) } } }
+        items(history.size.coerceAtMost(20)) { i ->
+            val e = history[i]
+            Card { Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween) {
+                Text("${i+1}.", color = TEXT_DIM, fontSize = 14.sp)
+                Text("${e.score}", color = ACCENT, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+                Text("Lv${e.level}", color = TEXT_DIM, fontSize = 12.sp)
+                Text("${e.lines}L", color = TEXT_DIM, fontSize = 12.sp)
+            }}
         }
-        item {
-            SettingsCard {
-                Text("High Score", color = TEXT_DIM, fontSize = 12.sp)
-                Text(highScore.toString(), color = ACCENT, fontSize = 24.sp,
-                    fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
-            }
-        }
-        item {
-            SectionLabel("Score History")
-        }
-        if (scoreHistory.isEmpty()) {
-            item {
-                SettingsCard { Text("No games played yet", color = TEXT_DIM) }
-            }
-        }
-        items(scoreHistory.size.coerceAtMost(20)) { i ->
-            val entry = scoreHistory[i]
-            SettingsCard {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text("${i + 1}.", color = TEXT_DIM, fontSize = 14.sp)
-                    Text("${entry.score}", color = ACCENT, fontFamily = FontFamily.Monospace,
-                        fontWeight = FontWeight.Bold)
-                    Text("Lv${entry.level}", color = TEXT_DIM, fontSize = 12.sp)
-                    Text("${entry.lines}L", color = TEXT_DIM, fontSize = 12.sp)
-                }
-            }
-        }
-        // Export/Import placeholder for v3.1
-        item { Spacer(Modifier.height(16.dp)) }
-        item {
-            SettingsCard {
-                Text("Export / Import", color = TEXT_DIM, fontSize = 14.sp)
-                Text("Coming in v3.1.0", color = TEXT_DIM, fontSize = 12.sp)
-            }
-        }
+        item { Spacer(Modifier.height(16.dp)); Card { Text("Export / Import — v3.1.0", color = TEXT_DIM, fontSize = 13.sp) } }
     }
 }
 
-// ===== Theme Page =====
-
-@Composable
-private fun ThemePage(
-    currentTheme: GameTheme,
-    onSetTheme: (GameTheme) -> Unit,
-    onBack: () -> Unit
-) {
-    LazyColumn(modifier = Modifier.fillMaxSize().padding(20.dp)) {
-        item { PageHeader("Theme", onBack = onBack) }
-        item { Spacer(Modifier.height(16.dp)) }
-
+@Composable private fun ThemePage(current: GameTheme, onSet: (GameTheme) -> Unit, onBack: () -> Unit) {
+    LazyColumn(Modifier.fillMaxSize().padding(20.dp)) {
+        item { Header("Theme", onBack); Spacer(Modifier.height(16.dp)) }
         items(GameThemes.allThemes.size) { i ->
-            val theme = GameThemes.allThemes[i]
-            val isSelected = theme.id == currentTheme.id
-
+            val t = GameThemes.allThemes[i]; val sel = t.id == current.id
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 4.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(if (isSelected) ACCENT.copy(alpha = 0.15f) else CARD)
-                    .clickable { onSetTheme(theme) }
-                    .padding(16.dp),
+                Modifier.fillMaxWidth().padding(vertical = 4.dp).clip(RoundedCornerShape(12.dp))
+                    .background(if (sel) ACCENT.copy(alpha = 0.15f) else CARD)
+                    .clickable { onSet(t) }.padding(16.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Colour preview
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Box(Modifier.size(24.dp).clip(CircleShape).background(theme.screenBackground))
-                    Box(Modifier.size(24.dp).clip(CircleShape).background(theme.pixelOn))
-                    Box(Modifier.size(24.dp).clip(CircleShape).background(theme.buttonPrimary))
+                    Box(Modifier.size(24.dp).clip(CircleShape).background(t.screenBackground))
+                    Box(Modifier.size(24.dp).clip(CircleShape).background(t.pixelOn))
+                    Box(Modifier.size(24.dp).clip(CircleShape).background(t.buttonPrimary))
                 }
                 Spacer(Modifier.width(16.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(theme.name, color = TEXT, fontWeight = FontWeight.Bold)
-                }
-                if (isSelected) {
-                    Text("✓", color = ACCENT, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-                }
+                Text(t.name, color = TEXT, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                if (sel) Text("✓", color = ACCENT, fontSize = 20.sp, fontWeight = FontWeight.Bold)
             }
         }
-
-        // Custom theme builder placeholder for v3.2
-        item { Spacer(Modifier.height(16.dp)) }
-        item {
-            SettingsCard {
-                Text("+ Create Custom Theme", color = TEXT_DIM, fontSize = 14.sp)
-                Text("Coming in v3.2.0", color = TEXT_DIM, fontSize = 12.sp)
-            }
-        }
+        item { Spacer(Modifier.height(16.dp)); Card { Text("+ Custom Theme Builder — v3.2.0", color = TEXT_DIM, fontSize = 13.sp) } }
     }
 }
 
-// ===== Layout Page =====
-
-@Composable
-private fun LayoutPage(
-    portraitLayout: LayoutPreset,
-    landscapeLayout: LayoutPreset,
-    dpadStyle: DPadStyle,
-    onSetPortrait: (LayoutPreset) -> Unit,
-    onSetLandscape: (LayoutPreset) -> Unit,
-    onSetDPadStyle: (DPadStyle) -> Unit,
-    onBack: () -> Unit
+@Composable private fun LayoutPage(
+    portrait: LayoutPreset, landscape: LayoutPreset, dpad: DPadStyle,
+    onP: (LayoutPreset) -> Unit, onL: (LayoutPreset) -> Unit, onD: (DPadStyle) -> Unit, onBack: () -> Unit
 ) {
-    LazyColumn(modifier = Modifier.fillMaxSize().padding(20.dp)) {
-        item { PageHeader("Layout", onBack = onBack) }
-
-        item { SectionLabel("Portrait") }
-        items(LayoutPreset.portraitPresets().size) { i ->
-            val preset = LayoutPreset.portraitPresets()[i]
-            SelectableRow(preset.displayName, preset == portraitLayout) { onSetPortrait(preset) }
-        }
-
-        item { SectionLabel("Landscape") }
-        items(LayoutPreset.landscapePresets().size) { i ->
-            val preset = LayoutPreset.landscapePresets()[i]
-            SelectableRow(preset.displayName, preset == landscapeLayout) { onSetLandscape(preset) }
-        }
-
-        item { SectionLabel("D-Pad Style") }
-        items(DPadStyle.entries.size) { i ->
-            val style = DPadStyle.entries[i]
-            SelectableRow(style.displayName, style == dpadStyle) { onSetDPadStyle(style) }
-        }
-
-        // Custom layout editor placeholder for v3.3
-        item { Spacer(Modifier.height(16.dp)) }
-        item {
-            SettingsCard {
-                Text("+ Custom Layout Editor", color = TEXT_DIM, fontSize = 14.sp)
-                Text("Coming in v3.3.0", color = TEXT_DIM, fontSize = 12.sp)
-            }
-        }
+    LazyColumn(Modifier.fillMaxSize().padding(20.dp)) {
+        item { Header("Layout", onBack) }
+        item { Label("Portrait") }
+        items(LayoutPreset.portraitPresets().size) { i -> val p = LayoutPreset.portraitPresets()[i]; Sel(p.displayName, p == portrait) { onP(p) } }
+        item { Label("Landscape") }
+        items(LayoutPreset.landscapePresets().size) { i -> val p = LayoutPreset.landscapePresets()[i]; Sel(p.displayName, p == landscape) { onL(p) } }
+        item { Label("D-Pad Style") }
+        items(DPadStyle.entries.size) { i -> val s = DPadStyle.entries[i]; Sel(s.displayName, s == dpad) { onD(s) } }
+        item { Spacer(Modifier.height(16.dp)); Card { Text("+ Custom Layout Editor — v3.3.0", color = TEXT_DIM, fontSize = 13.sp) } }
     }
 }
 
-// ===== Gameplay Page =====
-
-@Composable
-private fun GameplayPage(
-    difficulty: Difficulty,
-    gameMode: GameMode,
-    ghostEnabled: Boolean,
-    onSetDifficulty: (Difficulty) -> Unit,
-    onSetGameMode: (GameMode) -> Unit,
-    onSetGhostEnabled: (Boolean) -> Unit,
-    onBack: () -> Unit
+@Composable private fun GameplayPage(
+    diff: Difficulty, mode: GameMode, ghost: Boolean,
+    onD: (Difficulty) -> Unit, onM: (GameMode) -> Unit, onG: (Boolean) -> Unit, onBack: () -> Unit
 ) {
-    LazyColumn(modifier = Modifier.fillMaxSize().padding(20.dp)) {
-        item { PageHeader("Gameplay", onBack = onBack) }
-
-        item { SectionLabel("Difficulty") }
-        items(Difficulty.entries.size) { i ->
-            val diff = Difficulty.entries[i]
-            SelectableRow(
-                "${diff.displayName} — ${diff.description}",
-                diff == difficulty
-            ) { onSetDifficulty(diff) }
-        }
-
-        item { SectionLabel("Game Mode") }
-        items(GameMode.entries.size) { i ->
-            val mode = GameMode.entries[i]
-            SelectableRow(
-                "${mode.displayName} — ${mode.description}",
-                mode == gameMode
-            ) { onSetGameMode(mode) }
-        }
-
-        item { SectionLabel("Options") }
-        item {
-            SettingsCard {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("Ghost Piece", color = TEXT, fontSize = 16.sp)
-                    Switch(
-                        checked = ghostEnabled,
-                        onCheckedChange = onSetGhostEnabled,
-                        colors = SwitchDefaults.colors(checkedTrackColor = ACCENT)
-                    )
-                }
-            }
-        }
+    LazyColumn(Modifier.fillMaxSize().padding(20.dp)) {
+        item { Header("Gameplay", onBack) }
+        item { Label("Difficulty") }
+        items(Difficulty.entries.size) { i -> val d = Difficulty.entries[i]; Sel("${d.displayName} — ${d.description}", d == diff) { onD(d) } }
+        item { Label("Game Mode") }
+        items(GameMode.entries.size) { i -> val m = GameMode.entries[i]; Sel("${m.displayName} — ${m.description}", m == mode) { onM(m) } }
+        item { Label("Options") }
+        item { Card { Toggle("Ghost Piece", ghost, onG) } }
     }
 }
 
-// ===== Experience Page =====
-
-@Composable
-private fun ExperiencePage(
-    animationStyle: AnimationStyle,
-    animationDuration: Float,
-    soundEnabled: Boolean,
-    vibrationEnabled: Boolean,
-    onSetAnimationStyle: (AnimationStyle) -> Unit,
-    onSetAnimationDuration: (Float) -> Unit,
-    onSetSoundEnabled: (Boolean) -> Unit,
-    onSetVibrationEnabled: (Boolean) -> Unit,
-    onBack: () -> Unit
+@Composable private fun ExperiencePage(
+    aStyle: AnimationStyle, aDur: Float, sound: Boolean, vib: Boolean,
+    onAS: (AnimationStyle) -> Unit, onAD: (Float) -> Unit, onS: (Boolean) -> Unit, onV: (Boolean) -> Unit, onBack: () -> Unit
 ) {
-    LazyColumn(modifier = Modifier.fillMaxSize().padding(20.dp)) {
-        item { PageHeader("Experience", onBack = onBack) }
-
-        item { SectionLabel("Animation") }
-        items(AnimationStyle.entries.size) { i ->
-            val style = AnimationStyle.entries[i]
-            SelectableRow(
-                "${style.displayName} — ${style.description}",
-                style == animationStyle
-            ) { onSetAnimationStyle(style) }
-        }
-        item {
-            SettingsCard {
-                Text("Animation Speed", color = TEXT, fontSize = 14.sp)
-                Slider(
-                    value = animationDuration,
-                    onValueChange = onSetAnimationDuration,
-                    valueRange = 0.1f..2f,
-                    colors = SliderDefaults.colors(thumbColor = ACCENT, activeTrackColor = ACCENT)
-                )
-                Text("${(animationDuration * 1000).toInt()}ms", color = TEXT_DIM, fontSize = 12.sp)
-            }
-        }
-
-        item { SectionLabel("Sound & Vibration") }
-        item {
-            SettingsCard {
-                ToggleRow("Sound", soundEnabled, onSetSoundEnabled)
-                Spacer(Modifier.height(8.dp))
-                ToggleRow("Vibration", vibrationEnabled, onSetVibrationEnabled)
-            }
-        }
-
-        // Visual evolution placeholder for v3.4
-        item { Spacer(Modifier.height(16.dp)) }
-        item {
-            SettingsCard {
-                Text("✨ Visual Evolution", color = TEXT_DIM, fontSize = 14.sp)
-                Text("Coming in v3.4.0", color = TEXT_DIM, fontSize = 12.sp)
-            }
-        }
+    LazyColumn(Modifier.fillMaxSize().padding(20.dp)) {
+        item { Header("Experience", onBack) }
+        item { Label("Animation") }
+        items(AnimationStyle.entries.size) { i -> val s = AnimationStyle.entries[i]; Sel("${s.displayName} — ${s.description}", s == aStyle) { onAS(s) } }
+        item { Card {
+            Text("Speed", color = TEXT, fontSize = 14.sp)
+            Slider(value = aDur, onValueChange = onAD, valueRange = 0.1f..2f,
+                colors = SliderDefaults.colors(thumbColor = ACCENT, activeTrackColor = ACCENT))
+            Text("${(aDur * 1000).toInt()}ms", color = TEXT_DIM, fontSize = 12.sp)
+        }}
+        item { Label("Sound & Vibration") }
+        item { Card { Toggle("Sound", sound, onS); Spacer(Modifier.height(8.dp)); Toggle("Vibration", vib, onV) } }
+        item { Spacer(Modifier.height(16.dp)); Card { Text("✨ Visual Evolution — v3.4.0", color = TEXT_DIM, fontSize = 13.sp) } }
     }
 }
 
-// ===== About Page =====
-
-@Composable
-private fun AboutPage(onBack: () -> Unit) {
-    Column(modifier = Modifier.fillMaxSize().padding(20.dp)) {
-        PageHeader("About", onBack = onBack)
-        Spacer(Modifier.height(24.dp))
-
-        SettingsCard {
-            Text("BRICK GAME", color = ACCENT, fontSize = 24.sp,
-                fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace)
-            Spacer(Modifier.height(4.dp))
+@Composable private fun AboutPage(onBack: () -> Unit) {
+    Column(Modifier.fillMaxSize().padding(20.dp)) {
+        Header("About", onBack); Spacer(Modifier.height(24.dp))
+        Card {
+            Text("BRICK GAME", color = ACCENT, fontSize = 24.sp, fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace)
             Text("Kotlin Edition", color = TEXT, fontSize = 16.sp)
         }
-
-        SettingsCard {
-            InfoRow("Version", "3.0.0")
-            InfoRow("Build", "10")
-            InfoRow("Min Android", "8.0 (API 26)")
-            InfoRow("Architecture", "MVVM + Compose")
-        }
-
-        SettingsCard {
-            Text("Developer", color = TEXT_DIM, fontSize = 12.sp)
-            Text("Andrei Anton", color = TEXT, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-        }
-
-        SettingsCard {
-            Text("Changelog", color = TEXT_DIM, fontSize = 12.sp)
-            Spacer(Modifier.height(4.dp))
+        Card { Info("Version", "3.0.0"); Info("Build", "10"); Info("Min Android", "8.0 (API 26)") }
+        Card { Text("Developer", color = TEXT_DIM, fontSize = 12.sp); Text("Andrei Anton", color = TEXT, fontSize = 16.sp, fontWeight = FontWeight.Bold) }
+        Card {
             Text("v3.0.0 — Fresh start", color = ACCENT, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-            Text("• Core Tetris engine (SRS, T-Spin, B2B, Combos)", color = TEXT, fontSize = 12.sp)
-            Text("• 5 built-in themes", color = TEXT, fontSize = 12.sp)
-            Text("• 5 fixed layouts (3 portrait + 2 landscape)", color = TEXT, fontSize = 12.sp)
-            Text("• Both D-Pad styles (Standard + Rotate Centre)", color = TEXT, fontSize = 12.sp)
-            Text("• Full settings with profile, gameplay, experience", color = TEXT, fontSize = 12.sp)
+            Text("Core engine (SRS, T-Spin, B2B, Combos)", color = TEXT, fontSize = 12.sp)
+            Text("5 themes, 5 layouts, 2 D-Pad styles", color = TEXT, fontSize = 12.sp)
+            Text("Full settings with profile & experience", color = TEXT, fontSize = 12.sp)
         }
     }
 }
 
-// ===== Reusable Components =====
-
-@Composable
-private fun PageHeader(title: String, onBack: () -> Unit) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text("←", color = ACCENT, fontSize = 24.sp, fontWeight = FontWeight.Bold,
-            modifier = Modifier.clickable { onBack() }.padding(8.dp))
+// ===== Reusable =====
+@Composable private fun Header(title: String, onBack: () -> Unit) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Text("←", color = ACCENT, fontSize = 24.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { onBack() }.padding(8.dp))
         Spacer(Modifier.width(12.dp))
         Text(title, color = TEXT, fontSize = 22.sp, fontWeight = FontWeight.Bold)
     }
 }
 
-@Composable
-private fun SettingsMenuItem(icon: String, title: String, subtitle: String, onClick: () -> Unit) {
+@Composable private fun MenuItem(icon: String, title: String, sub: String, onClick: () -> Unit) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp)
-            .clip(RoundedCornerShape(12.dp))
-            .background(CARD)
-            .clickable { onClick() }
-            .padding(16.dp),
+        Modifier.fillMaxWidth().padding(vertical = 4.dp).clip(RoundedCornerShape(12.dp)).background(CARD).clickable { onClick() }.padding(16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(icon, fontSize = 22.sp)
-        Spacer(Modifier.width(16.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(title, color = TEXT, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-            Text(subtitle, color = TEXT_DIM, fontSize = 12.sp)
-        }
+        Text(icon, fontSize = 22.sp); Spacer(Modifier.width(16.dp))
+        Column(Modifier.weight(1f)) { Text(title, color = TEXT, fontWeight = FontWeight.Bold, fontSize = 16.sp); Text(sub, color = TEXT_DIM, fontSize = 12.sp) }
         Text("›", color = TEXT_DIM, fontSize = 20.sp)
     }
 }
 
-@Composable
-private fun SettingsCard(content: @Composable ColumnScope.() -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp)
-            .clip(RoundedCornerShape(12.dp))
-            .background(CARD)
-            .padding(16.dp),
-        content = content
-    )
+@Composable private fun Card(content: @Composable ColumnScope.() -> Unit) {
+    Column(Modifier.fillMaxWidth().padding(vertical = 4.dp).clip(RoundedCornerShape(12.dp)).background(CARD).padding(16.dp), content = content)
 }
 
-@Composable
-private fun SectionLabel(text: String) {
-    Text(text, color = ACCENT, fontSize = 14.sp, fontWeight = FontWeight.Bold,
-        modifier = Modifier.padding(top = 16.dp, bottom = 8.dp))
-}
+@Composable private fun Label(text: String) { Text(text, color = ACCENT, fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)) }
 
-@Composable
-private fun SelectableRow(text: String, isSelected: Boolean, onClick: () -> Unit) {
+@Composable private fun Sel(text: String, sel: Boolean, onClick: () -> Unit) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 2.dp)
-            .clip(RoundedCornerShape(8.dp))
-            .background(if (isSelected) ACCENT.copy(alpha = 0.15f) else CARD)
-            .clickable { onClick() }
-            .padding(12.dp),
+        Modifier.fillMaxWidth().padding(vertical = 2.dp).clip(RoundedCornerShape(8.dp))
+            .background(if (sel) ACCENT.copy(alpha = 0.15f) else CARD).clickable { onClick() }.padding(12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(text, color = TEXT, fontSize = 14.sp, modifier = Modifier.weight(1f))
-        if (isSelected) Text("✓", color = ACCENT, fontWeight = FontWeight.Bold)
+        if (sel) Text("✓", color = ACCENT, fontWeight = FontWeight.Bold)
     }
 }
 
-@Composable
-private fun ToggleRow(label: String, enabled: Boolean, onToggle: (Boolean) -> Unit) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
+@Composable private fun Toggle(label: String, v: Boolean, onToggle: (Boolean) -> Unit) {
+    Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
         Text(label, color = TEXT, fontSize = 16.sp)
-        Switch(
-            checked = enabled,
-            onCheckedChange = onToggle,
-            colors = SwitchDefaults.colors(checkedTrackColor = ACCENT)
-        )
+        Switch(checked = v, onCheckedChange = onToggle, colors = SwitchDefaults.colors(checkedTrackColor = ACCENT))
     }
 }
 
-@Composable
-private fun InfoRow(label: String, value: String) {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        Text(label, color = TEXT_DIM, fontSize = 14.sp)
-        Text(value, color = TEXT, fontSize = 14.sp, fontFamily = FontFamily.Monospace)
+@Composable private fun Info(label: String, value: String) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), Arrangement.SpaceBetween) {
+        Text(label, color = TEXT_DIM, fontSize = 14.sp); Text(value, color = TEXT, fontSize = 14.sp, fontFamily = FontFamily.Monospace)
     }
 }
