@@ -94,9 +94,9 @@ fun LayoutEditorScreen(
                 val bp = pos[LayoutElements.BOARD] ?: ElementPosition(0.5f, 0.4f)
                 val bW = with(density) { (maxWidth * 0.75f).toPx() }
                 val bH = with(density) { (maxHeight * 0.55f).toPx() }
-                DraggableWrapper("Board", bp, maxWPx, maxHPx, bW, bH) { newPos ->
+                DraggableWrapper("Board", bp, maxWPx, maxHPx, bW, bH, onDragEnd = { newPos ->
                     onUpdateLayout(layout.copy(positions = pos + (LayoutElements.BOARD to newPos)))
-                } {
+                }) {
                     Box(Modifier.fillMaxSize().clip(RoundedCornerShape(4.dp)).background(theme.screenBackground)) {
                         // Show a static grid placeholder
                         Column(Modifier.fillMaxSize().padding(2.dp), Arrangement.SpaceEvenly) {
@@ -116,9 +116,9 @@ fun LayoutEditorScreen(
             // ---- SCORE ----
             if (vis.getOrDefault(LayoutElements.SCORE, true)) {
                 val sp2 = pos[LayoutElements.SCORE] ?: ElementPosition(0.5f, 0.03f)
-                DraggableWrapper("Score", sp2, maxWPx, maxHPx, with(density) { 120.dp.toPx() }, with(density) { 24.dp.toPx() }) { newPos ->
+                DraggableWrapper("Score", sp2, maxWPx, maxHPx, with(density) { 120.dp.toPx() }, with(density) { 24.dp.toPx() }, onDragEnd = { newPos ->
                     onUpdateLayout(layout.copy(positions = pos + (LayoutElements.SCORE to newPos)))
-                } {
+                }) {
                     Text("0001234", color = theme.accentColor, fontSize = 16.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace,
                         modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(4.dp)).background(theme.deviceColor.copy(0.5f)).padding(horizontal = 4.dp))
                 }
@@ -127,9 +127,9 @@ fun LayoutEditorScreen(
             // ---- LEVEL ----
             if (vis.getOrDefault(LayoutElements.LEVEL, true)) {
                 val lp = pos[LayoutElements.LEVEL] ?: ElementPosition(0.15f, 0.03f)
-                DraggableWrapper("Level", lp, maxWPx, maxHPx, with(density) { 46.dp.toPx() }, with(density) { 18.dp.toPx() }) { newPos ->
+                DraggableWrapper("Level", lp, maxWPx, maxHPx, with(density) { 46.dp.toPx() }, with(density) { 18.dp.toPx() }, onDragEnd = { newPos ->
                     onUpdateLayout(layout.copy(positions = pos + (LayoutElements.LEVEL to newPos)))
-                } {
+                }) {
                     Text("LV 1", color = theme.textSecondary, fontSize = 10.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace,
                         modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(4.dp)).background(theme.deviceColor.copy(0.5f)).wrapContentAlignment(Alignment.Center))
                 }
@@ -138,9 +138,9 @@ fun LayoutEditorScreen(
             // ---- LINES ----
             if (vis.getOrDefault(LayoutElements.LINES, true)) {
                 val lp = pos[LayoutElements.LINES] ?: ElementPosition(0.85f, 0.03f)
-                DraggableWrapper("Lines", lp, maxWPx, maxHPx, with(density) { 46.dp.toPx() }, with(density) { 18.dp.toPx() }) { newPos ->
+                DraggableWrapper("Lines", lp, maxWPx, maxHPx, with(density) { 46.dp.toPx() }, with(density) { 18.dp.toPx() }, onDragEnd = { newPos ->
                     onUpdateLayout(layout.copy(positions = pos + (LayoutElements.LINES to newPos)))
-                } {
+                }) {
                     Text("0 L", color = theme.textSecondary, fontSize = 10.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace,
                         modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(4.dp)).background(theme.deviceColor.copy(0.5f)).wrapContentAlignment(Alignment.Center))
                 }
@@ -149,9 +149,9 @@ fun LayoutEditorScreen(
             // ---- HOLD PREVIEW ----
             if (vis.getOrDefault(LayoutElements.HOLD_PREVIEW, true)) {
                 val hp = pos[LayoutElements.HOLD_PREVIEW] ?: ElementPosition(0.1f, 0.1f)
-                DraggableWrapper("Hold", hp, maxWPx, maxHPx, with(density) { 52.dp.toPx() }, with(density) { 58.dp.toPx() }) { newPos ->
+                DraggableWrapper("Hold", hp, maxWPx, maxHPx, with(density) { 52.dp.toPx() }, with(density) { 58.dp.toPx() }, onDragEnd = { newPos ->
                     onUpdateLayout(layout.copy(positions = pos + (LayoutElements.HOLD_PREVIEW to newPos)))
-                } {
+                }) {
                     Column(Modifier.fillMaxSize().clip(RoundedCornerShape(4.dp)).background(theme.deviceColor.copy(0.5f)).padding(2.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                         Text("HOLD", color = theme.textSecondary, fontSize = 8.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
                         Box(Modifier.size(36.dp).clip(RoundedCornerShape(4.dp)).background(theme.screenBackground.copy(0.3f)))
@@ -162,9 +162,9 @@ fun LayoutEditorScreen(
             // ---- NEXT PREVIEW ----
             if (vis.getOrDefault(LayoutElements.NEXT_PREVIEW, true)) {
                 val np = pos[LayoutElements.NEXT_PREVIEW] ?: ElementPosition(0.9f, 0.1f)
-                DraggableWrapper("Next", np, maxWPx, maxHPx, with(density) { 52.dp.toPx() }, with(density) { 58.dp.toPx() }) { newPos ->
+                DraggableWrapper("Next", np, maxWPx, maxHPx, with(density) { 52.dp.toPx() }, with(density) { 58.dp.toPx() }, onDragEnd = { newPos ->
                     onUpdateLayout(layout.copy(positions = pos + (LayoutElements.NEXT_PREVIEW to newPos)))
-                } {
+                }) {
                     Column(Modifier.fillMaxSize().clip(RoundedCornerShape(4.dp)).background(theme.deviceColor.copy(0.5f)).padding(2.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                         Text("NEXT", color = theme.textSecondary, fontSize = 8.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
                         Box(Modifier.size(36.dp).clip(RoundedCornerShape(4.dp)).background(theme.screenBackground.copy(0.3f)))
@@ -176,9 +176,9 @@ fun LayoutEditorScreen(
             if (vis.getOrDefault(LayoutElements.DPAD, true)) {
                 val dp2 = pos[LayoutElements.DPAD] ?: ElementPosition(0.2f, 0.82f)
                 val dpadSz = when (layout.controlSize) { "SMALL" -> 110f; "LARGE" -> 160f; else -> 140f }
-                DraggableWrapper("D-Pad", dp2, maxWPx, maxHPx, with(density) { dpadSz.dp.toPx() }, with(density) { dpadSz.dp.toPx() }) { newPos ->
+                DraggableWrapper("D-Pad", dp2, maxWPx, maxHPx, with(density) { dpadSz.dp.toPx() }, with(density) { dpadSz.dp.toPx() }, onDragEnd = { newPos ->
                     onUpdateLayout(layout.copy(positions = pos + (LayoutElements.DPAD to newPos)))
-                } {
+                }) {
                     // Render actual DPad (disabled for interaction, just visual)
                     DPad(when (layout.controlSize) { "SMALL" -> 40.dp; "LARGE" -> 58.dp; else -> 50.dp },
                         rotateInCenter = dpadStyle == DPadStyle.ROTATE_CENTRE,
@@ -191,9 +191,9 @@ fun LayoutEditorScreen(
             if (vis.getOrDefault(LayoutElements.ROTATE_BTN, true)) {
                 val rp = pos[LayoutElements.ROTATE_BTN] ?: ElementPosition(0.82f, 0.82f)
                 val rotSz = when (layout.controlSize) { "SMALL" -> 52f; "LARGE" -> 74f; else -> 66f }
-                DraggableWrapper("Rotate", rp, maxWPx, maxHPx, with(density) { rotSz.dp.toPx() }, with(density) { rotSz.dp.toPx() }) { newPos ->
+                DraggableWrapper("Rotate", rp, maxWPx, maxHPx, with(density) { rotSz.dp.toPx() }, with(density) { rotSz.dp.toPx() }, onDragEnd = { newPos ->
                     onUpdateLayout(layout.copy(positions = pos + (LayoutElements.ROTATE_BTN to newPos)))
-                } {
+                }) {
                     RotateButton({}, when (layout.controlSize) { "SMALL" -> 52.dp; "LARGE" -> 74.dp; else -> 66.dp })
                 }
             }
@@ -201,9 +201,9 @@ fun LayoutEditorScreen(
             // ---- HOLD BUTTON ----
             if (vis.getOrDefault(LayoutElements.HOLD_BTN, true)) {
                 val hb = pos[LayoutElements.HOLD_BTN] ?: ElementPosition(0.5f, 0.78f)
-                DraggableWrapper("Hold Btn", hb, maxWPx, maxHPx, with(density) { 82.dp.toPx() }, with(density) { 36.dp.toPx() }) { newPos ->
+                DraggableWrapper("Hold Btn", hb, maxWPx, maxHPx, with(density) { 82.dp.toPx() }, with(density) { 36.dp.toPx() }, onDragEnd = { newPos ->
                     onUpdateLayout(layout.copy(positions = pos + (LayoutElements.HOLD_BTN to newPos)))
-                } {
+                }) {
                     ActionButton("HOLD", {}, width = 78.dp, height = 34.dp)
                 }
             }
@@ -211,18 +211,18 @@ fun LayoutEditorScreen(
             // ---- PAUSE BUTTON ----
             if (vis.getOrDefault(LayoutElements.PAUSE_BTN, true)) {
                 val pb = pos[LayoutElements.PAUSE_BTN] ?: ElementPosition(0.5f, 0.86f)
-                DraggableWrapper("Pause Btn", pb, maxWPx, maxHPx, with(density) { 82.dp.toPx() }, with(density) { 36.dp.toPx() }) { newPos ->
+                DraggableWrapper("Pause Btn", pb, maxWPx, maxHPx, with(density) { 82.dp.toPx() }, with(density) { 36.dp.toPx() }, onDragEnd = { newPos ->
                     onUpdateLayout(layout.copy(positions = pos + (LayoutElements.PAUSE_BTN to newPos)))
-                } {
+                }) {
                     ActionButton("PAUSE", {}, width = 78.dp, height = 34.dp)
                 }
             }
 
             // ---- MENU ≡ (always visible, always draggable) ----
             val mp = pos[LayoutElements.MENU_BTN] ?: ElementPosition(0.5f, 0.94f)
-            DraggableWrapper("Menu ≡", mp, maxWPx, maxHPx, with(density) { 50.dp.toPx() }, with(density) { 28.dp.toPx() }) { newPos ->
+            DraggableWrapper("Menu ≡", mp, maxWPx, maxHPx, with(density) { 50.dp.toPx() }, with(density) { 28.dp.toPx() }, onDragEnd = { newPos ->
                 onUpdateLayout(layout.copy(positions = pos + (LayoutElements.MENU_BTN to newPos)))
-            } {
+            }) {
                 ActionButton("≡", {}, width = 46.dp, height = 24.dp)
             }
         }
