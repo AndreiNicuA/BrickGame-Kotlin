@@ -15,6 +15,7 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
@@ -23,15 +24,15 @@ import androidx.compose.ui.unit.sp
 import com.brickgame.tetris.ui.theme.LocalGameTheme
 
 /**
- * Primary game button with press animation
+ * Round game button — used for D-Pad arrows and Rotate.
+ * Clean, large touch target, bouncy press feedback.
  */
 @Composable
-fun PrimaryGameButton(
+fun GameBtn(
     text: String,
-    size: Dp = 68.dp,
+    size: Dp = 62.dp,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
-    shape: androidx.compose.ui.graphics.Shape = CircleShape,
     backgroundColor: Color? = null,
     pressedColor: Color? = null,
     onPress: () -> Unit = {},
@@ -49,55 +50,33 @@ fun PrimaryGameButton(
         label = "scale"
     )
 
-    val shadowElevation by animateDpAsState(
-        targetValue = if (isPressed) 2.dp else 10.dp,
-        animationSpec = tween(100),
-        label = "shadow"
-    )
-
     Box(
         modifier = modifier
             .size(size)
             .scale(scale)
-            .shadow(shadowElevation, shape)
-            .clip(shape)
+            .shadow(if (isPressed) 2.dp else 8.dp, CircleShape)
+            .clip(CircleShape)
             .background(if (isPressed) pressed else bg)
             .then(
-                if (enabled) {
-                    Modifier.pointerInput(Unit) {
-                        detectTapGestures(
-                            onPress = {
-                                isPressed = true
-                                onPress()
-                                tryAwaitRelease()
-                                isPressed = false
-                                onRelease()
-                            },
-                            onTap = { onClick() }
-                        )
-                    }
+                if (enabled) Modifier.pointerInput(Unit) {
+                    detectTapGestures(
+                        onPress = { isPressed = true; onPress(); tryAwaitRelease(); isPressed = false; onRelease() },
+                        onTap = { onClick() }
+                    )
                 } else Modifier
             ),
         contentAlignment = Alignment.Center
     ) {
-        Text(
-            text = text,
-            fontSize = (size.value * 0.38f).sp,
-            fontWeight = FontWeight.Bold,
-            color = Color(0xFF1A1A1A),
-            textAlign = TextAlign.Center
-        )
+        Text(text, fontSize = (size.value * 0.35f).sp, fontWeight = FontWeight.Bold, color = Color(0xFF1A1A1A), textAlign = TextAlign.Center)
     }
 }
 
 /**
- * D-Pad with optional rotate button in center.
- * When rotateInCenter=true, the center of the cross becomes a rotate button
- * instead of a decorative circle.
+ * Clean D-Pad — minimalist arrows, generous spacing, optional rotate in center.
  */
 @Composable
 fun DPad(
-    buttonSize: Dp = 58.dp,
+    buttonSize: Dp = 62.dp,
     modifier: Modifier = Modifier,
     rotateInCenter: Boolean = false,
     onUpPress: () -> Unit = {},
@@ -110,114 +89,44 @@ fun DPad(
     onRotate: () -> Unit = {}
 ) {
     val theme = LocalGameTheme.current
-    val spacing = 4.dp
-    val centerSize = buttonSize * 0.85f
+    val gap = 4.dp
+    val centerSize = buttonSize * 0.78f
 
-    Column(
-        modifier = modifier,
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(spacing)
-    ) {
-        // Up (hard drop)
-        PrimaryGameButton(
-            text = "▲",
-            size = buttonSize,
-            onClick = onUpPress
-        )
-
-        // Left - Center(Rotate) - Right
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(spacing),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            PrimaryGameButton(
-                text = "◀",
-                size = buttonSize,
-                onPress = onLeftPress,
-                onRelease = onLeftRelease
-            )
-
-            if (rotateInCenter) {
-                // Rotate button in center of D-Pad
-                PrimaryGameButton(
-                    text = "↻",
-                    size = centerSize,
-                    backgroundColor = theme.buttonSecondary,
-                    pressedColor = theme.buttonSecondaryPressed,
-                    onClick = onRotate
-                )
-            } else {
-                // Decorative center
-                Box(
-                    modifier = Modifier
-                        .size(centerSize)
-                        .clip(CircleShape)
-                        .background(theme.buttonSecondaryPressed)
-                )
-            }
-
-            PrimaryGameButton(
-                text = "▶",
-                size = buttonSize,
-                onPress = onRightPress,
-                onRelease = onRightRelease
-            )
+    Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(gap)) {
+        GameBtn("▲", buttonSize, onClick = onUpPress)
+        Row(horizontalArrangement = Arrangement.spacedBy(gap), verticalAlignment = Alignment.CenterVertically) {
+            GameBtn("◀", buttonSize, onPress = onLeftPress, onRelease = onLeftRelease)
+            if (rotateInCenter)
+                GameBtn("↻", centerSize, backgroundColor = theme.buttonSecondary, pressedColor = theme.buttonSecondaryPressed, onClick = onRotate)
+            else
+                Box(Modifier.size(centerSize).clip(CircleShape).background(theme.buttonSecondaryPressed))
+            GameBtn("▶", buttonSize, onPress = onRightPress, onRelease = onRightRelease)
         }
-
-        // Down (soft drop)
-        PrimaryGameButton(
-            text = "▼",
-            size = buttonSize,
-            onPress = onDownPress,
-            onRelease = onDownRelease
-        )
+        GameBtn("▼", buttonSize, onPress = onDownPress, onRelease = onDownRelease)
     }
 }
 
 /**
- * Standalone rotate button with label
+ * Standalone rotate button — large, obvious.
  */
 @Composable
-fun RotateButton(
-    onClick: () -> Unit,
-    size: Dp = 72.dp,
-    modifier: Modifier = Modifier,
-    showLabel: Boolean = true
-) {
-    val theme = LocalGameTheme.current
-
-    Column(
-        modifier = modifier,
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        PrimaryGameButton(
-            text = "↻",
-            size = size,
-            onClick = onClick
-        )
-
-        if (showLabel) {
-            Text(
-                text = "ROTATE",
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold,
-                color = theme.textSecondary,
-                modifier = Modifier.padding(top = 6.dp)
-            )
-        }
+fun RotateButton(onClick: () -> Unit, size: Dp = 72.dp, modifier: Modifier = Modifier) {
+    Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
+        GameBtn("↻", size, onClick = onClick)
     }
 }
 
 /**
- * Wide action button (for HOLD, DROP, etc.)
+ * Pill-shaped action button — for HOLD, PAUSE, START, etc.
+ * Clean rounded pill, consistent height, gentle press animation.
  */
 @Composable
-fun WideActionButton(
+fun ActionButton(
     text: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    width: Dp = 100.dp,
-    height: Dp = 44.dp,
+    width: Dp = 90.dp,
+    height: Dp = 40.dp,
     enabled: Boolean = true,
     backgroundColor: Color? = null
 ) {
@@ -226,7 +135,7 @@ fun WideActionButton(
     val bg = backgroundColor ?: theme.buttonSecondary
 
     val scale by animateFloatAsState(
-        targetValue = if (isPressed) 0.92f else 1f,
+        targetValue = if (isPressed) 0.93f else 1f,
         animationSpec = spring(stiffness = Spring.StiffnessHigh),
         label = "scale"
     )
@@ -235,34 +144,37 @@ fun WideActionButton(
         modifier = modifier
             .width(width).height(height)
             .scale(scale)
-            .shadow(if (isPressed) 2.dp else 6.dp, RoundedCornerShape(12.dp))
-            .clip(RoundedCornerShape(12.dp))
-            .background(
-                if (!enabled) bg.copy(alpha = 0.3f)
-                else if (isPressed) bg.copy(alpha = 0.7f)
-                else bg
-            )
+            .shadow(if (isPressed) 1.dp else 4.dp, RoundedCornerShape(height / 2))
+            .clip(RoundedCornerShape(height / 2))
+            .background(if (!enabled) bg.copy(alpha = 0.3f) else if (isPressed) bg.copy(alpha = 0.7f) else bg)
             .then(
-                if (enabled) {
-                    Modifier.pointerInput(Unit) {
-                        detectTapGestures(
-                            onPress = {
-                                isPressed = true
-                                tryAwaitRelease()
-                                isPressed = false
-                            },
-                            onTap = { onClick() }
-                        )
-                    }
+                if (enabled) Modifier.pointerInput(Unit) {
+                    detectTapGestures(
+                        onPress = { isPressed = true; tryAwaitRelease(); isPressed = false },
+                        onTap = { onClick() }
+                    )
                 } else Modifier
             ),
         contentAlignment = Alignment.Center
     ) {
-        Text(
-            text,
-            fontSize = (height.value * 0.35f).sp,
-            fontWeight = FontWeight.Bold,
-            color = if (enabled) theme.textPrimary else theme.textPrimary.copy(alpha = 0.3f)
-        )
+        Text(text, fontSize = (height.value * 0.36f).sp, fontWeight = FontWeight.Bold,
+            fontFamily = FontFamily.Monospace, letterSpacing = 1.sp,
+            color = if (enabled) theme.textPrimary else theme.textPrimary.copy(alpha = 0.3f))
     }
 }
+
+// Keep backward compatibility alias
+@Composable
+fun WideActionButton(
+    text: String, onClick: () -> Unit, modifier: Modifier = Modifier,
+    width: Dp = 100.dp, height: Dp = 44.dp, enabled: Boolean = true, backgroundColor: Color? = null
+) = ActionButton(text, onClick, modifier, width, height, enabled, backgroundColor)
+
+// Keep backward compatibility alias
+@Composable
+fun PrimaryGameButton(
+    text: String, size: Dp = 68.dp, modifier: Modifier = Modifier,
+    enabled: Boolean = true, shape: androidx.compose.ui.graphics.Shape = CircleShape,
+    backgroundColor: Color? = null, pressedColor: Color? = null,
+    onPress: () -> Unit = {}, onRelease: () -> Unit = {}, onClick: () -> Unit = {}
+) = GameBtn(text, size, modifier, enabled, backgroundColor, pressedColor, onPress, onRelease, onClick)
