@@ -15,6 +15,9 @@ import com.brickgame.tetris.ui.styles.StylePreset
 import com.brickgame.tetris.ui.styles.VibrationStyle
 import com.brickgame.tetris.ui.theme.GameTheme
 import com.brickgame.tetris.ui.theme.GameThemes
+import com.brickgame.tetris.ui.layout.LayoutPresets
+import com.brickgame.tetris.ui.layout.LayoutProfile
+import com.brickgame.tetris.ui.layout.LayoutRepository
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -488,6 +491,74 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     fun setDasDelay(ms: Long) { dasDelay = ms.coerceIn(50, 300) }
     fun setArrSpeed(ms: Long) { arrSpeed = ms.coerceIn(0, 100) }
 
+    // ===== Layout Editor =====
+
+    private val layoutRepository = LayoutRepository(getApplication())
+
+    private val _showLayoutEditor = MutableStateFlow(false)
+    val showLayoutEditor: StateFlow<Boolean> = _showLayoutEditor.asStateFlow()
+
+    private val _currentLayoutProfile = MutableStateFlow(LayoutPresets.getDefaultLandscape())
+    val currentLayoutProfile: StateFlow<LayoutProfile> = _currentLayoutProfile.asStateFlow()
+
+    private val _allLayoutProfiles = MutableStateFlow(LayoutPresets.getAllPresets())
+    val allLayoutProfiles: StateFlow<List<LayoutProfile>> = _allLayoutProfiles.asStateFlow()
+
+    private val _snapToGrid = MutableStateFlow(true)
+    val snapToGrid: StateFlow<Boolean> = _snapToGrid.asStateFlow()
+
+    init {
+        // Load layout profiles
+        viewModelScope.launch {
+            layoutRepository.getAllProfiles().collect { profiles ->
+                _allLayoutProfiles.value = profiles
+            }
+        }
+        viewModelScope.launch {
+            layoutRepository.snapToGrid.collect { _snapToGrid.value = it }
+        }
+        viewModelScope.launch {
+            layoutRepository.activeLandscapeProfileId.collect { id ->
+                val profile = _allLayoutProfiles.value.find { it.id == id }
+                    ?: LayoutPresets.getDefaultLandscape()
+                _currentLayoutProfile.value = profile
+            }
+        }
+    }
+
+    fun showLayoutEditor() {
+        if (game.state.value.status == GameStatus.PLAYING) {
+            game.pauseGame()
+            stopGameLoop()
+        }
+        _showLayoutEditor.value = true
+    }
+
+    fun hideLayoutEditor() {
+        _showLayoutEditor.value = false
+    }
+
+    fun saveLayoutProfile(profile: LayoutProfile) {
+        viewModelScope.launch {
+            layoutRepository.saveProfile(profile)
+            layoutRepository.setActiveLandscapeProfile(profile.id)
+        }
+    }
+
+    fun selectLayoutProfile(profileId: String) {
+        val profile = _allLayoutProfiles.value.find { it.id == profileId }
+            ?: return
+        _currentLayoutProfile.value = profile
+        viewModelScope.launch {
+            layoutRepository.setActiveLandscapeProfile(profileId)
+        }
+    }
+
+    fun setSnapToGrid(enabled: Boolean) {
+        _snapToGrid.value = enabled
+        viewModelScope.launch { layoutRepository.setSnapToGrid(enabled) }
+    }
+
     override fun onCleared() {
         super.onCleared()
         stopGameLoop()
@@ -499,6 +570,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
 data class UiState(
     val showSettings: Boolean = false,
+    val showLayoutEditor: Boolean = false,
     val vibrationEnabled: Boolean = true,
     val vibrationIntensity: Float = 0.7f,
     val vibrationStyle: VibrationStyle = VibrationStyle.CLASSIC,

@@ -19,6 +19,7 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.brickgame.tetris.ui.layout.LayoutEditorScreen
 import com.brickgame.tetris.ui.screens.GameScreen
 import com.brickgame.tetris.ui.screens.GameViewModel
 import com.brickgame.tetris.ui.screens.SettingsScreen
@@ -44,9 +45,14 @@ class MainActivity : ComponentActivity() {
             val currentTheme by viewModel.currentTheme.collectAsState()
             val scoreHistory by viewModel.scoreHistory.collectAsState()
             val clearingLines by viewModel.clearingLines.collectAsState()
+            val showLayoutEditor by viewModel.showLayoutEditor.collectAsState()
+            val currentLayoutProfile by viewModel.currentLayoutProfile.collectAsState()
+            val allLayoutProfiles by viewModel.allLayoutProfiles.collectAsState()
+            val snapToGrid by viewModel.snapToGrid.collectAsState()
             
             BackHandler(enabled = true) {
                 when {
+                    showLayoutEditor -> viewModel.hideLayoutEditor()
                     uiState.showSettings -> viewModel.hideSettings()
                     else -> { }
                 }
@@ -120,7 +126,28 @@ class MainActivity : ComponentActivity() {
                             onDifficultyChange = viewModel::setDifficulty,
                             onPlayerNameChange = viewModel::setPlayerName,
                             onClearHistory = viewModel::clearScoreHistory,
-                            onClose = viewModel::hideSettings
+                            onClose = viewModel::hideSettings,
+                            onOpenLayoutEditor = {
+                                viewModel.hideSettings()
+                                viewModel.showLayoutEditor()
+                            }
+                        )
+                    }
+                    
+                    // Layout Editor overlay
+                    AnimatedVisibility(
+                        visible = showLayoutEditor,
+                        enter = fadeIn() + slideInVertically { it },
+                        exit = fadeOut() + slideOutVertically { it }
+                    ) {
+                        LayoutEditorScreen(
+                            currentProfile = currentLayoutProfile,
+                            allProfiles = allLayoutProfiles,
+                            snapToGrid = snapToGrid,
+                            onSaveProfile = viewModel::saveLayoutProfile,
+                            onSelectProfile = viewModel::selectLayoutProfile,
+                            onToggleSnap = viewModel::setSnapToGrid,
+                            onClose = viewModel::hideLayoutEditor
                         )
                     }
                 }

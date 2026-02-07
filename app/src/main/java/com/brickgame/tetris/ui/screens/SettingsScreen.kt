@@ -57,6 +57,7 @@ fun SettingsScreen(
     onStylePresetChange: (StylePreset) -> Unit,
     onGhostPieceChange: (Boolean) -> Unit, onDifficultyChange: (Difficulty) -> Unit,
     onPlayerNameChange: (String) -> Unit, onClearHistory: () -> Unit, onClose: () -> Unit,
+    onOpenLayoutEditor: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var currentPage by remember { mutableStateOf(SettingsPage.MAIN) }
@@ -70,7 +71,7 @@ fun SettingsScreen(
                 SettingsPage.MAIN -> MainPage({ currentPage = it }, onClose)
                 SettingsPage.PROFILE -> ProfilePage(playerName, highScore, scoreHistory, onPlayerNameChange, onClearHistory) { currentPage = SettingsPage.MAIN }
                 SettingsPage.THEMES -> ThemesPage(currentThemeName, onThemeChange) { currentPage = SettingsPage.MAIN }
-                SettingsPage.LAYOUT -> LayoutPage(layoutMode, onLayoutModeChange) { currentPage = SettingsPage.MAIN }
+                SettingsPage.LAYOUT -> LayoutPage(layoutMode, onLayoutModeChange, onOpenLayoutEditor) { currentPage = SettingsPage.MAIN }
                 SettingsPage.GAMEPLAY -> GameplayPage(ghostPieceEnabled, difficulty, onGhostPieceChange, onDifficultyChange) { currentPage = SettingsPage.MAIN }
                 SettingsPage.FEEDBACK -> FeedbackPage(vibrationEnabled, vibrationIntensity, soundEnabled, soundVolume, onVibrationEnabledChange, onVibrationIntensityChange, onSoundEnabledChange, onSoundVolumeChange) { currentPage = SettingsPage.MAIN }
                 SettingsPage.STYLES -> StylesPage(stylePreset, animationEnabled, animationStyle, animationDuration, vibrationStyle, soundStyle, onStylePresetChange, onAnimationEnabledChange, onAnimationStyleChange, onAnimationDurationChange, onVibrationStyleChange, onSoundStyleChange) { currentPage = SettingsPage.MAIN }
@@ -259,15 +260,42 @@ private fun ThemesPage(currentThemeName: String, onThemeChange: (String) -> Unit
 }
 
 @Composable
-private fun LayoutPage(layoutMode: LayoutMode, onLayoutModeChange: (LayoutMode) -> Unit, onBack: () -> Unit) {
+private fun LayoutPage(layoutMode: LayoutMode, onLayoutModeChange: (LayoutMode) -> Unit, onOpenLayoutEditor: () -> Unit, onBack: () -> Unit) {
     Column(modifier = Modifier.fillMaxSize().padding(20.dp)) {
         PageHeader("Layout", onBack)
-        Spacer(modifier = Modifier.height(32.dp))
+        Spacer(modifier = Modifier.height(24.dp))
+        
+        Text("PORTRAIT MODE", fontSize = 11.sp, color = Color(0xFF888888), 
+            fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
+        Spacer(modifier = Modifier.height(8.dp))
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             SelectableRow("Classic", "Device frame with LCD", layoutMode == LayoutMode.CLASSIC) { onLayoutModeChange(LayoutMode.CLASSIC) }
             SelectableRow("Modern", "Clean with status bar", layoutMode == LayoutMode.MODERN) { onLayoutModeChange(LayoutMode.MODERN) }
             SelectableRow("Fullscreen", "Maximum game area", layoutMode == LayoutMode.FULLSCREEN) { onLayoutModeChange(LayoutMode.FULLSCREEN) }
         }
+        
+        Spacer(modifier = Modifier.height(28.dp))
+        Text("LANDSCAPE MODE", fontSize = 11.sp, color = Color(0xFF888888),
+            fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
+        Spacer(modifier = Modifier.height(8.dp))
+        
+        // Layout Editor button
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .background(Color(0xFFF4D03F))
+                .clickable(onClick = onOpenLayoutEditor)
+                .padding(vertical = 14.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text("✎ EDIT LAYOUT (Drag & Drop)", fontSize = 15.sp,
+                fontWeight = FontWeight.Bold, color = Color.Black)
+        }
+        
+        Spacer(modifier = Modifier.height(8.dp))
+        Text("Drag controls to customize your landscape layout.\nRotate your device to landscape to play with custom layout.",
+            fontSize = 11.sp, color = Color(0xFF666666), lineHeight = 16.sp)
     }
 }
 
