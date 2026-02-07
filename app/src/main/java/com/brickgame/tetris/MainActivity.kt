@@ -4,20 +4,10 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
-import androidx.activity.enableEdgeToEdge
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
+import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.core.view.WindowCompat
-import androidx.core.view.WindowInsetsCompat
-import androidx.core.view.WindowInsetsControllerCompat
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.brickgame.tetris.ui.screens.GameScreen
 import com.brickgame.tetris.ui.screens.GameViewModel
@@ -27,98 +17,108 @@ import com.brickgame.tetris.ui.theme.BrickGameTheme
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
-
-        WindowCompat.setDecorFitsSystemWindows(window, false)
-        WindowInsetsControllerCompat(window, window.decorView).let { c ->
-            c.hide(WindowInsetsCompat.Type.systemBars())
-            c.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-        }
 
         setContent {
             val viewModel: GameViewModel = viewModel()
             val gameState by viewModel.gameState.collectAsState()
             val uiState by viewModel.uiState.collectAsState()
             val currentTheme by viewModel.currentTheme.collectAsState()
-            val scoreHistory by viewModel.scoreHistory.collectAsState()
-            val clearingLines by viewModel.clearingLines.collectAsState()
 
-            BackHandler(enabled = uiState.showSettings) { viewModel.hideSettings() }
+            // Layout
+            val portraitLayout by viewModel.portraitLayout.collectAsState()
+            val landscapeLayout by viewModel.landscapeLayout.collectAsState()
+            val dpadStyle by viewModel.dpadStyle.collectAsState()
+
+            // Settings
+            val ghostEnabled by viewModel.ghostPieceEnabled.collectAsState()
+            val difficulty by viewModel.difficulty.collectAsState()
+            val gameMode by viewModel.gameMode.collectAsState()
+            val animationStyle by viewModel.animationStyle.collectAsState()
+            val animationDuration by viewModel.animationDuration.collectAsState()
+            val soundEnabled by viewModel.soundEnabled.collectAsState()
+            val vibrationEnabled by viewModel.vibrationEnabled.collectAsState()
+            val playerName by viewModel.playerName.collectAsState()
+            val highScore by viewModel.highScore.collectAsState()
+            val scoreHistory by viewModel.scoreHistory.collectAsState()
+
+            // Orientation detection
+            val config = LocalConfiguration.current
+            val isLandscape = config.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+            val activeLayout = if (isLandscape) landscapeLayout else portraitLayout
 
             BrickGameTheme(gameTheme = currentTheme) {
-                Box(Modifier.fillMaxSize()) {
+
+                // Back handler
+                BackHandler(enabled = uiState.showSettings) {
+                    if (uiState.settingsPage != GameViewModel.SettingsPage.MAIN) {
+                        viewModel.navigateSettings(GameViewModel.SettingsPage.MAIN)
+                    } else {
+                        viewModel.closeSettings()
+                    }
+                }
+
+                if (uiState.showSettings) {
+                    SettingsScreen(
+                        page = uiState.settingsPage,
+                        currentTheme = currentTheme,
+                        portraitLayout = portraitLayout,
+                        landscapeLayout = landscapeLayout,
+                        dpadStyle = dpadStyle,
+                        difficulty = difficulty,
+                        gameMode = gameMode,
+                        ghostEnabled = ghostEnabled,
+                        animationStyle = animationStyle,
+                        animationDuration = animationDuration,
+                        soundEnabled = soundEnabled,
+                        vibrationEnabled = vibrationEnabled,
+                        playerName = playerName,
+                        highScore = highScore,
+                        scoreHistory = scoreHistory,
+                        onNavigate = viewModel::navigateSettings,
+                        onBack = {
+                            if (uiState.settingsPage != GameViewModel.SettingsPage.MAIN) {
+                                viewModel.navigateSettings(GameViewModel.SettingsPage.MAIN)
+                            } else {
+                                viewModel.closeSettings()
+                            }
+                        },
+                        onSetTheme = viewModel::setTheme,
+                        onSetPortraitLayout = viewModel::setPortraitLayout,
+                        onSetLandscapeLayout = viewModel::setLandscapeLayout,
+                        onSetDPadStyle = viewModel::setDPadStyle,
+                        onSetDifficulty = viewModel::setDifficulty,
+                        onSetGameMode = viewModel::setGameMode,
+                        onSetGhostEnabled = viewModel::setGhostPieceEnabled,
+                        onSetAnimationStyle = viewModel::setAnimationStyle,
+                        onSetAnimationDuration = viewModel::setAnimationDuration,
+                        onSetSoundEnabled = viewModel::setSoundEnabled,
+                        onSetVibrationEnabled = viewModel::setVibrationEnabled,
+                        onSetPlayerName = viewModel::setPlayerName
+                    )
+                } else {
                     GameScreen(
-                        gameState = gameState.copy(highScore = uiState.highScore),
-                        clearingLines = clearingLines,
-                        vibrationEnabled = uiState.vibrationEnabled,
-                        ghostPieceEnabled = uiState.ghostPieceEnabled,
-                        animationEnabled = uiState.animationEnabled,
-                        animationStyle = uiState.animationStyle,
-                        animationDuration = uiState.animationDuration,
-                        layoutMode = uiState.layoutMode,
-                        landscapeMode = uiState.landscapeMode,
+                        gameState = gameState.copy(highScore = highScore),
+                        layoutPreset = activeLayout,
+                        dpadStyle = dpadStyle,
+                        ghostEnabled = ghostEnabled,
+                        animationStyle = animationStyle,
+                        animationDuration = animationDuration,
                         onStartGame = viewModel::startGame,
-                        onPauseGame = viewModel::pauseGame,
-                        onResumeGame = viewModel::resumeGame,
-                        onToggleSound = { viewModel.setSoundEnabled(!uiState.soundEnabled) },
-                        onMoveLeft = viewModel::startLeftRepeat,
-                        onMoveLeftRelease = viewModel::stopLeftRepeat,
-                        onMoveRight = viewModel::startRightRepeat,
-                        onMoveRightRelease = viewModel::stopRightRepeat,
-                        onMoveDown = viewModel::startDownRepeat,
-                        onMoveDownRelease = viewModel::stopDownRepeat,
-                        onHardDrop = viewModel::hardDrop,
+                        onPause = viewModel::pauseGame,
+                        onResume = viewModel::resumeGame,
                         onRotate = viewModel::rotate,
                         onRotateCCW = viewModel::rotateCounterClockwise,
+                        onHardDrop = viewModel::hardDrop,
                         onHold = viewModel::holdPiece,
-                        onOpenSettings = viewModel::showSettings,
-                        modifier = Modifier.fillMaxSize()
+                        onLeftPress = viewModel::startLeftDAS,
+                        onLeftRelease = viewModel::stopDAS,
+                        onRightPress = viewModel::startRightDAS,
+                        onRightRelease = viewModel::stopDAS,
+                        onDownPress = viewModel::startDownDAS,
+                        onDownRelease = viewModel::stopDAS,
+                        onOpenSettings = viewModel::openSettings,
+                        onToggleSound = viewModel::toggleSound
                     )
-
-                    AnimatedVisibility(
-                        visible = uiState.showSettings,
-                        enter = fadeIn() + slideInVertically { it },
-                        exit = fadeOut() + slideOutVertically { it }
-                    ) {
-                        SettingsScreen(
-                            currentThemeName = currentTheme.name,
-                            layoutMode = uiState.layoutMode,
-                            landscapeMode = uiState.landscapeMode,
-                            vibrationEnabled = uiState.vibrationEnabled,
-                            vibrationIntensity = uiState.vibrationIntensity,
-                            vibrationStyle = uiState.vibrationStyle,
-                            soundEnabled = uiState.soundEnabled,
-                            soundVolume = uiState.soundVolume,
-                            soundStyle = uiState.soundStyle,
-                            animationEnabled = uiState.animationEnabled,
-                            animationStyle = uiState.animationStyle,
-                            animationDuration = uiState.animationDuration,
-                            stylePreset = uiState.stylePreset,
-                            ghostPieceEnabled = uiState.ghostPieceEnabled,
-                            difficulty = uiState.difficulty,
-                            playerName = uiState.playerName,
-                            highScore = uiState.highScore,
-                            scoreHistory = scoreHistory,
-                            onThemeChange = viewModel::setTheme,
-                            onLayoutModeChange = viewModel::setLayoutMode,
-                            onLandscapeModeChange = viewModel::setLandscapeMode,
-                            onVibrationEnabledChange = viewModel::setVibrationEnabled,
-                            onVibrationIntensityChange = viewModel::setVibrationIntensity,
-                            onVibrationStyleChange = viewModel::setVibrationStyle,
-                            onSoundEnabledChange = viewModel::setSoundEnabled,
-                            onSoundVolumeChange = viewModel::setSoundVolume,
-                            onSoundStyleChange = viewModel::setSoundStyle,
-                            onAnimationEnabledChange = viewModel::setAnimationEnabled,
-                            onAnimationStyleChange = viewModel::setAnimationStyle,
-                            onAnimationDurationChange = viewModel::setAnimationDuration,
-                            onStylePresetChange = viewModel::applyStylePreset,
-                            onGhostPieceChange = viewModel::setGhostPieceEnabled,
-                            onDifficultyChange = viewModel::setDifficulty,
-                            onPlayerNameChange = viewModel::setPlayerName,
-                            onClearHistory = viewModel::clearScoreHistory,
-                            onClose = viewModel::hideSettings
-                        )
-                    }
                 }
             }
         }

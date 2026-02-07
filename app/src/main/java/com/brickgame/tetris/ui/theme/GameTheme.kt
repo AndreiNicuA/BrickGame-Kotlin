@@ -1,9 +1,17 @@
 package com.brickgame.tetris.ui.theme
 
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.graphics.Color
+import kotlinx.serialization.Serializable
 
+/**
+ * Complete visual theme defining every colour in the app.
+ * Built-in themes cannot be deleted. Custom themes are user-created.
+ */
 data class GameTheme(
+    val id: String,
     val name: String,
+    val isBuiltIn: Boolean = true,
     val backgroundColor: Color,
     val deviceColor: Color,
     val screenBackground: Color,
@@ -18,12 +26,15 @@ data class GameTheme(
     val accentColor: Color
 )
 
+val LocalGameTheme = compositionLocalOf { GameThemes.ClassicGreen }
+
 object GameThemes {
-    // Classic - Pale olive green LCD (original Game Boy style, muted)
-    val Classic = GameTheme(
-        name = "Classic",
+
+    val ClassicGreen = GameTheme(
+        id = "builtin_classic_green",
+        name = "Classic Green",
         backgroundColor = Color(0xFF2A2A2A),
-        deviceColor = Color(0xFF3D3D3D),
+        deviceColor = Color(0xFF4A5A3A),
         screenBackground = Color(0xFFB8C4A8),
         pixelOn = Color(0xFF3D4A32),
         pixelOff = Color(0xFFA8B498),
@@ -35,95 +46,80 @@ object GameThemes {
         buttonSecondaryPressed = Color(0xFF3A3A3A),
         accentColor = Color(0xFFD4C896)
     )
-    
-    // Retro - Pale amber/orange LCD
-    val Retro = GameTheme(
-        name = "Retro",
-        backgroundColor = Color(0xFF2D2520),
-        deviceColor = Color(0xFF3D3530),
-        screenBackground = Color(0xFFD4C4A8),
-        pixelOn = Color(0xFF5A4830),
-        pixelOff = Color(0xFFC4B498),
-        textPrimary = Color(0xFFE8E0D8),
-        textSecondary = Color(0xFFA09080),
-        buttonPrimary = Color(0xFFCAAA78),
-        buttonPrimaryPressed = Color(0xFFB89868),
-        buttonSecondary = Color(0xFF4A4038),
-        buttonSecondaryPressed = Color(0xFF3A3028),
-        accentColor = Color(0xFFCAAA78)
-    )
-    
-    // Ocean - Pale blue-green
-    val Ocean = GameTheme(
-        name = "Ocean",
-        backgroundColor = Color(0xFF202830),
-        deviceColor = Color(0xFF2A3540),
-        screenBackground = Color(0xFFA8C4C8),
-        pixelOn = Color(0xFF2A4A50),
-        pixelOff = Color(0xFF98B4B8),
-        textPrimary = Color(0xFFE0E8EA),
-        textSecondary = Color(0xFF8098A0),
-        buttonPrimary = Color(0xFF88B8C0),
-        buttonPrimaryPressed = Color(0xFF78A8B0),
-        buttonSecondary = Color(0xFF384048),
-        buttonSecondaryPressed = Color(0xFF283038),
-        accentColor = Color(0xFF88B8C0)
-    )
-    
-    // Sakura - Pale pink
-    val Sakura = GameTheme(
-        name = "Sakura",
-        backgroundColor = Color(0xFF2A2528),
-        deviceColor = Color(0xFF3A3035),
-        screenBackground = Color(0xFFD8C4C8),
-        pixelOn = Color(0xFF5A3A40),
-        pixelOff = Color(0xFFC8B4B8),
-        textPrimary = Color(0xFFE8E0E2),
-        textSecondary = Color(0xFFA08890),
-        buttonPrimary = Color(0xFFD0A0A8),
-        buttonPrimaryPressed = Color(0xFFC09098),
-        buttonSecondary = Color(0xFF483840),
-        buttonSecondaryPressed = Color(0xFF382830),
-        accentColor = Color(0xFFD0A0A8)
-    )
-    
-    // Midnight - Pale blue on dark
+
     val Midnight = GameTheme(
+        id = "builtin_midnight",
         name = "Midnight",
-        backgroundColor = Color(0xFF181820),
-        deviceColor = Color(0xFF202030),
-        screenBackground = Color(0xFF283040),
-        pixelOn = Color(0xFF8898B0),
-        pixelOff = Color(0xFF202838),
-        textPrimary = Color(0xFFD0D8E0),
-        textSecondary = Color(0xFF7080A0),
-        buttonPrimary = Color(0xFF6878A0),
-        buttonPrimaryPressed = Color(0xFF586890),
-        buttonSecondary = Color(0xFF303848),
-        buttonSecondaryPressed = Color(0xFF202838),
-        accentColor = Color(0xFF8898B0)
+        backgroundColor = Color(0xFF0A0A14),
+        deviceColor = Color(0xFF181828),
+        screenBackground = Color(0xFF1A2030),
+        pixelOn = Color(0xFF8AB4F8),
+        pixelOff = Color(0xFF151C28),
+        textPrimary = Color(0xFFD0D8E8),
+        textSecondary = Color(0xFF6878A0),
+        buttonPrimary = Color(0xFF4A6090),
+        buttonPrimaryPressed = Color(0xFF3A5080),
+        buttonSecondary = Color(0xFF2A3040),
+        buttonSecondaryPressed = Color(0xFF1A2030),
+        accentColor = Color(0xFF8AB4F8)
     )
-    
-    // Forest - Pale green
-    val Forest = GameTheme(
-        name = "Forest",
-        backgroundColor = Color(0xFF202820),
-        deviceColor = Color(0xFF283828),
-        screenBackground = Color(0xFFB8C8B0),
-        pixelOn = Color(0xFF384830),
-        pixelOff = Color(0xFFA8B8A0),
-        textPrimary = Color(0xFFE0E8E0),
-        textSecondary = Color(0xFF80A080),
-        buttonPrimary = Color(0xFF90B088),
-        buttonPrimaryPressed = Color(0xFF80A078),
-        buttonSecondary = Color(0xFF384038),
-        buttonSecondaryPressed = Color(0xFF283028),
-        accentColor = Color(0xFF90B088)
+
+    val RetroAmber = GameTheme(
+        id = "builtin_retro_amber",
+        name = "Retro Amber",
+        backgroundColor = Color(0xFF1A1408),
+        deviceColor = Color(0xFF2A2010),
+        screenBackground = Color(0xFF201800),
+        pixelOn = Color(0xFFFF9800),
+        pixelOff = Color(0xFF1A1200),
+        textPrimary = Color(0xFFE8D0A0),
+        textSecondary = Color(0xFF8A7040),
+        buttonPrimary = Color(0xFFCAAA58),
+        buttonPrimaryPressed = Color(0xFFB89848),
+        buttonSecondary = Color(0xFF3A3020),
+        buttonSecondaryPressed = Color(0xFF2A2010),
+        accentColor = Color(0xFFFF9800)
     )
-    
-    val allThemes = listOf(Classic, Retro, Ocean, Sakura, Midnight, Forest)
-    
-    fun getThemeByName(name: String): GameTheme {
-        return allThemes.find { it.name == name } ?: Classic
-    }
+
+    val Neon = GameTheme(
+        id = "builtin_neon",
+        name = "Neon",
+        backgroundColor = Color(0xFF050508),
+        deviceColor = Color(0xFF0A0A10),
+        screenBackground = Color(0xFF080810),
+        pixelOn = Color(0xFF00FF88),
+        pixelOff = Color(0xFF0A0F0A),
+        textPrimary = Color(0xFFE0FFE0),
+        textSecondary = Color(0xFF40A060),
+        buttonPrimary = Color(0xFF00CC66),
+        buttonPrimaryPressed = Color(0xFF00AA55),
+        buttonSecondary = Color(0xFF1A1A2A),
+        buttonSecondaryPressed = Color(0xFF0A0A1A),
+        accentColor = Color(0xFF00FF88)
+    )
+
+    val Paper = GameTheme(
+        id = "builtin_paper",
+        name = "Paper",
+        backgroundColor = Color(0xFFF5F0E8),
+        deviceColor = Color(0xFFE8E0D0),
+        screenBackground = Color(0xFFFAF6F0),
+        pixelOn = Color(0xFF3A3530),
+        pixelOff = Color(0xFFE8E0D8),
+        textPrimary = Color(0xFF2A2520),
+        textSecondary = Color(0xFF8A8078),
+        buttonPrimary = Color(0xFFB0A898),
+        buttonPrimaryPressed = Color(0xFF9A9288),
+        buttonSecondary = Color(0xFFD8D0C0),
+        buttonSecondaryPressed = Color(0xFFC8C0B0),
+        accentColor = Color(0xFFE07030)
+    )
+
+    val allThemes = listOf(ClassicGreen, Midnight, RetroAmber, Neon, Paper)
+
+    fun getThemeById(id: String): GameTheme =
+        allThemes.find { it.id == id } ?: ClassicGreen
+
+    fun getThemeByName(name: String): GameTheme =
+        allThemes.find { it.name == name } ?: ClassicGreen
 }
