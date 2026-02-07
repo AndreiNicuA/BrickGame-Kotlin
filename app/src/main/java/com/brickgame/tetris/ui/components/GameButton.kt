@@ -133,9 +133,9 @@ fun DPad(
     val theme = LocalGameTheme.current
     val gap = 3.dp; val cs = buttonSize * 0.72f
 
-    Column(modifier, Alignment.CenterHorizontally, Arrangement.spacedBy(gap)) {
+    Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(gap)) {
         TapButton(ButtonIcon.UP, buttonSize, onClick = onUpPress)
-        Row(Arrangement.spacedBy(gap), Alignment.CenterVertically) {
+        Row(horizontalArrangement = Arrangement.spacedBy(gap), verticalAlignment = Alignment.CenterVertically) {
             HoldButton(ButtonIcon.LEFT, buttonSize, onPress = onLeftPress, onRelease = onLeftRelease)
             if (rotateInCenter) TapButton(ButtonIcon.ROTATE, cs, onClick = onRotate)
             else Box(Modifier.size(cs).clip(CircleShape).background(theme.buttonSecondaryPressed.copy(alpha = 0.4f)))
