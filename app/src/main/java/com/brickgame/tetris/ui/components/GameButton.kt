@@ -1,6 +1,7 @@
 package com.brickgame.tetris.ui.components
 
 import androidx.compose.animation.core.*
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
@@ -13,7 +14,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -23,14 +29,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.brickgame.tetris.ui.theme.LocalGameTheme
 
-/**
- * Round game button — used for D-Pad arrows and Rotate.
- * Clean, large touch target, bouncy press feedback.
- */
+// ===== Round Button with Custom Icon =====
+
 @Composable
 fun GameBtn(
-    text: String,
-    size: Dp = 62.dp,
+    icon: ButtonIcon,
+    size: Dp = 60.dp,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     backgroundColor: Color? = null,
@@ -43,18 +47,19 @@ fun GameBtn(
     var isPressed by remember { mutableStateOf(false) }
     val bg = backgroundColor ?: theme.buttonPrimary
     val pressed = pressedColor ?: theme.buttonPrimaryPressed
+    val iconColor = Color(0xFF1A1A1A)
 
     val scale by animateFloatAsState(
         targetValue = if (isPressed) 0.88f else 1f,
         animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessHigh),
-        label = "scale"
+        label = "s"
     )
 
     Box(
         modifier = modifier
             .size(size)
             .scale(scale)
-            .shadow(if (isPressed) 2.dp else 8.dp, CircleShape)
+            .shadow(if (isPressed) 2.dp else 6.dp, CircleShape)
             .clip(CircleShape)
             .background(if (isPressed) pressed else bg)
             .then(
@@ -67,16 +72,75 @@ fun GameBtn(
             ),
         contentAlignment = Alignment.Center
     ) {
-        Text(text, fontSize = (size.value * 0.35f).sp, fontWeight = FontWeight.Bold, color = Color(0xFF1A1A1A), textAlign = TextAlign.Center)
+        // Draw custom icon using Canvas
+        Canvas(modifier = Modifier.size(size * 0.4f)) {
+            val w = this.size.width
+            val h = this.size.height
+            val strokeWidth = w * 0.18f
+            val stroke = Stroke(strokeWidth, cap = StrokeCap.Round, join = StrokeJoin.Round)
+
+            when (icon) {
+                ButtonIcon.UP -> {
+                    val path = Path().apply {
+                        moveTo(w * 0.2f, h * 0.7f)
+                        lineTo(w * 0.5f, h * 0.25f)
+                        lineTo(w * 0.8f, h * 0.7f)
+                    }
+                    drawPath(path, iconColor, style = stroke)
+                }
+                ButtonIcon.DOWN -> {
+                    val path = Path().apply {
+                        moveTo(w * 0.2f, h * 0.3f)
+                        lineTo(w * 0.5f, h * 0.75f)
+                        lineTo(w * 0.8f, h * 0.3f)
+                    }
+                    drawPath(path, iconColor, style = stroke)
+                }
+                ButtonIcon.LEFT -> {
+                    val path = Path().apply {
+                        moveTo(w * 0.7f, h * 0.2f)
+                        lineTo(w * 0.25f, h * 0.5f)
+                        lineTo(w * 0.7f, h * 0.8f)
+                    }
+                    drawPath(path, iconColor, style = stroke)
+                }
+                ButtonIcon.RIGHT -> {
+                    val path = Path().apply {
+                        moveTo(w * 0.3f, h * 0.2f)
+                        lineTo(w * 0.75f, h * 0.5f)
+                        lineTo(w * 0.3f, h * 0.8f)
+                    }
+                    drawPath(path, iconColor, style = stroke)
+                }
+                ButtonIcon.ROTATE -> {
+                    // Curved arrow
+                    val path = Path().apply {
+                        moveTo(w * 0.65f, h * 0.15f)
+                        // Arc approximation
+                        cubicTo(w * 0.9f, h * 0.3f, w * 0.9f, h * 0.75f, w * 0.5f, h * 0.85f)
+                        cubicTo(w * 0.15f, h * 0.85f, w * 0.1f, h * 0.45f, w * 0.35f, h * 0.25f)
+                    }
+                    drawPath(path, iconColor, style = stroke)
+                    // Arrow head
+                    val arrow = Path().apply {
+                        moveTo(w * 0.5f, h * 0.05f)
+                        lineTo(w * 0.65f, h * 0.15f)
+                        lineTo(w * 0.5f, h * 0.3f)
+                    }
+                    drawPath(arrow, iconColor, style = Stroke(strokeWidth * 0.8f, cap = StrokeCap.Round, join = StrokeJoin.Round))
+                }
+            }
+        }
     }
 }
 
-/**
- * Clean D-Pad — minimalist arrows, generous spacing, optional rotate in center.
- */
+enum class ButtonIcon { UP, DOWN, LEFT, RIGHT, ROTATE }
+
+// ===== D-Pad =====
+
 @Composable
 fun DPad(
-    buttonSize: Dp = 62.dp,
+    buttonSize: Dp = 60.dp,
     modifier: Modifier = Modifier,
     rotateInCenter: Boolean = false,
     onUpPress: () -> Unit = {},
@@ -89,46 +153,38 @@ fun DPad(
     onRotate: () -> Unit = {}
 ) {
     val theme = LocalGameTheme.current
-    val gap = 4.dp
-    val centerSize = buttonSize * 0.78f
+    val gap = 3.dp
+    val centerSize = buttonSize * 0.72f
 
     Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(gap)) {
-        GameBtn("▲", buttonSize, onClick = onUpPress)
+        GameBtn(ButtonIcon.UP, buttonSize, onClick = onUpPress)
         Row(horizontalArrangement = Arrangement.spacedBy(gap), verticalAlignment = Alignment.CenterVertically) {
-            GameBtn("◀", buttonSize, onPress = onLeftPress, onRelease = onLeftRelease)
+            GameBtn(ButtonIcon.LEFT, buttonSize, onPress = onLeftPress, onRelease = onLeftRelease)
             if (rotateInCenter)
-                GameBtn("↻", centerSize, backgroundColor = theme.buttonSecondary, pressedColor = theme.buttonSecondaryPressed, onClick = onRotate)
+                GameBtn(ButtonIcon.ROTATE, centerSize, backgroundColor = theme.buttonSecondary, pressedColor = theme.buttonSecondaryPressed, onClick = onRotate)
             else
-                Box(Modifier.size(centerSize).clip(CircleShape).background(theme.buttonSecondaryPressed))
-            GameBtn("▶", buttonSize, onPress = onRightPress, onRelease = onRightRelease)
+                Box(Modifier.size(centerSize).clip(CircleShape).background(theme.buttonSecondaryPressed.copy(alpha = 0.5f)))
+            GameBtn(ButtonIcon.RIGHT, buttonSize, onPress = onRightPress, onRelease = onRightRelease)
         }
-        GameBtn("▼", buttonSize, onPress = onDownPress, onRelease = onDownRelease)
+        GameBtn(ButtonIcon.DOWN, buttonSize, onPress = onDownPress, onRelease = onDownRelease)
     }
 }
 
-/**
- * Standalone rotate button — large, obvious.
- */
+// ===== Rotate Button =====
+
 @Composable
 fun RotateButton(onClick: () -> Unit, size: Dp = 72.dp, modifier: Modifier = Modifier) {
-    Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
-        GameBtn("↻", size, onClick = onClick)
-    }
+    GameBtn(ButtonIcon.ROTATE, size, modifier = modifier, onClick = onClick)
 }
 
-/**
- * Pill-shaped action button — for HOLD, PAUSE, START, etc.
- * Clean rounded pill, consistent height, gentle press animation.
- */
+// ===== Pill Action Button (HOLD, PAUSE, START) =====
+
 @Composable
 fun ActionButton(
-    text: String,
-    onClick: () -> Unit,
+    text: String, onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    width: Dp = 90.dp,
-    height: Dp = 40.dp,
-    enabled: Boolean = true,
-    backgroundColor: Color? = null
+    width: Dp = 90.dp, height: Dp = 40.dp,
+    enabled: Boolean = true, backgroundColor: Color? = null
 ) {
     val theme = LocalGameTheme.current
     var isPressed by remember { mutableStateOf(false) }
@@ -136,8 +192,7 @@ fun ActionButton(
 
     val scale by animateFloatAsState(
         targetValue = if (isPressed) 0.93f else 1f,
-        animationSpec = spring(stiffness = Spring.StiffnessHigh),
-        label = "scale"
+        animationSpec = spring(stiffness = Spring.StiffnessHigh), label = "s"
     )
 
     Box(
@@ -157,24 +212,17 @@ fun ActionButton(
             ),
         contentAlignment = Alignment.Center
     ) {
-        Text(text, fontSize = (height.value * 0.36f).sp, fontWeight = FontWeight.Bold,
+        Text(
+            text, fontSize = (height.value * 0.34f).sp, fontWeight = FontWeight.Bold,
             fontFamily = FontFamily.Monospace, letterSpacing = 1.sp,
-            color = if (enabled) theme.textPrimary else theme.textPrimary.copy(alpha = 0.3f))
+            color = if (enabled) theme.textPrimary else theme.textPrimary.copy(alpha = 0.3f)
+        )
     }
 }
 
-// Keep backward compatibility alias
+// Backward compat alias
 @Composable
 fun WideActionButton(
     text: String, onClick: () -> Unit, modifier: Modifier = Modifier,
     width: Dp = 100.dp, height: Dp = 44.dp, enabled: Boolean = true, backgroundColor: Color? = null
 ) = ActionButton(text, onClick, modifier, width, height, enabled, backgroundColor)
-
-// Keep backward compatibility alias
-@Composable
-fun PrimaryGameButton(
-    text: String, size: Dp = 68.dp, modifier: Modifier = Modifier,
-    enabled: Boolean = true, shape: androidx.compose.ui.graphics.Shape = CircleShape,
-    backgroundColor: Color? = null, pressedColor: Color? = null,
-    onPress: () -> Unit = {}, onRelease: () -> Unit = {}, onClick: () -> Unit = {}
-) = GameBtn(text, size, modifier, enabled, backgroundColor, pressedColor, onPress, onRelease, onClick)
