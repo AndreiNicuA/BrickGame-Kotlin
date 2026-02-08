@@ -409,3 +409,187 @@ private fun BoxWithConstraintsScope.DraggableHandle(
         )
     }
 }
+
+// ============================================================================
+// STANDALONE FREEFORM EDITOR SCREEN
+// Opens directly from Settings — no game required.
+// Shows an empty board grid as background so user can see spatial context.
+// ============================================================================
+
+/**
+ * Full-screen freeform editor that can be opened from settings.
+ * Renders an empty 10×20 preview grid behind the drag handles.
+ */
+@Composable
+fun FreeformEditorScreen(
+    controlPositions: Map<String, FreeformPosition>,
+    infoPositions: Map<String, FreeformPosition>,
+    onControlMoved: (String, FreeformPosition) -> Unit,
+    onInfoMoved: (String, FreeformPosition) -> Unit,
+    onReset: () -> Unit,
+    onDone: () -> Unit
+) {
+    val theme = LocalGameTheme.current
+    val density = LocalDensity.current
+
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(theme.backgroundColor)
+            .systemBarsPadding()
+    ) {
+        // Empty board grid as background context
+        EmptyBoardPreview(
+            Modifier.fillMaxSize(),
+            gridColor = theme.pixelOff.copy(alpha = 0.3f)
+        )
+
+        // Editor overlay (always visible — no AnimatedVisibility)
+        BoxWithConstraints(
+            Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.35f))
+        ) {
+            val maxWidthPx = with(density) { maxWidth.toPx() }
+            val maxHeightPx = with(density) { maxHeight.toPx() }
+
+            // Instructions
+            Surface(
+                modifier = Modifier.align(Alignment.TopCenter).padding(top = 32.dp),
+                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.9f)
+            ) {
+                Column(
+                    Modifier.padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text("✥", fontSize = 24.sp, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "Drag elements to reposition",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(Modifier.size(12.dp).background(Color(0xFF3B82F6), CircleShape))
+                            Spacer(Modifier.width(4.dp))
+                            Text("Controls", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onPrimaryContainer.copy(0.7f))
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(Modifier.size(12.dp).background(Color(0xFFF59E0B), CircleShape))
+                            Spacer(Modifier.width(4.dp))
+                            Text("Info", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onPrimaryContainer.copy(0.7f))
+                        }
+                    }
+                }
+            }
+
+            // Draggable control elements (blue)
+            val cDefaults = PlayerProfile.defaultFreeformPositions()
+            val controlItems = listOf(
+                Triple("DPAD", "D-Pad", 50.dp),
+                Triple("ROTATE_BTN", "Rotate", 60.dp),
+                Triple("HOLD_BTN", "Hold", 72.dp),
+                Triple("PAUSE_BTN", "Pause", 72.dp),
+                Triple("MENU_BTN", "Menu", 42.dp)
+            )
+
+            controlItems.forEach { (key, label, size) ->
+                val pos = controlPositions[key] ?: cDefaults[key]!!
+                val sizePx = with(density) { size.toPx() }
+                DraggableHandle(
+                    label = label,
+                    position = pos,
+                    maxWidthPx = maxWidthPx,
+                    maxHeightPx = maxHeightPx,
+                    elementSizePx = sizePx,
+                    elementSize = size,
+                    color = Color(0xFF3B82F6),
+                    onDragEnd = { newPos -> onControlMoved(key, newPos) }
+                )
+            }
+
+            // Draggable info elements (orange)
+            val iDefaults = PlayerProfile.defaultFreeformInfoPositions()
+            val infoItems = listOf(
+                Triple("SCORE", "Score", 48.dp),
+                Triple("LEVEL", "Level", 40.dp),
+                Triple("LINES", "Lines", 40.dp),
+                Triple("HOLD_PREVIEW", "Hold▫", 44.dp),
+                Triple("NEXT_PREVIEW", "Next▫", 44.dp)
+            )
+
+            infoItems.forEach { (key, label, size) ->
+                val pos = infoPositions[key] ?: iDefaults[key]!!
+                val sizePx = with(density) { size.toPx() }
+                DraggableHandle(
+                    label = label,
+                    position = pos,
+                    maxWidthPx = maxWidthPx,
+                    maxHeightPx = maxHeightPx,
+                    elementSizePx = sizePx,
+                    elementSize = size,
+                    color = Color(0xFFF59E0B),
+                    onDragEnd = { newPos -> onInfoMoved(key, newPos) }
+                )
+            }
+
+            // Bottom buttons: Reset + Done
+            Row(
+                Modifier.align(Alignment.BottomCenter).padding(bottom = 32.dp),
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                OutlinedButton(
+                    onClick = onReset,
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+                    border = ButtonDefaults.outlinedButtonBorder(enabled = true)
+                ) {
+                    Text("↺", fontSize = 16.sp)
+                    Spacer(Modifier.width(6.dp))
+                    Text("Reset")
+                }
+
+                Button(
+                    onClick = onDone,
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF22C55E))
+                ) {
+                    Text("✓", fontSize = 16.sp, color = Color.White)
+                    Spacer(Modifier.width(6.dp))
+                    Text("Done")
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Draws an empty 10×20 Tetris grid as a visual reference for the editor.
+ */
+@Composable
+private fun EmptyBoardPreview(modifier: Modifier = Modifier, gridColor: Color) {
+    androidx.compose.foundation.Canvas(modifier) {
+        val cols = 10
+        val rows = 20
+        val cellW = size.width / cols
+        val cellH = size.height / rows
+        val cellSize = minOf(cellW, cellH)
+        val boardW = cellSize * cols
+        val boardH = cellSize * rows
+        val offsetX = (size.width - boardW) / 2
+        val offsetY = (size.height - boardH) / 2
+
+        // Draw grid cells
+        for (r in 0 until rows) {
+            for (c in 0 until cols) {
+                drawRect(
+                    color = gridColor,
+                    topLeft = androidx.compose.ui.geometry.Offset(
+                        offsetX + c * cellSize + 1f,
+                        offsetY + r * cellSize + 1f
+                    ),
+                    size = androidx.compose.ui.geometry.Size(cellSize - 2f, cellSize - 2f)
+                )
+            }
+        }
+    }
+}
