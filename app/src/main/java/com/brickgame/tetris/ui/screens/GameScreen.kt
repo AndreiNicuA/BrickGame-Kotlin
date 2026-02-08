@@ -94,16 +94,51 @@ fun GameScreen(
     Column(Modifier.fillMaxSize().padding(6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         // Device frame
         Row(Modifier.fillMaxWidth().weight(1f).clip(RoundedCornerShape(10.dp)).background(theme.deviceColor).padding(6.dp)) {
-            // Board — takes all remaining space
+            // Board — takes remaining space
             GameBoard(gs.board, Modifier.weight(1f).fillMaxHeight().padding(end = 4.dp), gs.currentPiece, gs.ghostY, ghost, gs.clearedLineRows, anim, ad, multiColor = LocalMultiColor.current)
-            // Right: Hold + Score + Next — all stacked
-            Column(Modifier.width(62.dp).fillMaxHeight(), Arrangement.SpaceEvenly, Alignment.CenterHorizontally) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) { Tag("HOLD"); HoldPiecePreview(gs.holdPiece?.shape, gs.holdUsed, Modifier.size(48.dp)) }
-                ScoreBlock(gs.score, gs.level, gs.lines)
+            // Right info panel — properly grouped
+            Column(
+                Modifier.width(72.dp).fillMaxHeight().padding(vertical = 4.dp),
+                verticalArrangement = Arrangement.SpaceBetween,
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                // Top group: Score
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Tag("NEXT")
+                    Text("SCORE", fontSize = 8.sp, color = theme.textSecondary, fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace, letterSpacing = 1.sp)
+                    Spacer(Modifier.height(2.dp))
+                    Text(gs.score.toString().padStart(7, '0'), fontSize = 13.sp, fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace, color = theme.pixelOn, letterSpacing = 1.sp)
+                }
+
+                // Hold piece
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("HOLD", fontSize = 8.sp, color = theme.textSecondary, fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace, letterSpacing = 1.sp)
+                    Spacer(Modifier.height(2.dp))
+                    HoldPiecePreview(gs.holdPiece?.shape, gs.holdUsed, Modifier.size(44.dp))
+                }
+
+                // Level + Lines
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("LEVEL", fontSize = 8.sp, color = theme.textSecondary, fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace, letterSpacing = 1.sp)
+                    Text("${gs.level}", fontSize = 16.sp, fontWeight = FontWeight.ExtraBold,
+                        fontFamily = FontFamily.Monospace, color = theme.accentColor)
+                    Spacer(Modifier.height(4.dp))
+                    Text("LINES", fontSize = 8.sp, color = theme.textSecondary, fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace, letterSpacing = 1.sp)
+                    Text("${gs.lines}", fontSize = 16.sp, fontWeight = FontWeight.ExtraBold,
+                        fontFamily = FontFamily.Monospace, color = theme.accentColor)
+                }
+
+                // Next pieces
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("NEXT", fontSize = 8.sp, color = theme.textSecondary, fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace, letterSpacing = 1.sp)
+                    Spacer(Modifier.height(2.dp))
                     gs.nextPieces.take(3).forEachIndexed { i, p ->
-                        NextPiecePreview(p.shape, Modifier.size(when(i){0->46.dp;1->36.dp;else->28.dp}).padding(1.dp), when(i){0->1f;1->0.55f;else->0.3f})
+                        NextPiecePreview(p.shape, Modifier.size(when (i) { 0 -> 44.dp; 1 -> 34.dp; else -> 26.dp }).padding(1.dp), when (i) { 0 -> 1f; 1 -> 0.55f; else -> 0.3f })
                     }
                 }
             }
