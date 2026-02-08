@@ -155,7 +155,7 @@ fun LayoutEditorScreen(
 }
 
 // ======================================================================
-// TOP BAR ZONE — Draggable element reorder
+// TOP BAR ZONE — Draggable element reorder + 3 visual styles
 // ======================================================================
 @Composable
 private fun TopBarZone(
@@ -164,29 +164,69 @@ private fun TopBarZone(
     onUpdate: (CustomLayoutData) -> Unit
 ) {
     val order = layout.topBarElementOrder.filter { layout.isVisible(it) }
+    val density = LocalDensity.current
 
-    Row(Modifier.fillMaxWidth().height(56.dp).background(theme.deviceColor.copy(0.3f)).padding(horizontal = 6.dp),
+    // The visual container changes based on topBarStyle
+    val bgMod = when (layout.topBarStyle) {
+        "DEVICE_FRAME" -> Modifier.fillMaxWidth().padding(horizontal = 4.dp).clip(RoundedCornerShape(10.dp)).background(theme.deviceColor).padding(6.dp)
+        "MINIMAL" -> Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 2.dp)
+        else -> Modifier.fillMaxWidth().padding(horizontal = 4.dp).clip(RoundedCornerShape(10.dp)).background(theme.deviceColor.copy(0.6f)).padding(horizontal = 10.dp, vertical = 6.dp)
+    }
+
+    Row(bgMod.height(if (layout.topBarStyle == "MINIMAL") 36.dp else 56.dp),
         Arrangement.SpaceEvenly, Alignment.CenterVertically) {
-        order.forEach { elem ->
+        order.forEachIndexed { idx, elem ->
             val isSelected = selectedElement == elem
+            var dragDX by remember { mutableStateOf(0f) }
+            var isDragging by remember { mutableStateOf(false) }
+
             Box(Modifier
+                .offset { IntOffset(if (isDragging) dragDX.roundToInt() else 0, 0) }
+                .zIndex(if (isDragging) 100f else 1f)
                 .clip(RoundedCornerShape(6.dp))
-                .background(if (isSelected) ACC.copy(0.15f) else Color.Transparent)
-                .border(1.dp, if (isSelected) ACC else Color.Transparent, RoundedCornerShape(6.dp))
-                .clickable { onSelect(elem) }
+                .background(if (isDragging) GRN.copy(0.15f) else if (isSelected) ACC.copy(0.15f) else Color.Transparent)
+                .border(1.dp, if (isDragging) GRN else if (isSelected) ACC else Color.Transparent, RoundedCornerShape(6.dp))
+                .pointerInput(elem) {
+                    detectDragGestures(
+                        onDragStart = { isDragging = true; dragDX = 0f },
+                        onDragEnd = {
+                            isDragging = false
+                            // Reorder based on drag direction
+                            val threshold = with(density) { 40.dp.toPx() }
+                            val currentOrder = layout.topBarElementOrder.toMutableList()
+                            val curIdx = currentOrder.indexOf(elem)
+                            if (curIdx >= 0) {
+                                if (dragDX > threshold && curIdx < currentOrder.size - 1) {
+                                    currentOrder.removeAt(curIdx)
+                                    currentOrder.add(curIdx + 1, elem)
+                                    onUpdate(layout.copy(topBarElementOrder = currentOrder))
+                                } else if (dragDX < -threshold && curIdx > 0) {
+                                    currentOrder.removeAt(curIdx)
+                                    currentOrder.add(curIdx - 1, elem)
+                                    onUpdate(layout.copy(topBarElementOrder = currentOrder))
+                                }
+                            }
+                            dragDX = 0f
+                        },
+                        onDragCancel = { isDragging = false; dragDX = 0f },
+                        onDrag = { change, amt -> change.consume(); dragDX += amt.x }
+                    )
+                }
+                .pointerInput(elem) { detectTapGestures { onSelect(elem) } }
                 .padding(horizontal = 6.dp, vertical = 4.dp)
             ) {
+                val isMini = layout.topBarStyle == "MINIMAL"
                 when (elem) {
                     LayoutElements.HOLD_PREVIEW -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("HOLD", fontSize = 7.sp, color = theme.textSecondary)
-                        Box(Modifier.size(28.dp).clip(RoundedCornerShape(4.dp)).background(theme.screenBackground))
+                        Text("HOLD", fontSize = if (isMini) 6.sp else 7.sp, color = theme.textSecondary)
+                        Box(Modifier.size(if (isMini) 20.dp else 28.dp).clip(RoundedCornerShape(4.dp)).background(theme.screenBackground))
                     }
-                    LayoutElements.SCORE -> Text("001234", fontSize = 14.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, color = theme.pixelOn)
-                    LayoutElements.LEVEL -> Text("LV 1", fontSize = 9.sp, fontFamily = FontFamily.Monospace, color = theme.textSecondary, fontWeight = FontWeight.Bold)
-                    LayoutElements.LINES -> Text("0 LINES", fontSize = 9.sp, fontFamily = FontFamily.Monospace, color = theme.textSecondary, fontWeight = FontWeight.Bold)
+                    LayoutElements.SCORE -> Text("001234", fontSize = if (isMini) 10.sp else 14.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, color = theme.pixelOn)
+                    LayoutElements.LEVEL -> Text("LV 1", fontSize = if (isMini) 7.sp else 9.sp, fontFamily = FontFamily.Monospace, color = theme.textSecondary, fontWeight = FontWeight.Bold)
+                    LayoutElements.LINES -> Text("0 LINES", fontSize = if (isMini) 7.sp else 9.sp, fontFamily = FontFamily.Monospace, color = theme.textSecondary, fontWeight = FontWeight.Bold)
                     LayoutElements.NEXT_PREVIEW -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("NEXT", fontSize = 7.sp, color = theme.textSecondary)
-                        Box(Modifier.size(28.dp).clip(RoundedCornerShape(4.dp)).background(theme.screenBackground))
+                        Text("NEXT", fontSize = if (isMini) 6.sp else 7.sp, color = theme.textSecondary)
+                        Box(Modifier.size(if (isMini) 20.dp else 28.dp).clip(RoundedCornerShape(4.dp)).background(theme.screenBackground))
                     }
                 }
             }
@@ -271,6 +311,10 @@ private fun ColumnScope.BoardZone(
                     dragDX > (maxWPx * 0.15f) -> "RIGHT →"
                     else -> "CENTER"
                 }, color = GRN, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.align(Alignment.Center).clip(RoundedCornerShape(6.dp)).background(Color.Black.copy(0.7f)).padding(horizontal = 12.dp, vertical = 4.dp))
+            } else {
+                // Idle hint
+                Text("⟵ drag ⟶", color = DIM.copy(0.3f), fontSize = 10.sp,
+                    modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 4.dp))
             }
         }
     }

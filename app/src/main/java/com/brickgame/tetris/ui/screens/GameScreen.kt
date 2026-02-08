@@ -54,13 +54,7 @@ fun GameScreen(
             gameState.status == GameStatus.MENU -> MenuOverlay(gameState.highScore, scoreHistory, onStartGame, onOpenSettings)
             else -> {
                 if (customLayout != null) {
-                    // Use the base layout with customization applied
-                    val cl = customLayout!!
-                    when (cl.baseLayout) {
-                        "MODERN" -> ModernLayout(gameState, dpadStyle, ghostEnabled, animationStyle, animationDuration, onRotate, onHardDrop, onHold, onLeftPress, onLeftRelease, onRightPress, onRightRelease, onDownPress, onDownRelease, onPause, onOpenSettings, onStartGame)
-                        "FULLSCREEN" -> FullscreenLayout(gameState, dpadStyle, ghostEnabled, animationStyle, animationDuration, onRotate, onHardDrop, onHold, onLeftPress, onLeftRelease, onRightPress, onRightRelease, onDownPress, onDownRelease, onPause, onOpenSettings, onStartGame)
-                        else -> ClassicLayout(gameState, dpadStyle, ghostEnabled, animationStyle, animationDuration, onRotate, onHardDrop, onHold, onLeftPress, onLeftRelease, onRightPress, onRightRelease, onDownPress, onDownRelease, onPause, onOpenSettings, onStartGame)
-                    }
+                    CustomGameLayout(gameState, customLayout, ghostEnabled, animationStyle, animationDuration, onRotate, onHardDrop, onHold, onLeftPress, onLeftRelease, onRightPress, onRightRelease, onDownPress, onDownRelease, onPause, onOpenSettings, onStartGame)
                 } else when (layoutPreset) {
                     LayoutPreset.PORTRAIT_CLASSIC -> ClassicLayout(gameState, dpadStyle, ghostEnabled, animationStyle, animationDuration, onRotate, onHardDrop, onHold, onLeftPress, onLeftRelease, onRightPress, onRightRelease, onDownPress, onDownRelease, onPause, onOpenSettings, onStartGame)
                     LayoutPreset.PORTRAIT_MODERN -> ModernLayout(gameState, dpadStyle, ghostEnabled, animationStyle, animationDuration, onRotate, onHardDrop, onHold, onLeftPress, onLeftRelease, onRightPress, onRightRelease, onDownPress, onDownRelease, onPause, onOpenSettings, onStartGame)
@@ -149,6 +143,7 @@ fun GameScreen(
             HoldPiecePreview(gs.holdPiece?.shape, gs.holdUsed, Modifier.size(28.dp))
             Text(gs.score.toString(), fontSize = 14.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, color = theme.accentColor)
             Tag("LV${gs.level}")
+            Tag("${gs.lines}L")
             NextPiecePreview(gs.nextPieces.firstOrNull()?.shape, Modifier.size(28.dp))
         }
         FullControls(dp, onHD, onHold, onLP, onLR, onRP, onRR, onDP, onDR, onRotate, onPause, onSet, onStart, gs.status)
@@ -157,6 +152,163 @@ fun GameScreen(
 
 // === LANDSCAPE ===
 @Composable private fun LandscapeLayout(
+
+// === CUSTOM GAME LAYOUT: 3-zone rendering using CustomLayoutData settings ===
+@Composable private fun CustomGameLayout(
+    gs: GameState, cl: CustomLayoutData, ghost: Boolean, anim: AnimationStyle, ad: Float,
+    onRotate: () -> Unit, onHD: () -> Unit, onHold: () -> Unit,
+    onLP: () -> Unit, onLR: () -> Unit, onRP: () -> Unit, onRR: () -> Unit,
+    onDP: () -> Unit, onDR: () -> Unit, onPause: () -> Unit, onSet: () -> Unit, onStart: () -> Unit
+) {
+    val theme = LocalGameTheme.current
+    val isRotateCenter = cl.dpadStyle == "ROTATE_CENTER"
+    val dpadSz = when (cl.controlSize) { "SMALL" -> 44.dp; "LARGE" -> 62.dp; else -> 54.dp }
+    val rotSz = when (cl.controlSize) { "SMALL" -> 52.dp; "LARGE" -> 74.dp; else -> 66.dp }
+    val dp = if (isRotateCenter) DPadStyle.ROTATE_CENTRE else DPadStyle.STANDARD
+
+    Column(Modifier.fillMaxSize().padding(horizontal = 4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+
+        // === TOP BAR ===
+        if (cl.topBarVisible) {
+            when (cl.topBarStyle) {
+                "DEVICE_FRAME" -> {
+                    // Classic-style device frame bar
+                    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(theme.deviceColor).padding(6.dp),
+                        Arrangement.SpaceBetween, Alignment.CenterVertically) {
+                        cl.topBarElementOrder.filter { cl.isVisible(it) }.forEach { elem ->
+                            when (elem) {
+                                LayoutElements.HOLD_PREVIEW -> Column(horizontalAlignment = Alignment.CenterHorizontally) { Tag("HOLD"); HoldPiecePreview(gs.holdPiece?.shape, gs.holdUsed, Modifier.size(34.dp)) }
+                                LayoutElements.SCORE -> Text(gs.score.toString().padStart(7, '0'), fontSize = 18.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, color = theme.pixelOn, letterSpacing = 2.sp)
+                                LayoutElements.LEVEL -> Tag("LV ${gs.level}")
+                                LayoutElements.LINES -> Tag("${gs.lines} LINES")
+                                LayoutElements.NEXT_PREVIEW -> Column(horizontalAlignment = Alignment.CenterHorizontally) { Tag("NEXT"); NextPiecePreview(gs.nextPieces.firstOrNull()?.shape, Modifier.size(34.dp)) }
+                            }
+                        }
+                    }
+                }
+                "MINIMAL" -> {
+                    // Tiny strip
+                    Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 2.dp), Arrangement.SpaceBetween, Alignment.CenterVertically) {
+                        cl.topBarElementOrder.filter { cl.isVisible(it) }.forEach { elem ->
+                            when (elem) {
+                                LayoutElements.HOLD_PREVIEW -> HoldPiecePreview(gs.holdPiece?.shape, gs.holdUsed, Modifier.size(24.dp))
+                                LayoutElements.SCORE -> Text(gs.score.toString(), fontSize = 13.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, color = theme.accentColor)
+                                LayoutElements.LEVEL -> Tag("LV${gs.level}")
+                                LayoutElements.LINES -> Tag("${gs.lines}L")
+                                LayoutElements.NEXT_PREVIEW -> NextPiecePreview(gs.nextPieces.firstOrNull()?.shape, Modifier.size(24.dp))
+                            }
+                        }
+                    }
+                }
+                else -> {
+                    // COMPACT — Modern-style bar
+                    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(theme.deviceColor).padding(horizontal = 10.dp, vertical = 6.dp),
+                        Arrangement.SpaceBetween, Alignment.CenterVertically) {
+                        cl.topBarElementOrder.filter { cl.isVisible(it) }.forEach { elem ->
+                            when (elem) {
+                                LayoutElements.HOLD_PREVIEW -> Column(horizontalAlignment = Alignment.CenterHorizontally) { Tag("HOLD"); HoldPiecePreview(gs.holdPiece?.shape, gs.holdUsed, Modifier.size(34.dp)) }
+                                LayoutElements.SCORE -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text(gs.score.toString().padStart(7, '0'), fontSize = 20.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, color = theme.pixelOn, letterSpacing = 2.sp)
+                                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) { if (cl.isVisible(LayoutElements.LEVEL)) Tag("LV ${gs.level}"); if (cl.isVisible(LayoutElements.LINES)) Tag("${gs.lines} LINES") }
+                                }
+                                LayoutElements.LEVEL -> {} // Handled inside SCORE for compact
+                                LayoutElements.LINES -> {} // Handled inside SCORE for compact
+                                LayoutElements.NEXT_PREVIEW -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Tag("NEXT")
+                                    gs.nextPieces.take(cl.nextQueueSize).forEachIndexed { i, p ->
+                                        NextPiecePreview(p.shape, Modifier.size(if (i == 0) 34.dp else 24.dp), if (i == 0) 1f else 0.5f)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            Spacer(Modifier.height(4.dp))
+        }
+
+        // === BOARD ===
+        val boardWeight = when (cl.boardSize) { "COMPACT" -> 0.55f; "FULLSCREEN" -> 0.85f; else -> 0.7f }
+        val boardAlign = when (cl.boardAlignment) { "LEFT" -> Alignment.CenterStart; "RIGHT" -> Alignment.CenterEnd; else -> Alignment.Center }
+
+        Box(Modifier.fillMaxWidth().weight(boardWeight), contentAlignment = boardAlign) {
+            val boardMod = when (cl.boardAlignment) {
+                "LEFT" -> Modifier.fillMaxHeight().fillMaxWidth(0.8f)
+                "RIGHT" -> Modifier.fillMaxHeight().fillMaxWidth(0.8f)
+                else -> Modifier.fillMaxHeight().aspectRatio(0.5f)
+            }
+            Box(boardMod) {
+                GameBoard(gs.board, Modifier.fillMaxSize(), gs.currentPiece, gs.ghostY, ghost, gs.clearedLineRows, anim, ad)
+                // Info overlay when top bar is hidden
+                if (!cl.topBarVisible && cl.boardInfoOverlay != "HIDDEN") {
+                    Box(Modifier.fillMaxWidth().align(Alignment.TopCenter).background(Color.Black.copy(0.35f)).padding(horizontal = 6.dp, vertical = 3.dp)) {
+                        Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
+                            if (cl.isVisible(LayoutElements.HOLD_PREVIEW)) HoldPiecePreview(gs.holdPiece?.shape, gs.holdUsed, Modifier.size(22.dp))
+                            if (cl.isVisible(LayoutElements.SCORE)) Text(gs.score.toString(), fontSize = 13.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, color = Color.White.copy(0.9f))
+                            if (cl.isVisible(LayoutElements.LEVEL)) Text("LV${gs.level}", fontSize = 10.sp, fontFamily = FontFamily.Monospace, color = Color.White.copy(0.7f))
+                            if (cl.isVisible(LayoutElements.LINES)) Text("${gs.lines}L", fontSize = 10.sp, fontFamily = FontFamily.Monospace, color = Color.White.copy(0.7f))
+                            if (cl.isVisible(LayoutElements.NEXT_PREVIEW)) NextPiecePreview(gs.nextPieces.firstOrNull()?.shape, Modifier.size(22.dp))
+                        }
+                    }
+                }
+            }
+        }
+
+        Spacer(Modifier.height(4.dp))
+
+        // === CONTROLS — uses stored positions ===
+        CustomControls(cl, dp, onHD, onHold, onLP, onLR, onRP, onRR, onDP, onDR, onRotate, onPause, onSet, onStart, gs.status)
+    }
+}
+
+// Renders controls at stored normalized positions within the controls area
+@Composable private fun CustomControls(
+    cl: CustomLayoutData, dp: DPadStyle, onHD: () -> Unit, onHold: () -> Unit,
+    onLP: () -> Unit, onLR: () -> Unit, onRP: () -> Unit, onRR: () -> Unit,
+    onDP: () -> Unit, onDR: () -> Unit, onRotate: () -> Unit,
+    onPause: () -> Unit, onSet: () -> Unit, onStart: () -> Unit, status: GameStatus
+) {
+    val dpadSz = when (cl.controlSize) { "SMALL" -> 44.dp; "LARGE" -> 62.dp; else -> 54.dp }
+    val rotSz = when (cl.controlSize) { "SMALL" -> 52.dp; "LARGE" -> 74.dp; else -> 66.dp }
+    val isRotateCenter = cl.dpadStyle == "ROTATE_CENTER"
+    val positions = cl.controlPositions
+
+    BoxWithConstraints(Modifier.fillMaxWidth().height(when (cl.controlSize) { "SMALL" -> 140.dp; "LARGE" -> 200.dp; else -> 170.dp })) {
+        val mw = maxWidth; val mh = maxHeight
+
+        // D-Pad
+        val dpPos = positions[LayoutElements.DPAD] ?: ElementPosition(0.15f, 0.5f)
+        val dpadArea = dpadSz * 2.6f
+        Box(Modifier.offset(x = mw * dpPos.x - dpadArea / 2, y = mh * dpPos.y - dpadArea / 2)) {
+            DPad(dpadSz, rotateInCenter = isRotateCenter, onUpPress = onHD, onDownPress = onDP, onDownRelease = onDR, onLeftPress = onLP, onLeftRelease = onLR, onRightPress = onRP, onRightRelease = onRR, onRotate = onRotate)
+        }
+
+        // Rotate button (only if standard style)
+        if (!isRotateCenter && cl.isVisible(LayoutElements.ROTATE_BTN)) {
+            val rp = positions[LayoutElements.ROTATE_BTN] ?: ElementPosition(0.85f, 0.5f)
+            Box(Modifier.offset(x = mw * rp.x - rotSz / 2, y = mh * rp.y - rotSz / 2)) { RotateButton(onRotate, rotSz) }
+        }
+
+        // Hold button
+        if (cl.isVisible(LayoutElements.HOLD_BTN)) {
+            val hp = positions[LayoutElements.HOLD_BTN] ?: ElementPosition(0.5f, 0.2f)
+            Box(Modifier.offset(x = mw * hp.x - 39.dp, y = mh * hp.y - 17.dp)) { ActionButton("HOLD", onHold, width = 78.dp, height = 34.dp) }
+        }
+
+        // Pause/Start button
+        if (cl.isVisible(LayoutElements.PAUSE_BTN)) {
+            val pp = positions[LayoutElements.PAUSE_BTN] ?: ElementPosition(0.5f, 0.55f)
+            Box(Modifier.offset(x = mw * pp.x - 39.dp, y = mh * pp.y - 17.dp)) {
+                ActionButton(if (status == GameStatus.MENU) "START" else "PAUSE",
+                    { if (status == GameStatus.MENU) onStart() else onPause() }, width = 78.dp, height = 34.dp)
+            }
+        }
+
+        // Menu button (always visible)
+        val mp = positions[LayoutElements.MENU_BTN] ?: ElementPosition(0.5f, 0.88f)
+        Box(Modifier.offset(x = mw * mp.x - 23.dp, y = mh * mp.y - 12.dp)) { ActionButton("···", onSet, width = 46.dp, height = 24.dp) }
+    }
+}
     gs: GameState, dp: DPadStyle, ghost: Boolean, anim: AnimationStyle, ad: Float,
     onRotate: () -> Unit, onHD: () -> Unit, onHold: () -> Unit,
     onLP: () -> Unit, onLR: () -> Unit, onRP: () -> Unit, onRR: () -> Unit,
@@ -351,35 +503,69 @@ fun GameScreen(
     }
 }
 
-// Falling transparent tetris pieces — matrix-style
+// Falling transparent tetris pieces — matrix rain style with colored pieces and green trails
 @Composable
 private fun FallingPiecesBackground(theme: com.brickgame.tetris.ui.theme.GameTheme) {
-    data class FP(val col: Float, val speed: Float, val sz: Float, val shape: Int, val alpha: Float, val startY: Float)
+    data class FP(val col: Float, val speed: Float, val sz: Float, val shape: Int,
+                  val alpha: Float, val startY: Float, val colorIdx: Int, val trailLen: Int)
+
     val pieces = remember {
-        (0..19).map { FP(col = it * 0.05f, speed = 0.15f + (it % 7) * 0.08f, sz = 10f + (it % 3) * 5f, shape = it % 7, alpha = 0.08f + (it % 5) * 0.03f, startY = -(it * 100f + (it % 4) * 60f)) }
+        val rng = java.util.Random(42)
+        (0..299).map {
+            FP(col = rng.nextFloat(), speed = 0.4f + rng.nextFloat() * 1.2f,
+               sz = 5f + rng.nextFloat() * 8f, shape = it % 7,
+               alpha = 0.12f + rng.nextFloat() * 0.25f,
+               startY = -(rng.nextFloat() * 3000f),
+               colorIdx = it % 7, trailLen = 2 + rng.nextInt(5))
+        }
     }
     val t = rememberInfiniteTransition(label = "bg")
-    val anim by t.animateFloat(0f, 10000f, infiniteRepeatable(tween(60000, easing = LinearEasing)), label = "fall")
-    val pixelColor = theme.accentColor
+    val anim by t.animateFloat(0f, 20000f, infiniteRepeatable(tween(30000, easing = LinearEasing)), label = "fall")
+
+    // Piece colors — bright and varied
+    val pieceColors = remember { listOf(
+        Color(0xFFFF4444), Color(0xFF44AAFF), Color(0xFFFFAA00), Color(0xFF44FF44),
+        Color(0xFFFF44FF), Color(0xFF44FFFF), Color(0xFFF4D03F)
+    ) }
+    val trailColor = Color(0xFF22C55E) // Green trail
+
+    val shapes = remember { listOf(
+        listOf(0 to 0, 1 to 0, 0 to 1, 1 to 1),       // O
+        listOf(0 to 0, 1 to 0, 2 to 0, 3 to 0),       // I
+        listOf(0 to 0, 1 to 0, 2 to 0, 2 to 1),       // L
+        listOf(0 to 0, 1 to 0, 2 to 0, 0 to 1),       // J
+        listOf(0 to 0, 1 to 0, 1 to 1, 2 to 1),       // S
+        listOf(1 to 0, 2 to 0, 0 to 1, 1 to 1),       // Z
+        listOf(0 to 0, 1 to 0, 2 to 0, 1 to 1),       // T
+    ) }
 
     Canvas(Modifier.fillMaxSize()) {
         val w = size.width; val h = size.height
-        val shapes = listOf(
-            listOf(0 to 0, 1 to 0, 0 to 1, 1 to 1),
-            listOf(0 to 0, 1 to 0, 2 to 0, 3 to 0),
-            listOf(0 to 0, 1 to 0, 2 to 0, 2 to 1),
-            listOf(0 to 0, 1 to 0, 2 to 0, 0 to 1),
-            listOf(0 to 0, 1 to 0, 1 to 1, 2 to 1),
-            listOf(1 to 0, 2 to 0, 0 to 1, 1 to 1),
-            listOf(0 to 0, 1 to 0, 2 to 0, 1 to 1),
-        )
         pieces.forEach { p ->
-            val baseY = ((p.startY + anim * p.speed) % (h + 400f)) - 200f
+            val baseY = ((p.startY + anim * p.speed) % (h + 600f)) - 300f
             val x = p.col * w
             val s = p.sz
-            shapes[p.shape % shapes.size].forEach { (dx, dy) ->
+            val shape = shapes[p.shape % shapes.size]
+            val pColor = pieceColors[p.colorIdx]
+
+            // Draw green trail (fading upward)
+            for (ti in 1..p.trailLen) {
+                val trailY = baseY - ti * (s + 2) * 1.5f
+                val trailAlpha = p.alpha * 0.4f * (1f - ti.toFloat() / (p.trailLen + 1))
+                shape.forEach { (dx, dy) ->
+                    drawRoundRect(
+                        color = trailColor.copy(alpha = trailAlpha.coerceIn(0f, 1f)),
+                        topLeft = androidx.compose.ui.geometry.Offset(x + dx * (s + 2), trailY + dy * (s + 2)),
+                        size = androidx.compose.ui.geometry.Size(s, s),
+                        cornerRadius = androidx.compose.ui.geometry.CornerRadius(2f, 2f)
+                    )
+                }
+            }
+
+            // Draw colored piece
+            shape.forEach { (dx, dy) ->
                 drawRoundRect(
-                    color = pixelColor.copy(alpha = p.alpha),
+                    color = pColor.copy(alpha = p.alpha),
                     topLeft = androidx.compose.ui.geometry.Offset(x + dx * (s + 2), baseY + dy * (s + 2)),
                     size = androidx.compose.ui.geometry.Size(s, s),
                     cornerRadius = androidx.compose.ui.geometry.CornerRadius(2f, 2f)
