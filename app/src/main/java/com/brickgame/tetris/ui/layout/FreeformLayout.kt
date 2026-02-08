@@ -11,8 +11,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.OpenWith
-import androidx.compose.material.icons.filled.RestartAlt
+import androidx.compose.material.icons.filled.DragHandle
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -33,8 +33,8 @@ import com.brickgame.tetris.game.GameState
 import com.brickgame.tetris.game.GameStatus
 import com.brickgame.tetris.ui.components.*
 import com.brickgame.tetris.ui.styles.AnimationStyle
+import com.brickgame.tetris.ui.screens.LocalMultiColor
 import com.brickgame.tetris.ui.theme.LocalGameTheme
-import com.brickgame.tetris.ui.theme.LocalMultiColor
 import kotlin.math.roundToInt
 
 /**
@@ -73,8 +73,8 @@ fun FreeformGameLayout(
             modifier = Modifier.fillMaxSize(),
             currentPiece = gs.currentPiece,
             ghostY = gs.ghostY,
-            ghostEnabled = ghostEnabled,
-            clearedLines = gs.clearedLineRows,
+            showGhost = ghostEnabled,
+            clearingLines = gs.clearedLineRows,
             animationStyle = animationStyle,
             animationDuration = animationDuration,
             multiColor = LocalMultiColor.current
@@ -147,7 +147,7 @@ fun FreeformGameLayout(
         val dp = controlPositions["DPAD"] ?: cDefaults["DPAD"]!!
         Box(Modifier.offset(x = maxW * dp.x - 25.dp, y = maxH * dp.y - 25.dp)) {
             DPad(
-                size = 50.dp,
+                buttonSize = 50.dp,
                 rotateInCenter = dpadStyle == DPadStyle.ROTATE_CENTRE,
                 onUpPress = onHardDrop,
                 onDownPress = onDownPress, onDownRelease = onDownRelease,
@@ -232,7 +232,7 @@ fun FreeformEditor(
                     Modifier.padding(16.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Icon(Icons.Default.OpenWith, null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
+                    Icon(Icons.Default.DragHandle, null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
                     Spacer(Modifier.height(6.dp))
                     Text(
                         "Drag elements to reposition",
@@ -308,7 +308,7 @@ fun FreeformEditor(
                     colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
                     border = ButtonDefaults.outlinedButtonBorder(enabled = true)
                 ) {
-                    Icon(Icons.Default.RestartAlt, null, modifier = Modifier.size(18.dp))
+                    Icon(Icons.Default.Refresh, null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(6.dp))
                     Text("Reset")
                 }
