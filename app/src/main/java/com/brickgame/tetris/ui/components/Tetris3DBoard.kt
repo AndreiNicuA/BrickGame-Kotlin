@@ -13,7 +13,7 @@ import com.brickgame.tetris.game.*
 /**
  * Isometric 3D Tetris board renderer.
  * Draws a 3D well with falling pieces using isometric projection.
- * Renders back-to-front for correct occlusion.
+ * Auto-sizes to fill available space. Renders back-to-front.
  */
 @Composable
 fun Tetris3DBoard(
@@ -24,29 +24,48 @@ fun Tetris3DBoard(
     Canvas(modifier) {
         val w = size.width
         val h = size.height
+        val bw = Tetris3DGame.BOARD_W
+        val bd = Tetris3DGame.BOARD_D
+        val bh = Tetris3DGame.BOARD_H
 
-        // Isometric cell size — fit the board in available space
-        // Isometric: x goes right-down, z goes left-down, y goes straight up
-        val cellW = w / (Tetris3DGame.BOARD_W + Tetris3DGame.BOARD_D + 2)
-        val cellH = cellW * 0.5f
-        val cellYH = cellW * 0.7f  // vertical height per Y level
+        // Compute cell size to maximize board in available space.
+        // Isometric width needed: (bw + bd) * cellW/2 (diamond width)
+        // Isometric height needed: (bw + bd) * cellH/2 + bh * cellYH (diamond depth + height)
+        // cellH = cellW * 0.5, cellYH = cellW * 0.65
 
-        // Origin point (top center of the well)
+        val isoRatioH = 0.5f   // cellH / cellW
+        val isoRatioY = 0.65f  // cellYH / cellW
+
+        // Horizontal constraint: (bw + bd) * cellW * 0.5 <= w * 0.92
+        val cellFromW = (w * 0.92f) / ((bw + bd) * 0.5f)
+        // Vertical constraint: (bw + bd) * cellH * 0.5 + bh * cellYH <= h * 0.95
+        val cellFromH = (h * 0.95f) / ((bw + bd) * isoRatioH * 0.5f + bh * isoRatioY)
+
+        val cellW = minOf(cellFromW, cellFromH)
+        val cellH = cellW * isoRatioH
+        val cellYH = cellW * isoRatioY
+
+        // Total board dimensions in screen space
+        val totalW = (bw + bd) * cellW * 0.5f
+        val totalH = (bw + bd) * cellH * 0.5f + bh * cellYH
+
+        // Center the board: origin is the top-center of the isometric diamond
         val ox = w / 2f
-        val oy = h * 0.12f
+        // Position so the board is vertically centered
+        val topOfBoard = (h - totalH) / 2f
+        val oy = topOfBoard + bh * cellYH  // origin is at the floor level, board grows upward
 
-        // Draw grid floor (y=0 plane)
-        drawFloorGrid(ox, oy, cellW, cellH, cellYH, Tetris3DGame.BOARD_W, Tetris3DGame.BOARD_D, Tetris3DGame.BOARD_H)
+        // Draw back walls first (behind everything)
+        drawWalls(ox, oy, cellW, cellH, cellYH, bw, bd, bh)
 
-        // Draw back walls (for depth reference)
-        drawWalls(ox, oy, cellW, cellH, cellYH, Tetris3DGame.BOARD_W, Tetris3DGame.BOARD_D, Tetris3DGame.BOARD_H)
+        // Draw floor grid
+        drawFloorGrid(ox, oy, cellW, cellH, cellYH, bw, bd)
 
-        // Draw placed blocks (back to front for correct occlusion)
+        // Draw placed blocks (back to front: high z first, high x first for correct occlusion)
         if (state.board.isNotEmpty()) {
-            for (y in Tetris3DGame.BOARD_H - 1 downTo 0) {
-                // Back-to-front: high z first, then low z; high x first for right side
-                for (z in 0 until Tetris3DGame.BOARD_D) {
-                    for (x in 0 until Tetris3DGame.BOARD_W) {
+            for (y in 0 until bh) {
+                for (z in bd - 1 downTo 0) {
+                    for (x in bw - 1 downTo 0) {
                         if (y < state.board.size && z < state.board[y].size && x < state.board[y][z].size) {
                             val colorIdx = state.board[y][z][x]
                             if (colorIdx > 0) {
@@ -93,17 +112,15 @@ private fun DrawScope.drawIsoCube(
     gx: Int, gy: Int, gz: Int, color: Color, alpha: Float
 ) {
     val x = gx.toFloat(); val y = gy.toFloat(); val z = gz.toFloat()
-
-    // 8 corners of the cube
-    val tfl = isoProject(ox, oy, cellW, cellH, cellYH, x, y + 1, z)         // top-front-left
-    val tfr = isoProject(ox, oy, cellW, cellH, cellYH, x + 1, y + 1, z)     // top-front-right
-    val tbl = isoProject(ox, oy, cellW, cellH, cellYH, x, y + 1, z + 1)     // top-back-left
-    val tbr = isoProject(ox, oy, cellW, cellH, cellYH, x + 1, y + 1, z + 1) // top-back-right
-    val bfl = isoProject(ox, oy, cellW, cellH, cellYH, x, y, z)             // bottom-front-left
-    val bfr = isoProject(ox, oy, cellW, cellH, cellYH, x + 1, y, z)         // bottom-front-right
-    val bbl = isoProject(ox, oy, cellW, cellH, cellYH, x, y, z + 1)         // bottom-back-left
-
     val a = alpha.coerceIn(0f, 1f)
+
+    val tfl = isoProject(ox, oy, cellW, cellH, cellYH, x, y + 1, z)
+    val tfr = isoProject(ox, oy, cellW, cellH, cellYH, x + 1, y + 1, z)
+    val tbl = isoProject(ox, oy, cellW, cellH, cellYH, x, y + 1, z + 1)
+    val tbr = isoProject(ox, oy, cellW, cellH, cellYH, x + 1, y + 1, z + 1)
+    val bfl = isoProject(ox, oy, cellW, cellH, cellYH, x, y, z)
+    val bfr = isoProject(ox, oy, cellW, cellH, cellYH, x + 1, y, z)
+    val bbl = isoProject(ox, oy, cellW, cellH, cellYH, x, y, z + 1)
 
     // Top face (brightest)
     val topPath = Path().apply {
@@ -112,42 +129,38 @@ private fun DrawScope.drawIsoCube(
     }
     drawPath(topPath, color.copy(alpha = a), style = Fill)
 
-    // Left face (medium)
+    // Left face (medium shade)
     val leftPath = Path().apply {
         moveTo(tfl.x, tfl.y); lineTo(tbl.x, tbl.y)
         lineTo(bbl.x, bbl.y); lineTo(bfl.x, bfl.y); close()
     }
-    drawPath(leftPath, darken(color, 0.7f).copy(alpha = a), style = Fill)
+    drawPath(leftPath, darken(color, 0.65f).copy(alpha = a), style = Fill)
 
-    // Right face (darkest)
+    // Right face (darkest shade)
     val rightPath = Path().apply {
         moveTo(tfl.x, tfl.y); lineTo(tfr.x, tfr.y)
         lineTo(bfr.x, bfr.y); lineTo(bfl.x, bfl.y); close()
     }
-    drawPath(rightPath, darken(color, 0.5f).copy(alpha = a), style = Fill)
+    drawPath(rightPath, darken(color, 0.4f).copy(alpha = a), style = Fill)
 
-    // Edge highlight on top face (subtle)
+    // Top edge highlights
     if (a > 0.5f) {
-        val hlPath = Path().apply {
-            moveTo(tfl.x, tfl.y); lineTo(tfr.x, tfr.y)
-        }
-        drawPath(hlPath, Color.White.copy(alpha = 0.15f * a))
+        drawLine(Color.White.copy(alpha = 0.2f * a), tfl, tfr, strokeWidth = 1.2f)
+        drawLine(Color.White.copy(alpha = 0.1f * a), tfl, tbl, strokeWidth = 0.8f)
     }
 }
 
 /** Draw the floor grid at y=0 */
 private fun DrawScope.drawFloorGrid(
     ox: Float, oy: Float, cellW: Float, cellH: Float, cellYH: Float,
-    boardW: Int, boardD: Int, boardH: Int
+    boardW: Int, boardD: Int
 ) {
-    val gridColor = Color.White.copy(alpha = 0.06f)
-    // Floor lines along X
+    val gridColor = Color.White.copy(alpha = 0.08f)
     for (z in 0..boardD) {
         val start = isoProject(ox, oy, cellW, cellH, cellYH, 0f, 0f, z.toFloat())
         val end = isoProject(ox, oy, cellW, cellH, cellYH, boardW.toFloat(), 0f, z.toFloat())
         drawLine(gridColor, start, end, strokeWidth = 1f)
     }
-    // Floor lines along Z
     for (x in 0..boardW) {
         val start = isoProject(ox, oy, cellW, cellH, cellYH, x.toFloat(), 0f, 0f)
         val end = isoProject(ox, oy, cellW, cellH, cellYH, x.toFloat(), 0f, boardD.toFloat())
@@ -160,60 +173,63 @@ private fun DrawScope.drawWalls(
     ox: Float, oy: Float, cellW: Float, cellH: Float, cellYH: Float,
     boardW: Int, boardD: Int, boardH: Int
 ) {
-    val wallColor = Color.White.copy(alpha = 0.03f)
-    val wallLine = Color.White.copy(alpha = 0.05f)
+    val wallColor = Color.White.copy(alpha = 0.025f)
+    val wallLine = Color.White.copy(alpha = 0.04f)
 
-    // Back-left wall (x=0 plane) — from z=0 to z=boardD, y=0 to boardH
-    for (z in 0 until boardD) {
-        for (y in 0 until boardH) {
-            val bl = isoProject(ox, oy, cellW, cellH, cellYH, 0f, y.toFloat(), z.toFloat())
-            val br = isoProject(ox, oy, cellW, cellH, cellYH, 0f, y.toFloat(), (z + 1).toFloat())
-            val tr = isoProject(ox, oy, cellW, cellH, cellYH, 0f, (y + 1).toFloat(), (z + 1).toFloat())
-            val tl = isoProject(ox, oy, cellW, cellH, cellYH, 0f, (y + 1).toFloat(), z.toFloat())
-            val path = Path().apply {
-                moveTo(bl.x, bl.y); lineTo(br.x, br.y); lineTo(tr.x, tr.y); lineTo(tl.x, tl.y); close()
-            }
-            drawPath(path, wallColor)
-        }
+    // Back-left wall (x=0 plane)
+    val bl0 = isoProject(ox, oy, cellW, cellH, cellYH, 0f, 0f, 0f)
+    val bl1 = isoProject(ox, oy, cellW, cellH, cellYH, 0f, 0f, boardD.toFloat())
+    val bl2 = isoProject(ox, oy, cellW, cellH, cellYH, 0f, boardH.toFloat(), boardD.toFloat())
+    val bl3 = isoProject(ox, oy, cellW, cellH, cellYH, 0f, boardH.toFloat(), 0f)
+    val wallLeftPath = Path().apply {
+        moveTo(bl0.x, bl0.y); lineTo(bl1.x, bl1.y); lineTo(bl2.x, bl2.y); lineTo(bl3.x, bl3.y); close()
     }
-    // Horizontal lines on back-left wall
-    for (y in 0..boardH) {
+    drawPath(wallLeftPath, wallColor)
+
+    // Grid lines on left wall
+    for (y in 0..boardH step 2) {
         val s = isoProject(ox, oy, cellW, cellH, cellYH, 0f, y.toFloat(), 0f)
         val e = isoProject(ox, oy, cellW, cellH, cellYH, 0f, y.toFloat(), boardD.toFloat())
         drawLine(wallLine, s, e, strokeWidth = 0.5f)
     }
-
-    // Back-right wall (z=boardD plane) — from x=0 to x=boardW
-    for (x in 0 until boardW) {
-        for (y in 0 until boardH) {
-            val bl = isoProject(ox, oy, cellW, cellH, cellYH, x.toFloat(), y.toFloat(), boardD.toFloat())
-            val br = isoProject(ox, oy, cellW, cellH, cellYH, (x + 1).toFloat(), y.toFloat(), boardD.toFloat())
-            val tr = isoProject(ox, oy, cellW, cellH, cellYH, (x + 1).toFloat(), (y + 1).toFloat(), boardD.toFloat())
-            val tl = isoProject(ox, oy, cellW, cellH, cellYH, x.toFloat(), (y + 1).toFloat(), boardD.toFloat())
-            val path = Path().apply {
-                moveTo(bl.x, bl.y); lineTo(br.x, br.y); lineTo(tr.x, tr.y); lineTo(tl.x, tl.y); close()
-            }
-            drawPath(path, wallColor)
-        }
+    for (z in 0..boardD step 2) {
+        val s = isoProject(ox, oy, cellW, cellH, cellYH, 0f, 0f, z.toFloat())
+        val e = isoProject(ox, oy, cellW, cellH, cellYH, 0f, boardH.toFloat(), z.toFloat())
+        drawLine(wallLine, s, e, strokeWidth = 0.5f)
     }
-    // Horizontal lines on back-right wall
-    for (y in 0..boardH) {
+
+    // Back-right wall (z=boardD plane)
+    val br0 = isoProject(ox, oy, cellW, cellH, cellYH, 0f, 0f, boardD.toFloat())
+    val br1 = isoProject(ox, oy, cellW, cellH, cellYH, boardW.toFloat(), 0f, boardD.toFloat())
+    val br2 = isoProject(ox, oy, cellW, cellH, cellYH, boardW.toFloat(), boardH.toFloat(), boardD.toFloat())
+    val br3 = isoProject(ox, oy, cellW, cellH, cellYH, 0f, boardH.toFloat(), boardD.toFloat())
+    val wallRightPath = Path().apply {
+        moveTo(br0.x, br0.y); lineTo(br1.x, br1.y); lineTo(br2.x, br2.y); lineTo(br3.x, br3.y); close()
+    }
+    drawPath(wallRightPath, wallColor)
+
+    // Grid lines on right wall
+    for (y in 0..boardH step 2) {
         val s = isoProject(ox, oy, cellW, cellH, cellYH, 0f, y.toFloat(), boardD.toFloat())
         val e = isoProject(ox, oy, cellW, cellH, cellYH, boardW.toFloat(), y.toFloat(), boardD.toFloat())
         drawLine(wallLine, s, e, strokeWidth = 0.5f)
     }
+    for (x in 0..boardW step 2) {
+        val s = isoProject(ox, oy, cellW, cellH, cellYH, x.toFloat(), 0f, boardD.toFloat())
+        val e = isoProject(ox, oy, cellW, cellH, cellYH, x.toFloat(), boardH.toFloat(), boardD.toFloat())
+        drawLine(wallLine, s, e, strokeWidth = 0.5f)
+    }
 }
 
-/** Get color for a piece color index */
 private fun pieceColor(idx: Int): Color = when (idx) {
-    1 -> Color(0xFF00E5FF)  // I - cyan
-    2 -> Color(0xFFFFD600)  // O - yellow
-    3 -> Color(0xFFAA00FF)  // T - purple
-    4 -> Color(0xFF00E676)  // S - green
-    5 -> Color(0xFFFF6D00)  // L - orange
-    6 -> Color(0xFFFF1744)  // Tower - red
-    7 -> Color(0xFF2979FF)  // Corner - blue
-    8 -> Color(0xFFFF4081)  // Step - pink
+    1 -> Color(0xFF00E5FF)
+    2 -> Color(0xFFFFD600)
+    3 -> Color(0xFFAA00FF)
+    4 -> Color(0xFF00E676)
+    5 -> Color(0xFFFF6D00)
+    6 -> Color(0xFFFF1744)
+    7 -> Color(0xFF2979FF)
+    8 -> Color(0xFFFF4081)
     else -> Color(0xFF888888)
 }
 
