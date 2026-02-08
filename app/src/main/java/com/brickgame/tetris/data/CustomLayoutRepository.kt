@@ -41,49 +41,29 @@ object LayoutElements {
 }
 
 /**
- * Full custom layout config: positions + visibility + per-element sizes/styles
+ * Custom layout config: base layout + per-element visibility/size/style options
+ * No more free-form positioning — uses real Compose layouts as base.
  */
 @Serializable
 data class CustomLayoutData(
     val id: String,
     val name: String,
     val baseLayout: String = "CLASSIC",                    // CLASSIC, MODERN, FULLSCREEN
-    val positions: Map<String, ElementPosition> = defaultPositions(),
+    val positions: Map<String, ElementPosition> = emptyMap(), // Legacy — kept for compatibility
     val visibility: Map<String, Boolean> = LayoutElements.allElements.associateWith { true },
-    val nextQueueSize: Int = 1,
-    val controlSize: String = "MEDIUM",                    // Legacy global — still used as fallback
-    val elementSizes: Map<String, String> = emptyMap(),    // Per-element: SMALL/MEDIUM/LARGE
-    val elementStyles: Map<String, String> = emptyMap(),   // Per-element: ROUND/SQUARE, LCD/FLAT/MINIMAL
-    val infoMode: String = "SCATTERED"                     // SCATTERED, PANEL, INTEGRATED
+    val nextQueueSize: Int = 3,
+    val controlSize: String = "MEDIUM",                    // Global control size: SMALL/MEDIUM/LARGE
+    val elementSizes: Map<String, String> = emptyMap(),    // Per-element override: SMALL/MEDIUM/LARGE
+    val elementStyles: Map<String, String> = emptyMap(),   // Per-element style options
+    val infoMode: String = "DEFAULT",                      // DEFAULT (use base layout's info), COMPACT, HIDDEN
+    val controlsSwapped: Boolean = false,                  // Swap DPad ↔ Rotate sides
+    val showGhostGrid: Boolean = true                      // Show grid lines in board
 ) {
-    /** Get size for specific element, fallback to controlSize for controls */
-    fun sizeFor(elem: String): String = elementSizes[elem] ?: when (elem) {
-        LayoutElements.DPAD, LayoutElements.ROTATE_BTN,
-        LayoutElements.HOLD_BTN, LayoutElements.PAUSE_BTN -> controlSize
-        else -> "MEDIUM"
-    }
-
-    /** Get style for specific element */
-    fun styleFor(elem: String): String = elementStyles[elem] ?: when (elem) {
-        LayoutElements.DPAD, LayoutElements.ROTATE_BTN,
-        LayoutElements.HOLD_BTN, LayoutElements.PAUSE_BTN, LayoutElements.MENU_BTN -> "ROUND"
-        else -> "LCD"
-    }
+    fun sizeFor(elem: String): String = elementSizes[elem] ?: controlSize
+    fun styleFor(elem: String): String = elementStyles[elem] ?: "DEFAULT"
 
     companion object {
-        fun defaultPositions() = mapOf(
-            LayoutElements.BOARD to ElementPosition(0.5f, 0.38f),
-            LayoutElements.SCORE to ElementPosition(0.5f, 0.02f),
-            LayoutElements.LEVEL to ElementPosition(0.2f, 0.02f),
-            LayoutElements.LINES to ElementPosition(0.8f, 0.02f),
-            LayoutElements.HOLD_PREVIEW to ElementPosition(0.08f, 0.08f),
-            LayoutElements.NEXT_PREVIEW to ElementPosition(0.92f, 0.08f),
-            LayoutElements.DPAD to ElementPosition(0.18f, 0.85f),
-            LayoutElements.ROTATE_BTN to ElementPosition(0.85f, 0.85f),
-            LayoutElements.HOLD_BTN to ElementPosition(0.5f, 0.80f),
-            LayoutElements.PAUSE_BTN to ElementPosition(0.5f, 0.87f),
-            LayoutElements.MENU_BTN to ElementPosition(0.5f, 0.94f)
-        )
+        fun defaultPositions() = emptyMap<String, ElementPosition>()
     }
 }
 

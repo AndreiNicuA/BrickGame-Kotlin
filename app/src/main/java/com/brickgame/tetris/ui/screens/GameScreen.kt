@@ -54,7 +54,13 @@ fun GameScreen(
             gameState.status == GameStatus.MENU -> MenuOverlay(gameState.highScore, scoreHistory, onStartGame, onOpenSettings)
             else -> {
                 if (customLayout != null) {
-                    CustomLayout(gameState, dpadStyle, ghostEnabled, animationStyle, animationDuration, customLayout, onRotate, onHardDrop, onHold, onLeftPress, onLeftRelease, onRightPress, onRightRelease, onDownPress, onDownRelease, onPause, onOpenSettings, onStartGame)
+                    // Use the base layout with customization applied
+                    val cl = customLayout!!
+                    when (cl.baseLayout) {
+                        "MODERN" -> ModernLayout(gameState, dpadStyle, ghostEnabled, animationStyle, animationDuration, onRotate, onHardDrop, onHold, onLeftPress, onLeftRelease, onRightPress, onRightRelease, onDownPress, onDownRelease, onPause, onOpenSettings, onStartGame)
+                        "FULLSCREEN" -> FullscreenLayout(gameState, dpadStyle, ghostEnabled, animationStyle, animationDuration, onRotate, onHardDrop, onHold, onLeftPress, onLeftRelease, onRightPress, onRightRelease, onDownPress, onDownRelease, onPause, onOpenSettings, onStartGame)
+                        else -> ClassicLayout(gameState, dpadStyle, ghostEnabled, animationStyle, animationDuration, onRotate, onHardDrop, onHold, onLeftPress, onLeftRelease, onRightPress, onRightRelease, onDownPress, onDownRelease, onPause, onOpenSettings, onStartGame)
+                    }
                 } else when (layoutPreset) {
                     LayoutPreset.PORTRAIT_CLASSIC -> ClassicLayout(gameState, dpadStyle, ghostEnabled, animationStyle, animationDuration, onRotate, onHardDrop, onHold, onLeftPress, onLeftRelease, onRightPress, onRightRelease, onDownPress, onDownRelease, onPause, onOpenSettings, onStartGame)
                     LayoutPreset.PORTRAIT_MODERN -> ModernLayout(gameState, dpadStyle, ghostEnabled, animationStyle, animationDuration, onRotate, onHardDrop, onHold, onLeftPress, onLeftRelease, onRightPress, onRightRelease, onDownPress, onDownRelease, onPause, onOpenSettings, onStartGame)
@@ -350,7 +356,7 @@ fun GameScreen(
 private fun FallingPiecesBackground(theme: com.brickgame.tetris.ui.theme.GameTheme) {
     data class FP(val col: Float, val speed: Float, val sz: Float, val shape: Int, val alpha: Float, val startY: Float)
     val pieces = remember {
-        (0..14).map { FP(col = it * 0.067f + (it % 3) * 0.01f, speed = 0.2f + (it % 5) * 0.12f, sz = 8f + (it % 3) * 4f, shape = it % 7, alpha = 0.04f + (it % 4) * 0.02f, startY = -(it * 120f + (it % 3) * 80f)) }
+        (0..19).map { FP(col = it * 0.05f, speed = 0.15f + (it % 7) * 0.08f, sz = 10f + (it % 3) * 5f, shape = it % 7, alpha = 0.08f + (it % 5) * 0.03f, startY = -(it * 100f + (it % 4) * 60f)) }
     }
     val t = rememberInfiniteTransition(label = "bg")
     val anim by t.animateFloat(0f, 10000f, infiniteRepeatable(tween(60000, easing = LinearEasing)), label = "fall")

@@ -226,7 +226,7 @@ fun SettingsScreen(
     LazyColumn(Modifier.fillMaxSize().padding(20.dp)) {
         item { Header("About", onBack); Spacer(Modifier.height(24.dp)) }
         item { Card { Text("BRICK GAME", color = ACC, fontSize = 24.sp, fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace); Text("Kotlin Edition", color = TX, fontSize = 14.sp) } }
-        item { Card { Info("Version", "3.2.0"); Info("Build", "17"); Info("Platform", "Android 8.0+"); Info("Engine", "Compose + Canvas") } }
+        item { Card { Info("Version", "3.3.0"); Info("Build", "18"); Info("Platform", "Android 8.0+"); Info("Engine", "Compose + Canvas") } }
         item { Card { Text("Developer", color = DIM, fontSize = 12.sp); Text("Andrei Anton", color = TX, fontSize = 16.sp, fontWeight = FontWeight.Bold) } }
         item { Lbl("Features") }
         item { Card {
