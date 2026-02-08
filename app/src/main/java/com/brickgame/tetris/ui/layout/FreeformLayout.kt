@@ -5,8 +5,6 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
@@ -14,7 +12,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
@@ -163,6 +160,7 @@ private fun RenderElement(
 
 // ============================================================================
 // STANDALONE FREEFORM EDITOR SCREEN
+// Full screen for dragging. Floating toolbar button opens popup menu.
 // ============================================================================
 
 @Composable
@@ -178,17 +176,16 @@ fun FreeformEditorScreen(
     val density = LocalDensity.current
     var selectedKey by remember { mutableStateOf<String?>(null) }
     val selectedElement = selectedKey?.let { elements[it] }
+    var showMenu by remember { mutableStateOf(false) }
 
     Box(Modifier.fillMaxSize().background(theme.backgroundColor).systemBarsPadding()) {
         // Empty board grid background
         EmptyBoardPreview(Modifier.fillMaxSize(), gridColor = theme.pixelOff.copy(alpha = 0.3f))
 
-        // Draggable elements
+        // Draggable elements — full screen
         BoxWithConstraints(Modifier.fillMaxSize()) {
             val maxWidthPx = with(density) { maxWidth.toPx() }
             val maxHeightPx = with(density) { maxHeight.toPx() }
-            val maxW = maxWidth
-            val maxH = maxHeight
 
             elements.values.filter { it.visible }.forEach { elem ->
                 val type = FreeformElementType.fromKey(elem.key) ?: return@forEach
@@ -211,100 +208,141 @@ fun FreeformEditorScreen(
                     alpha = elem.alpha,
                     isSelected = isSelected,
                     onTap = { selectedKey = if (selectedKey == elem.key) null else elem.key },
-                    onDragEnd = { newX, newY ->
-                        onElementUpdated(elem.copy(x = newX, y = newY))
-                    }
+                    onDragEnd = { newX, newY -> onElementUpdated(elem.copy(x = newX, y = newY)) }
                 )
             }
         }
 
-        // Top: instructions
-        Surface(
-            modifier = Modifier.align(Alignment.TopCenter).padding(top = 12.dp),
-            shape = RoundedCornerShape(12.dp),
-            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.9f)
+        // Compact top bar: legend + Done button
+        Row(
+            Modifier.align(Alignment.TopCenter).padding(top = 8.dp)
+                .background(Color.Black.copy(0.7f), RoundedCornerShape(20.dp))
+                .padding(horizontal = 14.dp, vertical = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Column(Modifier.padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("Drag elements · Tap to select", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onPrimaryContainer)
-                Row(Modifier.padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    LegendDot(Color(0xFF3B82F6), "Controls")
-                    LegendDot(Color(0xFFF59E0B), "Info")
-                    LegendDot(Color(0xFF22C55E), "Selected")
-                }
+            LegendDot(Color(0xFF3B82F6), "Ctrl")
+            LegendDot(Color(0xFFF59E0B), "Info")
+            Spacer(Modifier.width(8.dp))
+            Surface(
+                modifier = Modifier.clickable { onDone() },
+                shape = RoundedCornerShape(12.dp),
+                color = Color(0xFF22C55E)
+            ) {
+                Text("✓ Done", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
             }
         }
 
-        // Bottom panel: property controls for selected element + add/remove + actions
-        Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth()) {
-            // Selected element properties
-            if (selectedElement != null) {
-                val selType = FreeformElementType.fromKey(selectedElement.key)
-                Surface(
-                    Modifier.fillMaxWidth().padding(horizontal = 8.dp),
-                    shape = RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp),
-                    color = Color(0xFF1A1A1A).copy(alpha = 0.95f)
-                ) {
-                    Column(Modifier.padding(12.dp)) {
-                        Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
-                            Text(selType?.displayName ?: selectedElement.key, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                            Text("✕ Remove", color = Color(0xFFFF4444), fontSize = 12.sp, fontWeight = FontWeight.Bold,
-                                modifier = Modifier.clickable { onElementRemoved(selectedElement.key); selectedKey = null }.padding(4.dp))
-                        }
-                        Spacer(Modifier.height(8.dp))
-                        // Size slider
-                        SliderRow("Size", selectedElement.size, 0.4f, 2.0f) {
-                            onElementUpdated(selectedElement.copy(size = it))
-                        }
-                        // Transparency slider
-                        SliderRow("Opacity", selectedElement.alpha, 0.05f, 1.0f) {
-                            onElementUpdated(selectedElement.copy(alpha = it))
-                        }
-                    }
-                }
+        // Floating toolbar button (bottom-right)
+        Surface(
+            modifier = Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 16.dp)
+                .size(52.dp).clickable { showMenu = true },
+            shape = CircleShape,
+            color = if (selectedElement != null) Color(0xFF22C55E) else Color(0xFF3B82F6),
+            shadowElevation = 8.dp
+        ) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text("☰", fontSize = 22.sp, color = Color.White)
             }
+        }
 
-            // Add elements row
+        // Popup menu overlay
+        if (showMenu) {
+            // Scrim — tap to dismiss
+            Box(Modifier.fillMaxSize().background(Color.Black.copy(0.5f)).clickable { showMenu = false })
+
+            // Menu card — centered
             Surface(
-                Modifier.fillMaxWidth().padding(horizontal = 8.dp),
-                color = Color(0xFF111111).copy(alpha = 0.95f)
+                modifier = Modifier.align(Alignment.Center).fillMaxWidth(0.88f),
+                shape = RoundedCornerShape(16.dp),
+                color = Color(0xFF1A1A1A),
+                shadowElevation = 16.dp
             ) {
-                Column(Modifier.padding(horizontal = 8.dp, vertical = 6.dp)) {
-                    Text("+ Add Element", color = Color(0xFF888888), fontSize = 11.sp)
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 4.dp)) {
-                        val existing = elements.keys
-                        val available = PlayerProfile.availableElements().filter { it.key !in existing }
-                        items(available) { type ->
-                            val isControl = type.category == ElementCategory.CONTROL
-                            Surface(
-                                modifier = Modifier.clickable {
-                                    // Add at center with defaults
-                                    onElementAdded(FreeformElement(type.key, 0.5f, 0.5f))
-                                    selectedKey = type.key
-                                },
-                                shape = RoundedCornerShape(8.dp),
-                                color = if (isControl) Color(0xFF3B82F6).copy(0.2f) else Color(0xFFF59E0B).copy(0.2f)
-                            ) {
-                                Column(Modifier.padding(horizontal = 10.dp, vertical = 6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Text(type.displayName, color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
-                                    Text(type.description, color = Color.White.copy(0.5f), fontSize = 9.sp, textAlign = TextAlign.Center)
+                Column(Modifier.padding(16.dp)) {
+                    // Header
+                    Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
+                        Text("Freeform Editor", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                        Text("✕", color = Color(0xFF888888), fontSize = 20.sp,
+                            modifier = Modifier.clickable { showMenu = false }.padding(4.dp))
+                    }
+                    Spacer(Modifier.height(12.dp))
+
+                    // Selected element properties
+                    if (selectedElement != null) {
+                        val selType = FreeformElementType.fromKey(selectedElement.key)
+                        Surface(Modifier.fillMaxWidth(), shape = RoundedCornerShape(10.dp), color = Color(0xFF222222)) {
+                            Column(Modifier.padding(12.dp)) {
+                                Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Box(Modifier.size(10.dp).background(Color(0xFF22C55E), CircleShape))
+                                        Spacer(Modifier.width(6.dp))
+                                        Text(selType?.displayName ?: selectedElement.key, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                    }
+                                    Text("Remove", color = Color(0xFFFF4444), fontSize = 12.sp, fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.clickable {
+                                            onElementRemoved(selectedElement.key)
+                                            selectedKey = null
+                                        }.padding(4.dp))
+                                }
+                                Spacer(Modifier.height(8.dp))
+                                SliderRow("Size", selectedElement.size, 0.4f, 2.0f) {
+                                    onElementUpdated(selectedElement.copy(size = it))
+                                }
+                                SliderRow("Opacity", selectedElement.alpha, 0.05f, 1.0f) {
+                                    onElementUpdated(selectedElement.copy(alpha = it))
                                 }
                             }
                         }
+                        Spacer(Modifier.height(12.dp))
                     }
-                }
-            }
 
-            // Action buttons: Reset + Done
-            Row(
-                Modifier.fillMaxWidth().background(Color.Black.copy(0.9f)).padding(horizontal = 16.dp, vertical = 12.dp),
-                horizontalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterHorizontally)
-            ) {
-                OutlinedButton(onClick = { selectedKey = null; onReset() },
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)) {
-                    Text("↺ Reset")
-                }
-                Button(onClick = onDone, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF22C55E))) {
-                    Text("✓ Done", color = Color.White)
+                    // Add elements section
+                    val existing = elements.keys
+                    val available = PlayerProfile.availableElements().filter { it.key !in existing }
+                    if (available.isNotEmpty()) {
+                        Text("Add Element", color = Color(0xFF888888), fontSize = 12.sp)
+                        Spacer(Modifier.height(6.dp))
+                        // Grid of available elements
+                        val chunked = available.chunked(3)
+                        chunked.forEach { row ->
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                row.forEach { type ->
+                                    val isControl = type.category == ElementCategory.CONTROL
+                                    Surface(
+                                        modifier = Modifier.weight(1f).clickable {
+                                            onElementAdded(FreeformElement(type.key, 0.5f, 0.5f))
+                                            selectedKey = type.key
+                                            showMenu = false
+                                        },
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = if (isControl) Color(0xFF3B82F6).copy(0.15f) else Color(0xFFF59E0B).copy(0.15f)
+                                    ) {
+                                        Column(Modifier.padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                            Text(type.displayName, color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+                                            Text(type.description, color = Color.White.copy(0.4f), fontSize = 9.sp, textAlign = TextAlign.Center)
+                                        }
+                                    }
+                                }
+                                // Pad incomplete rows
+                                repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
+                            }
+                            Spacer(Modifier.height(6.dp))
+                        }
+                        Spacer(Modifier.height(8.dp))
+                    }
+
+                    // Actions row
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally)) {
+                        OutlinedButton(onClick = { selectedKey = null; onReset(); showMenu = false },
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)) {
+                            Text("↺ Reset All")
+                        }
+                        Button(onClick = { showMenu = false; onDone() },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF22C55E))) {
+                            Text("✓ Done", color = Color.White)
+                        }
+                    }
                 }
             }
         }
