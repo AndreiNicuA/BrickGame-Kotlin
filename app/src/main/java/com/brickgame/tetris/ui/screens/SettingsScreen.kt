@@ -211,21 +211,8 @@ fun SettingsScreen(
                 }
             }
         }
-        if (custom.isNotEmpty()) {
-            item { Lbl("Custom Layouts") }
-            items(custom.size) { i ->
-                val cl = custom[i]; val sel = active?.id == cl.id
-                Row(Modifier.fillMaxWidth().padding(vertical = 2.dp).clip(RoundedCornerShape(8.dp)).background(if (sel) ACC.copy(0.15f) else CARD).clickable { onSelect(cl) }.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) { Text(cl.name, color = TX, fontSize = 14.sp, fontWeight = FontWeight.Bold); Text("${cl.controlSize} · ${cl.visibility.count { it.value }} elements", color = DIM, fontSize = 11.sp) }
-                    Text("EDIT", color = ACC, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { onEdit(cl) }.padding(8.dp))
-                    Text("✕", color = Color(0xFFFF4444), fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { onDelete(cl.id) }.padding(8.dp))
-                    if (sel) Text("✓", color = ACC, fontWeight = FontWeight.Bold)
-                }
-            }
-        }
         item { Lbl("Landscape") }; items(LayoutPreset.landscapePresets().size) { i -> val x = LayoutPreset.landscapePresets()[i]; Sel(x.displayName, x == l) { onL(x) } }
         item { Lbl("D-Pad Style") }; items(DPadStyle.entries.size) { i -> val x = DPadStyle.entries[i]; Sel(x.displayName, x == d) { onD(x) } }
-        item { Spacer(Modifier.height(16.dp)); ActionCard("+ Create Custom Layout", onNew) }
     }
 }
 
@@ -260,7 +247,8 @@ fun SettingsScreen(
         item { Lbl("Features") }
         item { Card {
             Text("5 built-in themes + custom theme editor", color = TX, fontSize = 12.sp)
-            Text("3 layouts (Classic, Modern, Fullscreen) + custom layout editor", color = TX, fontSize = 12.sp)
+            Text("5 layouts (Classic, Modern, Fullscreen, One-Hand, Freeform)", color = TX, fontSize = 12.sp)
+            Text("Freeform editor: drag, resize, transparency for every element", color = TX, fontSize = 12.sp)
             Text("Hold piece, Next queue (1-3), Ghost piece", color = TX, fontSize = 12.sp)
             Text("D-Pad and Swipe control styles", color = TX, fontSize = 12.sp)
             Text("Score history with sort & filter", color = TX, fontSize = 12.sp)

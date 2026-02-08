@@ -3,10 +3,73 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
+
+    <!-- 3D T-piece — top faces (bright green) -->
+    <!-- Top row: 3 blocks -->
     <path
-        android:fillColor="#3D4A32"
-        android:pathData="M0,0h108v108h-108z"/>
+        android:fillColor="#22C55E"
+        android:pathData="M29,30h13v13h-13z"/>
     <path
-        android:fillColor="#B8C4A8"
-        android:pathData="M30,30h12v12h-12zM42,30h12v12h-12zM54,30h12v12h-12zM30,42h12v12h-12zM54,42h12v12h-12zM30,54h12v12h-12zM42,54h12v12h-12zM54,54h12v12h-12zM30,66h12v12h-12zM54,66h12v12h-12z"/>
+        android:fillColor="#22C55E"
+        android:pathData="M44,30h13v13h-13z"/>
+    <path
+        android:fillColor="#22C55E"
+        android:pathData="M59,30h13v13h-13z"/>
+    <!-- Stem block -->
+    <path
+        android:fillColor="#22C55E"
+        android:pathData="M44,45h13v13h-13z"/>
+
+    <!-- 3D depth — right faces -->
+    <path
+        android:fillColor="#16A34A"
+        android:pathData="M72,30 l5,5 v13 l-5,-5z"/>
+    <path
+        android:fillColor="#16A34A"
+        android:pathData="M42,43 l2,2 h13 l-2,-2z"/>
+    <path
+        android:fillColor="#16A34A"
+        android:pathData="M57,45 l5,5 v13 l-5,-5z"/>
+
+    <!-- 3D depth — bottom faces -->
+    <path
+        android:fillColor="#15803D"
+        android:pathData="M29,43 l5,5 h13 l-5,-5z"/>
+    <path
+        android:fillColor="#15803D"
+        android:pathData="M44,58 l5,5 h13 l-5,-5z"/>
+    <path
+        android:fillColor="#15803D"
+        android:pathData="M59,43 l5,5 h13 l-5,-5z"/>
+
+    <!-- Block inner highlights (top-left shine on each block) -->
+    <path
+        android:fillColor="#4ADE80"
+        android:pathData="M30,31h5v1.5h-5zM30,31h1.5v5h-1.5z"/>
+    <path
+        android:fillColor="#4ADE80"
+        android:pathData="M45,31h5v1.5h-5zM45,31h1.5v5h-1.5z"/>
+    <path
+        android:fillColor="#4ADE80"
+        android:pathData="M60,31h5v1.5h-5zM60,31h1.5v5h-1.5z"/>
+    <path
+        android:fillColor="#4ADE80"
+        android:pathData="M45,46h5v1.5h-5zM45,46h1.5v5h-1.5z"/>
+
+    <!-- Ghost piece — very subtle hint of where it lands -->
+    <path
+        android:fillColor="#22C55E"
+        android:alpha="0.08"
+        android:pathData="M29,70h13v13h-13zM44,70h13v13h-13zM59,70h13v13h-13zM44,83h13v8h-13z"/>
+
+    <!-- Falling trail particles -->
+    <path
+        android:fillColor="#22C55E"
+        android:alpha="0.35"
+        android:pathData="M49.5,21h3v6h-3z"/>
+    <path
+        android:fillColor="#22C55E"
+        android:alpha="0.15"
+        android:pathData="M50,11h2v6h-2z"/>
+
 </vector>
