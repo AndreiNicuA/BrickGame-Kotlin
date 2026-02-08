@@ -92,15 +92,47 @@ fun SettingsScreen(
 // ===== PROFILE =====
 @Composable private fun ProfilePage(name: String, hs: Int, history: List<ScoreEntry>, onName: (String) -> Unit, onBack: () -> Unit) {
     var editName by remember { mutableStateOf(name) }
+    var sortBy by remember { mutableStateOf("score") } // score, level, lines, recent
     LaunchedEffect(name) { editName = name }
+    val sorted = remember(history, sortBy) {
+        when (sortBy) {
+            "score" -> history.sortedByDescending { it.score }
+            "level" -> history.sortedByDescending { it.level }
+            "lines" -> history.sortedByDescending { it.lines }
+            else -> history.sortedByDescending { it.timestamp }
+        }
+    }
     LazyColumn(Modifier.fillMaxSize().padding(20.dp)) {
         item { Header("Profile", onBack); Spacer(Modifier.height(16.dp)) }
         item { Card { Text("Player Name", color = DIM, fontSize = 12.sp); Spacer(Modifier.height(4.dp)); EditField(editName) { editName = it; onName(it) } } }
         item { Card { Text("High Score", color = DIM, fontSize = 12.sp); Text(hs.toString(), color = ACC, fontSize = 24.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace) } }
         item { Lbl("Score History") }
-        if (history.isEmpty()) { item { Card { Text("No games yet", color = DIM) } } }
-        items(history.size.coerceAtMost(20)) { i -> val e = history[i]; Card { Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween) { Text("${i+1}.", color = DIM); Text("${e.score}", color = ACC, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold); Text("Lv${e.level}", color = DIM, fontSize = 12.sp); Text("${e.lines}L", color = DIM, fontSize = 12.sp) } } }
-        item { Spacer(Modifier.height(16.dp)); Card { Text("Export / Import — v3.1.0", color = DIM, fontSize = 13.sp) } }
+        // Sort filter
+        item {
+            Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), Arrangement.spacedBy(6.dp)) {
+                listOf("score" to "Score", "level" to "Level", "lines" to "Lines", "recent" to "Recent").forEach { (k, v) ->
+                    Chip(v, sortBy == k) { sortBy = k }
+                }
+            }
+        }
+        if (sorted.isEmpty()) { item { Card { Text("No games yet", color = DIM) } } }
+        items(sorted.size.coerceAtMost(50)) { i ->
+            val e = sorted[i]
+            Card {
+                Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
+                    Text("${i+1}.", color = DIM, modifier = Modifier.width(28.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(e.playerName, color = TX, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        Text("${e.score}", color = ACC, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    }
+                    Column(horizontalAlignment = Alignment.End) {
+                        Text("Lv${e.level}", color = DIM, fontSize = 12.sp)
+                        Text("${e.lines}L", color = DIM, fontSize = 12.sp)
+                    }
+                }
+            }
+        }
+        item { Spacer(Modifier.height(16.dp)) }
     }
 }
 
