@@ -41,17 +41,35 @@ object LayoutElements {
 }
 
 /**
- * Full custom layout config: positions + visibility + sizes
+ * Full custom layout config: positions + visibility + per-element sizes/styles
  */
 @Serializable
 data class CustomLayoutData(
     val id: String,
     val name: String,
+    val baseLayout: String = "CLASSIC",                    // CLASSIC, MODERN, FULLSCREEN
     val positions: Map<String, ElementPosition> = defaultPositions(),
     val visibility: Map<String, Boolean> = LayoutElements.allElements.associateWith { true },
     val nextQueueSize: Int = 1,
-    val controlSize: String = "MEDIUM"  // SMALL, MEDIUM, LARGE
+    val controlSize: String = "MEDIUM",                    // Legacy global — still used as fallback
+    val elementSizes: Map<String, String> = emptyMap(),    // Per-element: SMALL/MEDIUM/LARGE
+    val elementStyles: Map<String, String> = emptyMap(),   // Per-element: ROUND/SQUARE, LCD/FLAT/MINIMAL
+    val infoMode: String = "SCATTERED"                     // SCATTERED, PANEL, INTEGRATED
 ) {
+    /** Get size for specific element, fallback to controlSize for controls */
+    fun sizeFor(elem: String): String = elementSizes[elem] ?: when (elem) {
+        LayoutElements.DPAD, LayoutElements.ROTATE_BTN,
+        LayoutElements.HOLD_BTN, LayoutElements.PAUSE_BTN -> controlSize
+        else -> "MEDIUM"
+    }
+
+    /** Get style for specific element */
+    fun styleFor(elem: String): String = elementStyles[elem] ?: when (elem) {
+        LayoutElements.DPAD, LayoutElements.ROTATE_BTN,
+        LayoutElements.HOLD_BTN, LayoutElements.PAUSE_BTN, LayoutElements.MENU_BTN -> "ROUND"
+        else -> "LCD"
+    }
+
     companion object {
         fun defaultPositions() = mapOf(
             LayoutElements.BOARD to ElementPosition(0.5f, 0.38f),

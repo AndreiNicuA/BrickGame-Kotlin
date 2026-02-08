@@ -38,6 +38,7 @@ fun GameScreen(
     animationStyle: AnimationStyle,
     animationDuration: Float,
     customLayout: CustomLayoutData? = null,
+    scoreHistory: List<com.brickgame.tetris.data.ScoreEntry> = emptyList(),
     onStartGame: () -> Unit, onPause: () -> Unit, onResume: () -> Unit,
     onRotate: () -> Unit, onRotateCCW: () -> Unit,
     onHardDrop: () -> Unit, onHold: () -> Unit,
@@ -50,7 +51,7 @@ fun GameScreen(
 
     Box(Modifier.fillMaxSize().background(theme.backgroundColor).systemBarsPadding()) {
         when {
-            gameState.status == GameStatus.MENU -> MenuOverlay(gameState.highScore, onStartGame, onOpenSettings)
+            gameState.status == GameStatus.MENU -> MenuOverlay(gameState.highScore, scoreHistory, onStartGame, onOpenSettings)
             else -> {
                 if (customLayout != null) {
                     CustomLayout(gameState, dpadStyle, ghostEnabled, animationStyle, animationDuration, customLayout, onRotate, onHardDrop, onHold, onLeftPress, onLeftRelease, onRightPress, onRightRelease, onDownPress, onDownRelease, onPause, onOpenSettings, onStartGame)
@@ -224,8 +225,8 @@ fun GameScreen(
     onDP: () -> Unit, onDR: () -> Unit, onPause: () -> Unit, onSet: () -> Unit, onStart: () -> Unit
 ) {
     val theme = LocalGameTheme.current
-    val btnSize = when (cl.controlSize) { "SMALL" -> 44.dp; "LARGE" -> 62.dp; else -> 54.dp }
-    val rotSize = when (cl.controlSize) { "SMALL" -> 52.dp; "LARGE" -> 74.dp; else -> 66.dp }
+    val dpadSz = when (cl.sizeFor(LayoutElements.DPAD)) { "SMALL" -> 44.dp; "LARGE" -> 62.dp; else -> 54.dp }
+    val rotSz = when (cl.sizeFor(LayoutElements.ROTATE_BTN)) { "SMALL" -> 52.dp; "LARGE" -> 74.dp; else -> 66.dp }
     val vis = cl.visibility
     val pos = cl.positions
 
@@ -275,7 +276,7 @@ fun GameScreen(
         if (isVisible(LayoutElements.DPAD)) {
             val dp2 = pos[LayoutElements.DPAD] ?: ElementPosition(0.18f, 0.85f)
             Box(Modifier.offset(x = maxW * dp2.x - 70.dp, y = maxH * dp2.y - 70.dp)) {
-                DPad(btnSize, rotateInCenter = dp == DPadStyle.ROTATE_CENTRE,
+                DPad(dpadSz, rotateInCenter = dp == DPadStyle.ROTATE_CENTRE,
                     onUpPress = onHD, onDownPress = onDP, onDownRelease = onDR,
                     onLeftPress = onLP, onLeftRelease = onLR, onRightPress = onRP, onRightRelease = onRR, onRotate = onRotate)
             }
@@ -283,7 +284,7 @@ fun GameScreen(
         // Rotate
         if (isVisible(LayoutElements.ROTATE_BTN) && dp == DPadStyle.STANDARD) {
             val rp = pos[LayoutElements.ROTATE_BTN] ?: ElementPosition(0.85f, 0.85f)
-            Box(Modifier.offset(x = maxW * rp.x - rotSize / 2, y = maxH * rp.y - rotSize / 2)) { RotateButton(onRotate, rotSize) }
+            Box(Modifier.offset(x = maxW * rp.x - rotSz / 2, y = maxH * rp.y - rotSz / 2)) { RotateButton(onRotate, rotSz) }
         }
         // Hold button
         if (isVisible(LayoutElements.HOLD_BTN)) {
@@ -315,7 +316,7 @@ fun GameScreen(
 }
 
 // === Overlays ===
-@Composable private fun MenuOverlay(hs: Int, onStart: () -> Unit, onSet: () -> Unit) {
+@Composable private fun MenuOverlay(hs: Int, scoreHistory: List<com.brickgame.tetris.data.ScoreEntry>, onStart: () -> Unit, onSet: () -> Unit) {
     val theme = LocalGameTheme.current
     Box(Modifier.fillMaxSize().background(theme.backgroundColor)) {
         // Falling tetris pieces background
@@ -326,9 +327,15 @@ fun GameScreen(
             Text("GAME", fontSize = 38.sp, fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace, color = theme.accentColor, letterSpacing = 8.sp)
             Spacer(Modifier.height(32.dp))
             if (hs > 0) {
+                val bestEntry = scoreHistory.maxByOrNull { it.score }
                 Text("$hs", fontSize = 28.sp, fontFamily = FontFamily.Monospace, color = theme.accentColor, fontWeight = FontWeight.Bold)
+                if (bestEntry != null) {
+                    val sdf = java.text.SimpleDateFormat("dd.MM.yyyy", java.util.Locale.getDefault())
+                    val dateStr = sdf.format(java.util.Date(bestEntry.timestamp))
+                    Text("${bestEntry.playerName} · $dateStr", fontSize = 11.sp, fontFamily = FontFamily.Monospace, color = theme.textSecondary)
+                }
                 Spacer(Modifier.height(4.dp))
-                Text("HIGH SCORE", fontSize = 10.sp, fontFamily = FontFamily.Monospace, color = theme.textSecondary, letterSpacing = 4.sp)
+                Text("HIGH SCORE", fontSize = 10.sp, fontFamily = FontFamily.Monospace, color = theme.textSecondary.copy(alpha = 0.6f), letterSpacing = 4.sp)
                 Spacer(Modifier.height(32.dp))
             }
             ActionButton("PLAY", onStart, width = 180.dp, height = 52.dp, backgroundColor = theme.accentColor)

@@ -28,7 +28,6 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -48,7 +47,9 @@ private val DIM = Color(0xFF888888)
 private val DRG = Color(0xFF22C55E)
 
 // ======================================================================
-// LAYOUT EDITOR v6
+// LAYOUT EDITOR v7 — REAL GAME SIZES
+// Elements render at their actual game dimensions.
+// Drag positions map 1:1 to CustomLayout in GameScreen.
 // ======================================================================
 @Composable
 fun LayoutEditorScreen(
@@ -73,114 +74,248 @@ fun LayoutEditorScreen(
     fun redo() { if (redoStack.isNotEmpty()) { undoStack.add(layout); onUpdateLayout(redoStack.removeLast()) } }
     fun snap(p: ElementPosition) = if (gridSnap) ElementPosition((p.x / gridStepX).roundToInt() * gridStepX, (p.y / gridStepY).roundToInt() * gridStepY) else p
 
-    // Element sizes map (compact)
-    data class ESz(val w: Dp, val h: Dp)
-    fun ctrlSz(base: Dp): Dp = when (layout.controlSize) { "SMALL" -> base * 0.75f; "LARGE" -> base * 1.2f; else -> base }
-
-    val sizes = mapOf(
-        LayoutElements.BOARD to ESz(140.dp, 200.dp),
-        LayoutElements.SCORE to ESz(100.dp, 22.dp),
-        LayoutElements.LEVEL to ESz(40.dp, 18.dp),
-        LayoutElements.LINES to ESz(36.dp, 18.dp),
-        LayoutElements.HOLD_PREVIEW to ESz(44.dp, 52.dp),
-        LayoutElements.NEXT_PREVIEW to ESz(44.dp, 52.dp),
-        LayoutElements.DPAD to ESz(ctrlSz(120.dp), ctrlSz(120.dp)),
-        LayoutElements.ROTATE_BTN to ESz(ctrlSz(64.dp), ctrlSz(64.dp)),
-        LayoutElements.HOLD_BTN to ESz(78.dp, 32.dp),
-        LayoutElements.PAUSE_BTN to ESz(78.dp, 32.dp),
-        LayoutElements.MENU_BTN to ESz(44.dp, 24.dp)
-    )
-
     Box(Modifier.fillMaxSize().background(theme.backgroundColor).systemBarsPadding()) {
         Column(Modifier.fillMaxSize()) {
-            // HEADER
-            Row(Modifier.fillMaxWidth().background(PBG).padding(horizontal = 8.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            // HEADER: ← [name] SAVE ☰
+            Row(Modifier.fillMaxWidth().background(PBG).padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text("←", color = ACC, fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { onBack() }.padding(6.dp))
                 BasicTextField(layoutName, { layoutName = it; onUpdateLayout(layout.copy(name = it)) },
-                    textStyle = TextStyle(color = TX, fontSize = 15.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace),
+                    textStyle = TextStyle(color = TX, fontSize = 14.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace),
                     cursorBrush = SolidColor(ACC), singleLine = true,
-                    modifier = Modifier.weight(1f).clip(RoundedCornerShape(6.dp)).background(Color(0xFF252525)).padding(horizontal = 10.dp, vertical = 8.dp),
-                    decorationBox = { inner -> if (layoutName.isEmpty()) Text("Layout name...", color = DIM, fontSize = 15.sp, fontFamily = FontFamily.Monospace); inner() })
+                    modifier = Modifier.weight(1f).clip(RoundedCornerShape(6.dp)).background(Color(0xFF252525)).padding(horizontal = 10.dp, vertical = 7.dp),
+                    decorationBox = { inner -> if (layoutName.isEmpty()) Text("Layout name...", color = DIM, fontSize = 14.sp, fontFamily = FontFamily.Monospace); inner() })
                 Spacer(Modifier.width(8.dp))
-                Text("SAVE", color = Color.Black, fontSize = 13.sp, fontWeight = FontWeight.Bold,
-                    modifier = Modifier.clip(RoundedCornerShape(6.dp)).background(ACC).clickable { onSave() }.padding(horizontal = 14.dp, vertical = 8.dp))
+                Text("SAVE", color = Color.Black, fontSize = 12.sp, fontWeight = FontWeight.Bold,
+                    modifier = Modifier.clip(RoundedCornerShape(6.dp)).background(ACC).clickable { onSave() }.padding(horizontal = 12.dp, vertical = 7.dp))
                 Spacer(Modifier.width(12.dp))
-                Box(Modifier.size(40.dp).clip(RoundedCornerShape(8.dp)).background(if (showSideMenu) ACC.copy(0.2f) else Color(0xFF333333)).clickable { showSideMenu = !showSideMenu; selectedElement = null }, Alignment.Center) { Text("☰", color = TX, fontSize = 20.sp, fontWeight = FontWeight.Bold) }
+                Box(Modifier.size(38.dp).clip(RoundedCornerShape(8.dp)).background(if (showSideMenu) ACC.copy(0.2f) else Color(0xFF333333)).clickable { showSideMenu = !showSideMenu; selectedElement = null }, Alignment.Center) { Text("☰", color = TX, fontSize = 18.sp, fontWeight = FontWeight.Bold) }
             }
 
-            // DRAG CANVAS
-            BoxWithConstraints(Modifier.fillMaxSize().pointerInput(selectedElement) { detectTapGestures { selectedElement = null; showSideMenu = false } }) {
+            // CANVAS — full screen drag area
+            BoxWithConstraints(Modifier.fillMaxSize().pointerInput(Unit) { detectTapGestures { selectedElement = null; showSideMenu = false } }) {
                 val density = LocalDensity.current
-                val maxWPx = with(density) { maxWidth.toPx() }
-                val maxHPx = with(density) { maxHeight.toPx() }
+                val maxW = maxWidth; val maxH = maxHeight
+                val maxWPx = with(density) { maxW.toPx() }
+                val maxHPx = with(density) { maxH.toPx() }
 
-                // Grid
+                // Grid overlay
                 if (gridSnap) Canvas(Modifier.fillMaxSize()) {
                     for (i in 1 until (1f / gridStepX).toInt()) { val x = size.width * i * gridStepX; drawLine(Color.White.copy(0.06f), androidx.compose.ui.geometry.Offset(x, 0f), androidx.compose.ui.geometry.Offset(x, size.height), 1f) }
                     for (i in 1 until (1f / gridStepY).toInt()) { val y = size.height * i * gridStepY; drawLine(Color.White.copy(0.06f), androidx.compose.ui.geometry.Offset(0f, y), androidx.compose.ui.geometry.Offset(size.width, y), 1f) }
                 }
 
-                // Render each element
-                LayoutElements.allElements.forEach { elemId ->
-                    if (elemId != LayoutElements.MENU_BTN && !(layout.visibility.getOrDefault(elemId, true))) return@forEach
-                    val pos = layout.positions[elemId] ?: CustomLayoutData.defaultPositions()[elemId] ?: return@forEach
-                    val sz = sizes[elemId] ?: return@forEach
+                // REAL GAME ELEMENT SIZES — must match CustomLayout in GameScreen
+                val boardW = maxW * 0.85f; val boardH = maxH * 0.6f
+                val dpadBtnSz = when (layout.sizeFor(LayoutElements.DPAD)) { "SMALL" -> 44.dp; "LARGE" -> 62.dp; else -> 54.dp }
+                val dpadArea = 140.dp // overall dpad area
+                val rotSz = when (layout.sizeFor(LayoutElements.ROTATE_BTN)) { "SMALL" -> 52.dp; "LARGE" -> 74.dp; else -> 66.dp }
 
-                    key(elemId) {
-                        DraggableItem(
-                            elementId = elemId,
-                            position = pos,
-                            itemWidth = sz.w, itemHeight = sz.h,
-                            maxWPx = maxWPx, maxHPx = maxHPx,
-                            isSelected = selectedElement == elemId,
-                            onTap = { selectedElement = if (selectedElement == it) null else it },
-                            onDragEnd = { id, ep -> withUndo(layout.copy(positions = layout.positions + (id to snap(ep)))) }
-                        ) {
-                            ElementContent(elemId, sz.w, sz.h, theme, layout)
+                val vis = layout.visibility
+                val pos = layout.positions
+
+                // == BOARD ==
+                if (vis.getOrDefault(LayoutElements.BOARD, true)) {
+                    val elem = LayoutElements.BOARD
+                    val ep = pos[elem] ?: ElementPosition(0.5f, 0.38f)
+                    // Game offset: x = maxW * bp.x - maxW*0.425, y = maxH * bp.y - maxH*0.3
+                    val offX = maxW * ep.x - boardW / 2; val offY = maxH * ep.y - boardH / 2
+                    DragHandle(elem, ep, boardW, boardH, offX, offY, maxWPx, maxHPx, maxW, maxH,
+                        selectedElement == elem, { selectedElement = if (selectedElement == it) null else it },
+                        { id, newEp -> withUndo(layout.copy(positions = pos + (id to snap(newEp)))) }) {
+                        // Preview board
+                        Box(Modifier.fillMaxSize().clip(RoundedCornerShape(8.dp)).background(theme.screenBackground)) {
+                            Column(Modifier.fillMaxSize().padding(4.dp), Arrangement.SpaceEvenly) {
+                                repeat(10) { r -> Row(Modifier.fillMaxWidth(), Arrangement.SpaceEvenly) { repeat(10) { c ->
+                                    val on = (r == 3 && c in 4..6) || (r == 4 && c == 5) || (r >= 8)
+                                    Box(Modifier.weight(1f).aspectRatio(1f).padding(0.5.dp).clip(RoundedCornerShape(1.dp)).background(if (on) theme.pixelOn else theme.pixelOff))
+                                } } }
+                            }
                         }
                     }
                 }
 
-                // FLOATING SETTINGS CARD — appears near selected element, compact
+                // == SCORE ==
+                if (vis.getOrDefault(LayoutElements.SCORE, true)) {
+                    val elem = LayoutElements.SCORE
+                    val ep = pos[elem] ?: ElementPosition(0.5f, 0.02f)
+                    val txtW = 100.dp; val txtH = 20.dp
+                    val offX = maxW * ep.x - 40.dp; val offY = maxH * ep.y
+                    DragHandle(elem, ep, txtW, txtH, offX, offY, maxWPx, maxHPx, maxW, maxH,
+                        selectedElement == elem, { selectedElement = if (selectedElement == it) null else it },
+                        { id, newEp -> withUndo(layout.copy(positions = pos + (id to snap(newEp)))) }) {
+                        Text("0001234", fontSize = 16.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, color = theme.accentColor)
+                    }
+                }
+
+                // == LEVEL ==
+                if (vis.getOrDefault(LayoutElements.LEVEL, true)) {
+                    val elem = LayoutElements.LEVEL; val ep = pos[elem] ?: ElementPosition(0.2f, 0.02f)
+                    val offX = maxW * ep.x - 16.dp; val offY = maxH * ep.y
+                    DragHandle(elem, ep, 40.dp, 16.dp, offX, offY, maxWPx, maxHPx, maxW, maxH,
+                        selectedElement == elem, { selectedElement = if (selectedElement == it) null else it },
+                        { id, newEp -> withUndo(layout.copy(positions = pos + (id to snap(newEp)))) }) {
+                        Text("LV1", fontSize = 9.sp, color = theme.textSecondary, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                    }
+                }
+
+                // == LINES ==
+                if (vis.getOrDefault(LayoutElements.LINES, true)) {
+                    val elem = LayoutElements.LINES; val ep = pos[elem] ?: ElementPosition(0.8f, 0.02f)
+                    val offX = maxW * ep.x - 16.dp; val offY = maxH * ep.y
+                    DragHandle(elem, ep, 32.dp, 16.dp, offX, offY, maxWPx, maxHPx, maxW, maxH,
+                        selectedElement == elem, { selectedElement = if (selectedElement == it) null else it },
+                        { id, newEp -> withUndo(layout.copy(positions = pos + (id to snap(newEp)))) }) {
+                        Text("0L", fontSize = 9.sp, color = theme.textSecondary, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                    }
+                }
+
+                // == HOLD PREVIEW ==
+                if (vis.getOrDefault(LayoutElements.HOLD_PREVIEW, true)) {
+                    val elem = LayoutElements.HOLD_PREVIEW; val ep = pos[elem] ?: ElementPosition(0.08f, 0.08f)
+                    val offX = maxW * ep.x - 24.dp; val offY = maxH * ep.y - 12.dp
+                    DragHandle(elem, ep, 48.dp, 56.dp, offX, offY, maxWPx, maxHPx, maxW, maxH,
+                        selectedElement == elem, { selectedElement = if (selectedElement == it) null else it },
+                        { id, newEp -> withUndo(layout.copy(positions = pos + (id to snap(newEp)))) }) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("HOLD", fontSize = 9.sp, color = theme.textSecondary, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                            Box(Modifier.size(40.dp).clip(RoundedCornerShape(4.dp)).background(theme.screenBackground.copy(0.3f)))
+                        }
+                    }
+                }
+
+                // == NEXT PREVIEW ==
+                if (vis.getOrDefault(LayoutElements.NEXT_PREVIEW, true)) {
+                    val elem = LayoutElements.NEXT_PREVIEW; val ep = pos[elem] ?: ElementPosition(0.92f, 0.08f)
+                    val offX = maxW * ep.x - 24.dp; val offY = maxH * ep.y - 12.dp
+                    val queueH = 34.dp + (layout.nextQueueSize - 1) * 28.dp
+                    DragHandle(elem, ep, 48.dp, 16.dp + queueH, offX, offY, maxWPx, maxHPx, maxW, maxH,
+                        selectedElement == elem, { selectedElement = if (selectedElement == it) null else it },
+                        { id, newEp -> withUndo(layout.copy(positions = pos + (id to snap(newEp)))) }) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("NEXT", fontSize = 9.sp, color = theme.textSecondary, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                            repeat(layout.nextQueueSize) { i ->
+                                Box(Modifier.size(if (i == 0) 34.dp else 24.dp).clip(RoundedCornerShape(4.dp)).background(theme.screenBackground.copy(if (i == 0) 0.3f else 0.15f)))
+                            }
+                        }
+                    }
+                }
+
+                // == DPAD ==
+                if (vis.getOrDefault(LayoutElements.DPAD, true)) {
+                    val elem = LayoutElements.DPAD; val ep = pos[elem] ?: ElementPosition(0.18f, 0.85f)
+                    val offX = maxW * ep.x - 70.dp; val offY = maxH * ep.y - 70.dp
+                    DragHandle(elem, ep, dpadArea, dpadArea, offX, offY, maxWPx, maxHPx, maxW, maxH,
+                        selectedElement == elem, { selectedElement = if (selectedElement == it) null else it },
+                        { id, newEp -> withUndo(layout.copy(positions = pos + (id to snap(newEp)))) }) {
+                        val bSz = dpadBtnSz
+                        Box(Modifier.size(dpadArea), Alignment.Center) {
+                            Box(Modifier.size(bSz).align(Alignment.TopCenter).clip(CircleShape).background(theme.buttonPrimary), Alignment.Center) { Text("▲", color = theme.buttonSecondary, fontSize = 14.sp) }
+                            Box(Modifier.size(bSz).align(Alignment.BottomCenter).clip(CircleShape).background(theme.buttonPrimary), Alignment.Center) { Text("▼", color = theme.buttonSecondary, fontSize = 14.sp) }
+                            Box(Modifier.size(bSz).align(Alignment.CenterStart).clip(CircleShape).background(theme.buttonPrimary), Alignment.Center) { Text("◄", color = theme.buttonSecondary, fontSize = 14.sp) }
+                            Box(Modifier.size(bSz).align(Alignment.CenterEnd).clip(CircleShape).background(theme.buttonPrimary), Alignment.Center) { Text("►", color = theme.buttonSecondary, fontSize = 14.sp) }
+                            Box(Modifier.size(bSz * 0.6f).clip(CircleShape).background(theme.buttonPrimaryPressed))
+                        }
+                    }
+                }
+
+                // == ROTATE BTN ==
+                if (vis.getOrDefault(LayoutElements.ROTATE_BTN, true)) {
+                    val elem = LayoutElements.ROTATE_BTN; val ep = pos[elem] ?: ElementPosition(0.85f, 0.85f)
+                    val offX = maxW * ep.x - rotSz / 2; val offY = maxH * ep.y - rotSz / 2
+                    DragHandle(elem, ep, rotSz, rotSz, offX, offY, maxWPx, maxHPx, maxW, maxH,
+                        selectedElement == elem, { selectedElement = if (selectedElement == it) null else it },
+                        { id, newEp -> withUndo(layout.copy(positions = pos + (id to snap(newEp)))) }) {
+                        Box(Modifier.fillMaxSize().shadow(6.dp, CircleShape).clip(CircleShape).background(theme.buttonPrimary), Alignment.Center) { Text("↻", color = theme.buttonSecondary, fontSize = 22.sp, fontWeight = FontWeight.Bold) }
+                    }
+                }
+
+                // == HOLD BTN ==
+                if (vis.getOrDefault(LayoutElements.HOLD_BTN, true)) {
+                    val elem = LayoutElements.HOLD_BTN; val ep = pos[elem] ?: ElementPosition(0.5f, 0.80f)
+                    val offX = maxW * ep.x - 39.dp; val offY = maxH * ep.y - 17.dp
+                    DragHandle(elem, ep, 78.dp, 34.dp, offX, offY, maxWPx, maxHPx, maxW, maxH,
+                        selectedElement == elem, { selectedElement = if (selectedElement == it) null else it },
+                        { id, newEp -> withUndo(layout.copy(positions = pos + (id to snap(newEp)))) }) {
+                        Box(Modifier.fillMaxSize().clip(RoundedCornerShape(17.dp)).background(theme.accentColor.copy(0.8f)), Alignment.Center) { Text("HOLD", color = theme.backgroundColor, fontSize = 12.sp, fontWeight = FontWeight.Bold) }
+                    }
+                }
+
+                // == PAUSE BTN ==
+                if (vis.getOrDefault(LayoutElements.PAUSE_BTN, true)) {
+                    val elem = LayoutElements.PAUSE_BTN; val ep = pos[elem] ?: ElementPosition(0.5f, 0.87f)
+                    val offX = maxW * ep.x - 39.dp; val offY = maxH * ep.y - 17.dp
+                    DragHandle(elem, ep, 78.dp, 34.dp, offX, offY, maxWPx, maxHPx, maxW, maxH,
+                        selectedElement == elem, { selectedElement = if (selectedElement == it) null else it },
+                        { id, newEp -> withUndo(layout.copy(positions = pos + (id to snap(newEp)))) }) {
+                        Box(Modifier.fillMaxSize().clip(RoundedCornerShape(17.dp)).background(theme.accentColor.copy(0.8f)), Alignment.Center) { Text("PAUSE", color = theme.backgroundColor, fontSize = 12.sp, fontWeight = FontWeight.Bold) }
+                    }
+                }
+
+                // == MENU BTN ==
+                run {
+                    val elem = LayoutElements.MENU_BTN; val ep = pos[elem] ?: ElementPosition(0.5f, 0.94f)
+                    val offX = maxW * ep.x - 23.dp; val offY = maxH * ep.y - 12.dp
+                    DragHandle(elem, ep, 46.dp, 24.dp, offX, offY, maxWPx, maxHPx, maxW, maxH,
+                        selectedElement == elem, { selectedElement = if (selectedElement == it) null else it },
+                        { id, newEp -> withUndo(layout.copy(positions = pos + (id to snap(newEp)))) }) {
+                        Box(Modifier.fillMaxSize().clip(RoundedCornerShape(12.dp)).background(theme.accentColor), Alignment.Center) { Text("···", color = theme.backgroundColor, fontSize = 14.sp, fontWeight = FontWeight.Bold) }
+                    }
+                }
+
+                // == SETTINGS CARD for selected element ==
                 if (selectedElement != null) {
                     val elem = selectedElement!!
-                    val ePos = layout.positions[elem] ?: CustomLayoutData.defaultPositions()[elem] ?: ElementPosition(0.5f, 0.5f)
-                    val eSz = sizes[elem] ?: ESz(60.dp, 40.dp)
-                    // Position card: prefer below element, or above if too low
-                    val cardBelow = ePos.y < 0.65f
-                    val cardX = with(density) { (ePos.x * maxWidth.toPx()).toDp() - 80.dp }.coerceIn(4.dp, maxWidth - 164.dp)
-                    val cardY = if (cardBelow) with(density) { (ePos.y * maxHeight.toPx()).toDp() + eSz.h / 2 + 8.dp }
-                              else with(density) { (ePos.y * maxHeight.toPx()).toDp() - eSz.h / 2 - 120.dp }
-                    val adjY = cardY.coerceIn(4.dp, maxHeight - 140.dp)
+                    val ePos = pos[elem] ?: CustomLayoutData.defaultPositions()[elem] ?: ElementPosition(0.5f, 0.5f)
+                    // Position card below or above element
+                    val cardBelow = ePos.y < 0.6f
+                    val cardXDp = with(density) { (ePos.x * maxWPx).toDp() - 85.dp }.coerceIn(4.dp, maxW - 174.dp)
+                    val cardYDp = if (cardBelow) with(density) { (ePos.y * maxHPx).toDp() + 40.dp }
+                                  else with(density) { (ePos.y * maxHPx).toDp() - 180.dp }
+                    val adjY = cardYDp.coerceIn(4.dp, maxH - 200.dp)
 
-                    Column(Modifier.offset(x = cardX, y = adjY).width(160.dp).zIndex(300f)
+                    Column(Modifier.offset(x = cardXDp, y = adjY).width(170.dp).zIndex(300f)
                         .clip(RoundedCornerShape(12.dp)).shadow(16.dp, RoundedCornerShape(12.dp))
                         .background(Color(0xF0181818)).border(1.dp, ACC.copy(0.4f), RoundedCornerShape(12.dp))
-                        .pointerInput(Unit) { detectTapGestures { /* consume */ } }
+                        .pointerInput(Unit) { detectTapGestures { /* consume tap */ } }
                         .padding(10.dp)) {
 
                         Text(elem.replace("_", " "), color = ACC, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                         Spacer(Modifier.height(6.dp))
 
-                        // Hide (not for menu)
+                        // Hide
                         if (elem != LayoutElements.MENU_BTN) {
                             Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).background(Color(0xFF2A1515))
-                                .clickable { withUndo(layout.copy(visibility = layout.visibility + (elem to false))); selectedElement = null }
-                                .padding(horizontal = 8.dp, vertical = 6.dp)) {
-                                Text("👁 Hide", color = Color(0xFFFF6B6B), fontSize = 11.sp)
+                                .clickable { withUndo(layout.copy(visibility = vis + (elem to false))); selectedElement = null }
+                                .padding(horizontal = 8.dp, vertical = 5.dp)) { Text("👁 Hide", color = Color(0xFFFF6B6B), fontSize = 11.sp) }
+                            Spacer(Modifier.height(4.dp))
+                        }
+
+                        // Per-element size
+                        if (elem in listOf(LayoutElements.DPAD, LayoutElements.ROTATE_BTN, LayoutElements.HOLD_BTN, LayoutElements.PAUSE_BTN)) {
+                            Text("Size", color = DIM, fontSize = 9.sp)
+                            Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                                listOf("SMALL" to "S", "MEDIUM" to "M", "LARGE" to "L").forEach { (k, v) ->
+                                    val sel = layout.sizeFor(elem) == k
+                                    Box(Modifier.clip(RoundedCornerShape(4.dp)).background(if (sel) ACC.copy(0.25f) else Color(0xFF333333))
+                                        .clickable { withUndo(layout.copy(elementSizes = layout.elementSizes + (elem to k))) }
+                                        .padding(horizontal = 8.dp, vertical = 4.dp)) {
+                                        Text(v, color = if (sel) ACC else DIM, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                }
                             }
                             Spacer(Modifier.height(4.dp))
                         }
 
-                        // Size (for all control elements)
-                        if (elem in listOf(LayoutElements.DPAD, LayoutElements.ROTATE_BTN, LayoutElements.HOLD_BTN, LayoutElements.PAUSE_BTN, LayoutElements.BOARD, LayoutElements.SCORE, LayoutElements.LEVEL, LayoutElements.LINES, LayoutElements.HOLD_PREVIEW, LayoutElements.NEXT_PREVIEW)) {
-                            Text("Size", color = DIM, fontSize = 9.sp)
+                        // Per-element style
+                        if (elem in listOf(LayoutElements.DPAD, LayoutElements.ROTATE_BTN, LayoutElements.HOLD_BTN, LayoutElements.PAUSE_BTN)) {
+                            Text("Style", color = DIM, fontSize = 9.sp)
                             Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-                                listOf("SMALL" to "S", "MEDIUM" to "M", "LARGE" to "L").forEach { (k, v) ->
-                                    val sel = layout.controlSize == k
+                                listOf("ROUND" to "◯", "SQUARE" to "◻").forEach { (k, v) ->
+                                    val sel = layout.styleFor(elem) == k
                                     Box(Modifier.clip(RoundedCornerShape(4.dp)).background(if (sel) ACC.copy(0.25f) else Color(0xFF333333))
-                                        .clickable { withUndo(layout.copy(controlSize = k)) }.padding(horizontal = 8.dp, vertical = 4.dp)) {
-                                        Text(v, color = if (sel) ACC else DIM, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                        .clickable { withUndo(layout.copy(elementStyles = layout.elementStyles + (elem to k))) }
+                                        .padding(horizontal = 8.dp, vertical = 4.dp)) {
+                                        Text(v, color = if (sel) ACC else DIM, fontSize = 12.sp)
                                     }
                                 }
                             }
@@ -194,7 +329,8 @@ fun LayoutEditorScreen(
                                 (1..3).forEach { n ->
                                     val sel = layout.nextQueueSize == n
                                     Box(Modifier.clip(RoundedCornerShape(4.dp)).background(if (sel) ACC.copy(0.25f) else Color(0xFF333333))
-                                        .clickable { withUndo(layout.copy(nextQueueSize = n)) }.padding(horizontal = 8.dp, vertical = 4.dp)) {
+                                        .clickable { withUndo(layout.copy(nextQueueSize = n)) }
+                                        .padding(horizontal = 8.dp, vertical = 4.dp)) {
                                         Text("$n", color = if (sel) ACC else DIM, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                                     }
                                 }
@@ -205,131 +341,132 @@ fun LayoutEditorScreen(
             }
         }
 
-        // SIDE MENU
+        // == SIDE MENU ==
         AnimatedVisibility(showSideMenu, enter = slideInHorizontally { it } + fadeIn(), exit = slideOutHorizontally { it } + fadeOut(),
             modifier = Modifier.align(Alignment.CenterEnd)) {
             Column(Modifier.width(190.dp).fillMaxHeight().background(Color(0xEE111111))
-                .pointerInput(Unit) { detectTapGestures { /* consume */ } }.padding(16.dp), Arrangement.spacedBy(6.dp)) {
+                .pointerInput(Unit) { detectTapGestures { } }.padding(14.dp), Arrangement.spacedBy(6.dp)) {
                 Text("Layout Tools", color = ACC, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                Spacer(Modifier.height(4.dp))
-                Row(Modifier.fillMaxWidth(), Arrangement.spacedBy(6.dp)) {
-                    Box(Modifier.weight(1f).clip(RoundedCornerShape(8.dp)).background(if (undoStack.isNotEmpty()) Color(0xFF2A2A3A) else CBG)
-                        .clickable(enabled = undoStack.isNotEmpty()) { undo() }.padding(10.dp), Alignment.Center) { Text("↶ Undo", color = if (undoStack.isNotEmpty()) Color(0xFF8AB4F8) else DIM.copy(0.4f), fontSize = 11.sp, fontWeight = FontWeight.Bold) }
-                    Box(Modifier.weight(1f).clip(RoundedCornerShape(8.dp)).background(if (redoStack.isNotEmpty()) Color(0xFF2A2A3A) else CBG)
-                        .clickable(enabled = redoStack.isNotEmpty()) { redo() }.padding(10.dp), Alignment.Center) { Text("↷ Redo", color = if (redoStack.isNotEmpty()) Color(0xFF8AB4F8) else DIM.copy(0.4f), fontSize = 11.sp, fontWeight = FontWeight.Bold) }
+                Spacer(Modifier.height(2.dp))
+
+                // Undo / Redo
+                Row(Modifier.fillMaxWidth(), Arrangement.spacedBy(4.dp)) {
+                    Box(Modifier.weight(1f).clip(RoundedCornerShape(6.dp)).background(if (undoStack.isNotEmpty()) Color(0xFF2A2A3A) else CBG)
+                        .clickable(enabled = undoStack.isNotEmpty()) { undo() }.padding(8.dp), Alignment.Center) { Text("↶ Undo", color = if (undoStack.isNotEmpty()) Color(0xFF8AB4F8) else DIM.copy(0.4f), fontSize = 10.sp, fontWeight = FontWeight.Bold) }
+                    Box(Modifier.weight(1f).clip(RoundedCornerShape(6.dp)).background(if (redoStack.isNotEmpty()) Color(0xFF2A2A3A) else CBG)
+                        .clickable(enabled = redoStack.isNotEmpty()) { redo() }.padding(8.dp), Alignment.Center) { Text("↷ Redo", color = if (redoStack.isNotEmpty()) Color(0xFF8AB4F8) else DIM.copy(0.4f), fontSize = 10.sp, fontWeight = FontWeight.Bold) }
                 }
-                Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(if (gridSnap) ACC.copy(0.15f) else CBG).clickable { gridSnap = !gridSnap }.padding(10.dp), verticalAlignment = Alignment.CenterVertically) { Text(if (gridSnap) "⊞" else "⊟", fontSize = 16.sp, color = if (gridSnap) ACC else DIM); Spacer(Modifier.width(8.dp)); Text("Grid Snap", color = if (gridSnap) ACC else TX, fontSize = 12.sp) }
+
+                // Grid snap
+                Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).background(if (gridSnap) ACC.copy(0.15f) else CBG).clickable { gridSnap = !gridSnap }.padding(8.dp), verticalAlignment = Alignment.CenterVertically) { Text(if (gridSnap) "⊞" else "⊟", fontSize = 14.sp, color = if (gridSnap) ACC else DIM); Spacer(Modifier.width(6.dp)); Text("Grid Snap", color = if (gridSnap) ACC else TX, fontSize = 11.sp) }
+
+                // Info mode
+                Text("Info Layout", color = DIM, fontSize = 10.sp, modifier = Modifier.padding(top = 4.dp))
+                listOf("SCATTERED" to "Scattered", "PANEL" to "Side Panel", "INTEGRATED" to "Integrated").forEach { (k, v) ->
+                    val sel = layout.infoMode == k
+                    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).background(if (sel) ACC.copy(0.15f) else CBG)
+                        .clickable { withUndo(layout.copy(infoMode = k)) }.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(if (sel) "◉" else "○", color = if (sel) ACC else DIM, fontSize = 12.sp)
+                        Spacer(Modifier.width(6.dp))
+                        Text(v, color = if (sel) ACC else TX, fontSize = 11.sp)
+                    }
+                }
+
+                // Hidden elements
                 val hidden = LayoutElements.hideable.filter { !(layout.visibility.getOrDefault(it, true)) }
                 if (hidden.isNotEmpty()) { Text("Hidden", color = DIM, fontSize = 10.sp, modifier = Modifier.padding(top = 4.dp))
-                    hidden.forEach { elem -> val lbl = elem.replace("_PREVIEW", "").replace("_BTN", "").lowercase().replaceFirstChar { it.uppercase() }
-                        Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).background(CBG).clickable { withUndo(layout.copy(visibility = layout.visibility + (elem to true))) }.padding(8.dp)) { Text("👁 Show $lbl", color = DRG, fontSize = 11.sp) } } }
+                    hidden.forEach { elem -> val lbl = elem.replace("_PREVIEW", "").replace("_BTN", "").lowercase().replaceFirstChar { c -> c.uppercase() }
+                        Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).background(CBG).clickable { withUndo(layout.copy(visibility = layout.visibility + (elem to true))) }.padding(6.dp)) { Text("👁 Show $lbl", color = DRG, fontSize = 10.sp) } } }
+
                 Spacer(Modifier.weight(1f))
-                Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(Color(0xFF4A1A1A)).clickable { withUndo(layout.copy(positions = CustomLayoutData.defaultPositions(), visibility = LayoutElements.allElements.associateWith { true }, controlSize = "MEDIUM", nextQueueSize = 1)); showSideMenu = false }.padding(10.dp)) { Text("↺ Reset All", color = Color(0xFFFF6B6B), fontSize = 12.sp, fontWeight = FontWeight.Bold) }
+                Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).background(Color(0xFF4A1A1A)).clickable {
+                    withUndo(layout.copy(positions = CustomLayoutData.defaultPositions(), visibility = LayoutElements.allElements.associateWith { true }, controlSize = "MEDIUM", elementSizes = emptyMap(), elementStyles = emptyMap(), nextQueueSize = 1, infoMode = "SCATTERED"))
+                    showSideMenu = false
+                }.padding(8.dp)) { Text("↺ Reset All", color = Color(0xFFFF6B6B), fontSize = 11.sp, fontWeight = FontWeight.Bold) }
             }
         }
     }
 }
 
 // ======================================================================
-// ELEMENT CONTENT — renders the visual for each element type
+// DRAG HANDLE — wraps any element with drag + tap behavior.
+// Uses delta-based approach: base position derived from ElementPosition,
+// drag adds temporary delta. On drag end, saves new normalized position.
 // ======================================================================
 @Composable
-private fun ElementContent(elemId: String, w: Dp, h: Dp, theme: GameTheme, layout: CustomLayoutData) {
-    when (elemId) {
-        LayoutElements.BOARD -> Column(Modifier.size(w, h).clip(RoundedCornerShape(6.dp)).background(theme.screenBackground).padding(3.dp), Arrangement.SpaceEvenly) {
-            repeat(8) { r -> Row(Modifier.fillMaxWidth(), Arrangement.SpaceEvenly) { repeat(5) { c -> val on = (r == 2 && c in 1..3) || (r == 3 && c == 2); Box(Modifier.size(10.dp).clip(RoundedCornerShape(1.dp)).background(if (on) theme.pixelOn else theme.pixelOff)) } } } }
-        LayoutElements.SCORE -> Box(Modifier.size(w, h).clip(RoundedCornerShape(4.dp)).background(theme.deviceColor), Alignment.Center) { Text("0001234", color = theme.accentColor, fontSize = 12.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace) }
-        LayoutElements.LEVEL -> Box(Modifier.size(w, h).clip(RoundedCornerShape(4.dp)).background(theme.deviceColor), Alignment.Center) { Text("LV1", color = theme.textSecondary, fontSize = 9.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace) }
-        LayoutElements.LINES -> Box(Modifier.size(w, h).clip(RoundedCornerShape(4.dp)).background(theme.deviceColor), Alignment.Center) { Text("0L", color = theme.textSecondary, fontSize = 9.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace) }
-        LayoutElements.HOLD_PREVIEW -> Column(Modifier.size(w, h).clip(RoundedCornerShape(4.dp)).background(theme.deviceColor).padding(2.dp), horizontalAlignment = Alignment.CenterHorizontally) { Text("HOLD", color = theme.textSecondary, fontSize = 7.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace); Box(Modifier.size(32.dp).clip(RoundedCornerShape(3.dp)).background(theme.screenBackground.copy(0.4f))) }
-        LayoutElements.NEXT_PREVIEW -> Column(Modifier.size(w, h).clip(RoundedCornerShape(4.dp)).background(theme.deviceColor).padding(2.dp), horizontalAlignment = Alignment.CenterHorizontally) { Text("NEXT", color = theme.textSecondary, fontSize = 7.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace); Box(Modifier.size(32.dp).clip(RoundedCornerShape(3.dp)).background(theme.screenBackground.copy(0.4f))) }
-        LayoutElements.DPAD -> { val bSz = when (layout.controlSize) { "SMALL" -> 26.dp; "LARGE" -> 38.dp; else -> 32.dp }
-            Box(Modifier.size(w, h), Alignment.Center) {
-                Box(Modifier.size(bSz).align(Alignment.TopCenter).clip(CircleShape).background(theme.buttonPrimary), Alignment.Center) { Text("▲", color = theme.buttonSecondary, fontSize = 11.sp) }
-                Box(Modifier.size(bSz).align(Alignment.BottomCenter).clip(CircleShape).background(theme.buttonPrimary), Alignment.Center) { Text("▼", color = theme.buttonSecondary, fontSize = 11.sp) }
-                Box(Modifier.size(bSz).align(Alignment.CenterStart).clip(CircleShape).background(theme.buttonPrimary), Alignment.Center) { Text("◄", color = theme.buttonSecondary, fontSize = 11.sp) }
-                Box(Modifier.size(bSz).align(Alignment.CenterEnd).clip(CircleShape).background(theme.buttonPrimary), Alignment.Center) { Text("►", color = theme.buttonSecondary, fontSize = 11.sp) }
-                Box(Modifier.size(bSz * 0.6f).clip(CircleShape).background(theme.buttonPrimaryPressed)) } }
-        LayoutElements.ROTATE_BTN -> Box(Modifier.size(w, h).shadow(6.dp, CircleShape).clip(CircleShape).background(theme.buttonPrimary), Alignment.Center) { Text("↻", color = theme.buttonSecondary, fontSize = 22.sp, fontWeight = FontWeight.Bold) }
-        LayoutElements.HOLD_BTN -> Box(Modifier.size(w, h).clip(RoundedCornerShape(16.dp)).background(theme.accentColor.copy(0.8f)), Alignment.Center) { Text("HOLD", color = theme.backgroundColor, fontSize = 11.sp, fontWeight = FontWeight.Bold) }
-        LayoutElements.PAUSE_BTN -> Box(Modifier.size(w, h).clip(RoundedCornerShape(16.dp)).background(theme.accentColor.copy(0.8f)), Alignment.Center) { Text("PAUSE", color = theme.backgroundColor, fontSize = 11.sp, fontWeight = FontWeight.Bold) }
-        LayoutElements.MENU_BTN -> Box(Modifier.size(w, h).clip(RoundedCornerShape(12.dp)).background(theme.accentColor), Alignment.Center) { Text("≡", color = theme.backgroundColor, fontSize = 14.sp, fontWeight = FontWeight.Bold) }
-    }
-}
-
-// ======================================================================
-// DRAGGABLE ITEM v6 — BULLETPROOF position tracking
-// Uses a version counter to force state reset when position changes externally.
-// During drag: local pixel offsets only.
-// On drag end: saves normalized position, version bumps, state resets.
-// ======================================================================
-@Composable
-private fun BoxWithConstraintsScope.DraggableItem(
+private fun BoxWithConstraintsScope.DragHandle(
     elementId: String, position: ElementPosition,
-    itemWidth: Dp, itemHeight: Dp, maxWPx: Float, maxHPx: Float,
+    itemWidth: Dp, itemHeight: Dp,
+    offsetX: Dp, offsetY: Dp,
+    maxWPx: Float, maxHPx: Float, maxW: Dp, maxH: Dp,
     isSelected: Boolean,
     onTap: (String) -> Unit,
     onDragEnd: (String, ElementPosition) -> Unit,
     content: @Composable () -> Unit
 ) {
     val density = LocalDensity.current
+    val baseXPx = with(density) { offsetX.toPx() }
+    val baseYPx = with(density) { offsetY.toPx() }
     val wPx = with(density) { itemWidth.toPx() }
     val hPx = with(density) { itemHeight.toPx() }
 
-    // CORE FIX: derive baseline from position, track drag delta separately
-    val baseX = position.x * maxWPx - wPx / 2
-    val baseY = position.y * maxHPx - hPx / 2
-    var dragDeltaX by remember { mutableStateOf(0f) }
-    var dragDeltaY by remember { mutableStateOf(0f) }
+    var dragDX by remember { mutableStateOf(0f) }
+    var dragDY by remember { mutableStateOf(0f) }
     var isDragging by remember { mutableStateOf(false) }
     var wasDragged by remember { mutableStateOf(false) }
 
-    // Reset delta when position changes (element was saved or undo'd)
-    LaunchedEffect(position.x, position.y) {
-        if (!isDragging) { dragDeltaX = 0f; dragDeltaY = 0f }
-    }
+    // Reset drag delta when position changes externally (undo, other element)
+    LaunchedEffect(position.x, position.y) { if (!isDragging) { dragDX = 0f; dragDY = 0f } }
 
-    val finalX = baseX + dragDeltaX
-    val finalY = baseY + dragDeltaY
+    val finalXPx = baseXPx + dragDX
+    val finalYPx = baseYPx + dragDY
 
     Box(
         Modifier
-            .offset { IntOffset(finalX.roundToInt(), finalY.roundToInt()) }
+            .offset { IntOffset(finalXPx.roundToInt(), finalYPx.roundToInt()) }
+            .size(itemWidth, itemHeight)
             .zIndex(if (isDragging) 100f else if (isSelected) 50f else 1f)
             .pointerInput(elementId) {
                 detectDragGestures(
-                    onDragStart = { isDragging = true; wasDragged = false; dragDeltaX = 0f; dragDeltaY = 0f },
+                    onDragStart = { isDragging = true; wasDragged = false; dragDX = 0f; dragDY = 0f },
                     onDragEnd = {
                         isDragging = false
                         if (wasDragged) {
-                            val cx = (finalX + wPx / 2) / maxWPx
-                            val cy = (finalY + hPx / 2) / maxHPx
-                            dragDeltaX = 0f; dragDeltaY = 0f
-                            onDragEnd(elementId, ElementPosition(cx.coerceIn(0.02f, 0.98f), cy.coerceIn(0.02f, 0.98f)))
-                        } else { dragDeltaX = 0f; dragDeltaY = 0f }
+                            // Reverse-engineer the normalized position from the final pixel offset
+                            // The offset formula varies per element, so we compute the CENTER of the dragged element
+                            // and normalize. The receiving code in CustomLayout uses element-specific offset formulas,
+                            // but they all place the element such that:
+                            //   pixelX = maxW * normX + elementSpecificOffset
+                            // We stored the original baseXPx = offsetX.toPx() which IS that formula.
+                            // So the new normX is whatever value makes: newBaseXPx = baseXPx + dragDX
+                            // Since baseXPx = f(normX), and f is linear, we can compute:
+                            //   normX_new = normX_old + dragDX / maxWPx
+                            val newNormX = (position.x + dragDX / maxWPx).coerceIn(0.02f, 0.98f)
+                            val newNormY = (position.y + dragDY / maxHPx).coerceIn(0.02f, 0.98f)
+                            dragDX = 0f; dragDY = 0f
+                            onDragEnd(elementId, ElementPosition(newNormX, newNormY))
+                        } else { dragDX = 0f; dragDY = 0f }
                     },
-                    onDragCancel = { isDragging = false; dragDeltaX = 0f; dragDeltaY = 0f },
+                    onDragCancel = { isDragging = false; dragDX = 0f; dragDY = 0f },
                     onDrag = { change, amt ->
                         change.consume()
                         wasDragged = true
-                        val newX = (baseX + dragDeltaX + amt.x).coerceIn(0f, maxWPx - wPx)
-                        val newY = (baseY + dragDeltaY + amt.y).coerceIn(0f, maxHPx - hPx)
-                        dragDeltaX = newX - baseX
-                        dragDeltaY = newY - baseY
+                        dragDX += amt.x
+                        dragDY += amt.y
                     }
                 )
             }
             .pointerInput(elementId) { detectTapGestures { onTap(elementId) } }
+            .then(if (isDragging) Modifier.border(2.dp, DRG, RoundedCornerShape(4.dp))
+                  else if (isSelected) Modifier.border(2.dp, ACC, RoundedCornerShape(4.dp))
+                  else Modifier.border(1.dp, Color.White.copy(0.08f), RoundedCornerShape(4.dp)))
     ) {
-        Box(Modifier.then(if (isDragging || isSelected) Modifier.border(2.dp, if (isDragging) DRG else ACC, RoundedCornerShape(6.dp)) else Modifier)
-            .shadow(if (isDragging) 12.dp else if (isSelected) 8.dp else 3.dp, RoundedCornerShape(6.dp))) { content() }
-        Text(elementId.replace("_", " ").lowercase().replaceFirstChar { it.uppercase() }, color = Color.White, fontSize = 7.sp, fontWeight = FontWeight.Bold,
-            modifier = Modifier.align(Alignment.BottomCenter).offset(y = 13.dp).background(Color.Black.copy(0.7f), RoundedCornerShape(3.dp)).padding(horizontal = 4.dp, vertical = 1.dp))
+        content()
     }
 }
 
 // ======================================================================
-// THEME EDITOR
+// THEME EDITOR (unchanged from v6)
 // ======================================================================
 private data class ThemeColorTarget(val label: String, val getColor: (GameTheme) -> Color, val setColor: (GameTheme, Color) -> GameTheme)
 private val themeTargets = listOf(

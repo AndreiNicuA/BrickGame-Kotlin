@@ -93,7 +93,7 @@ class MainActivity : ComponentActivity() {
                     GameScreen(
                         gameState = gs.copy(highScore = hs), layoutPreset = activeLayout, dpadStyle = dpadStyle,
                         ghostEnabled = ghost, animationStyle = anim, animationDuration = animDur,
-                        customLayout = activeCustomLayout,
+                        customLayout = activeCustomLayout, scoreHistory = history,
                         onStartGame = vm::startGame, onPause = vm::pauseGame, onResume = vm::resumeGame,
                         onRotate = vm::rotate, onRotateCCW = vm::rotateCounterClockwise,
                         onHardDrop = vm::hardDrop, onHold = vm::holdPiece,
