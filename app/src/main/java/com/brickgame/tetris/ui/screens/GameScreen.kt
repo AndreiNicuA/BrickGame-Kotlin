@@ -150,9 +150,6 @@ fun GameScreen(
     }
 }
 
-// === LANDSCAPE ===
-@Composable private fun LandscapeLayout(
-
 // === CUSTOM GAME LAYOUT: 3-zone rendering using CustomLayoutData settings ===
 @Composable private fun CustomGameLayout(
     gs: GameState, cl: CustomLayoutData, ghost: Boolean, anim: AnimationStyle, ad: Float,
@@ -309,6 +306,9 @@ fun GameScreen(
         Box(Modifier.offset(x = mw * mp.x - 23.dp, y = mh * mp.y - 12.dp)) { ActionButton("···", onSet, width = 46.dp, height = 24.dp) }
     }
 }
+
+// === LANDSCAPE ===
+@Composable private fun LandscapeLayout(
     gs: GameState, dp: DPadStyle, ghost: Boolean, anim: AnimationStyle, ad: Float,
     onRotate: () -> Unit, onHD: () -> Unit, onHold: () -> Unit,
     onLP: () -> Unit, onLR: () -> Unit, onRP: () -> Unit, onRR: () -> Unit,
