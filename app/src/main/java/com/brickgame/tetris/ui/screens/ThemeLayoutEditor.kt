@@ -4,7 +4,9 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.*
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -33,6 +35,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import com.brickgame.tetris.data.CustomLayoutData
 import com.brickgame.tetris.data.ElementPosition
 import com.brickgame.tetris.data.LayoutElements
@@ -46,11 +49,8 @@ private val TX = Color(0xFFE8E8E8)
 private val DIM = Color(0xFF888888)
 private val DRG = Color(0xFF22C55E)
 
-// Element shapes
-object ElementShapes { const val ROUND = "ROUND"; const val SQUARE = "SQUARE"; const val PILL = "PILL"; const val DIAMOND = "DIAMOND" }
-
 // ======================================================================
-// LAYOUT EDITOR
+// LAYOUT EDITOR v5
 // ======================================================================
 @Composable
 fun LayoutEditorScreen(
@@ -68,28 +68,63 @@ fun LayoutEditorScreen(
     var gridSnap by remember { mutableStateOf(false) }
     val gridStepX = 0.05f; val gridStepY = 0.04f
 
+    // Undo/Redo history
+    val undoStack = remember { mutableStateListOf<CustomLayoutData>() }
+    val redoStack = remember { mutableStateListOf<CustomLayoutData>() }
+
+    fun updateWithUndo(newLayout: CustomLayoutData) {
+        undoStack.add(layout)
+        redoStack.clear()
+        onUpdateLayout(newLayout)
+    }
+    fun undo() { if (undoStack.isNotEmpty()) { redoStack.add(layout); onUpdateLayout(undoStack.removeLast()) } }
+    fun redo() { if (redoStack.isNotEmpty()) { undoStack.add(layout); onUpdateLayout(redoStack.removeLast()) } }
+
     fun snapPos(pos: ElementPosition) = if (gridSnap)
         ElementPosition((pos.x / gridStepX).roundToInt() * gridStepX, (pos.y / gridStepY).roundToInt() * gridStepY)
     else pos
 
     Box(Modifier.fillMaxSize().background(theme.backgroundColor).systemBarsPadding()) {
         Column(Modifier.fillMaxSize()) {
-            // Header
-            Row(Modifier.fillMaxWidth().background(PBG).padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("←", color = ACC, fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { onBack() }.padding(6.dp))
+            // ===== HEADER: ← Name [gap] SAVE [gap] ☰ =====
+            Row(Modifier.fillMaxWidth().background(PBG).padding(horizontal = 8.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically) {
+                Text("←", color = ACC, fontSize = 20.sp, fontWeight = FontWeight.Bold,
+                    modifier = Modifier.clickable { onBack() }.padding(6.dp))
+                // Layout name - editable text box
                 BasicTextField(layoutName, { layoutName = it; onUpdateLayout(layout.copy(name = it)) },
-                    textStyle = TextStyle(color = TX, fontSize = 14.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace),
-                    cursorBrush = SolidColor(ACC), singleLine = true, modifier = Modifier.weight(1f).padding(horizontal = 8.dp))
-                // Hamburger menu button
-                Text("☰", color = TX, fontSize = 20.sp, modifier = Modifier.clickable { showSideMenu = !showSideMenu }.padding(6.dp))
+                    textStyle = TextStyle(color = TX, fontSize = 15.sp, fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace),
+                    cursorBrush = SolidColor(ACC), singleLine = true,
+                    modifier = Modifier.weight(1f)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(Color(0xFF252525))
+                        .padding(horizontal = 10.dp, vertical = 8.dp),
+                    decorationBox = { inner ->
+                        if (layoutName.isEmpty()) Text("Layout name...", color = DIM, fontSize = 15.sp,
+                            fontFamily = FontFamily.Monospace)
+                        inner()
+                    })
+                Spacer(Modifier.width(8.dp))
+                // SAVE button
                 Text("SAVE", color = Color.Black, fontSize = 13.sp, fontWeight = FontWeight.Bold,
-                    modifier = Modifier.clip(RoundedCornerShape(6.dp)).background(ACC).clickable { onSave() }.padding(horizontal = 14.dp, vertical = 6.dp))
+                    modifier = Modifier.clip(RoundedCornerShape(6.dp)).background(ACC)
+                        .clickable { onSave() }.padding(horizontal = 14.dp, vertical = 8.dp))
+                Spacer(Modifier.width(12.dp))
+                // ☰ Menu button - bigger
+                Box(Modifier.size(40.dp).clip(RoundedCornerShape(8.dp))
+                    .background(if (showSideMenu) ACC.copy(0.2f) else Color(0xFF333333))
+                    .clickable { showSideMenu = !showSideMenu; selectedElement = null },
+                    Alignment.Center) {
+                    Text("☰", color = TX, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                }
             }
 
-            // DRAG CANVAS — tap outside to dismiss popup
-            BoxWithConstraints(Modifier.fillMaxSize().pointerInput(selectedElement) {
-                detectTapGestures { selectedElement = null }
-            }) {
+            // ===== DRAG CANVAS =====
+            BoxWithConstraints(Modifier.fillMaxSize()
+                .pointerInput(selectedElement) {
+                    detectTapGestures { selectedElement = null; showSideMenu = false }
+                }) {
                 val density = LocalDensity.current
                 val maxWPx = with(density) { maxWidth.toPx() }
                 val maxHPx = with(density) { maxHeight.toPx() }
@@ -103,215 +138,301 @@ fun LayoutEditorScreen(
                     }
                 }
 
-                // All draggable elements
                 val pos = layout.positions; val vis = layout.visibility
 
+                // ---- Each element: key(elementId) ensures stable identity ----
+
                 if (vis.getOrDefault(LayoutElements.BOARD, true))
-                    DraggableItem(LayoutElements.BOARD, "Board", pos[LayoutElements.BOARD] ?: ElementPosition(0.5f, 0.38f),
-                        140.dp, 200.dp, maxWPx, maxHPx, selectedElement == LayoutElements.BOARD, { selectedElement = it }, { onUpdateLayout(layout.copy(positions = pos + (it.first to snapPos(it.second)))) }) {
-                        Column(Modifier.size(140.dp, 200.dp).clip(RoundedCornerShape(6.dp)).background(theme.screenBackground).padding(3.dp), Arrangement.SpaceEvenly) {
-                            repeat(8) { r -> Row(Modifier.fillMaxWidth(), Arrangement.SpaceEvenly) { repeat(5) { c ->
-                                val on = (r == 2 && c in 1..3) || (r == 3 && c == 2)
-                                Box(Modifier.size(10.dp).clip(RoundedCornerShape(1.dp)).background(if (on) theme.pixelOn else theme.pixelOff))
-                            } } }
+                    key(LayoutElements.BOARD) {
+                        DraggableItem(LayoutElements.BOARD, "Board",
+                            pos[LayoutElements.BOARD] ?: ElementPosition(0.5f, 0.38f),
+                            140.dp, 200.dp, maxWPx, maxHPx, selectedElement == LayoutElements.BOARD,
+                            onTap = { selectedElement = if (selectedElement == it) null else it },
+                            onDragEnd = { id, ep -> updateWithUndo(layout.copy(positions = pos + (id to snapPos(ep)))) }) {
+                            Column(Modifier.size(140.dp, 200.dp).clip(RoundedCornerShape(6.dp)).background(theme.screenBackground).padding(3.dp), Arrangement.SpaceEvenly) {
+                                repeat(8) { r -> Row(Modifier.fillMaxWidth(), Arrangement.SpaceEvenly) { repeat(5) { c ->
+                                    val on = (r == 2 && c in 1..3) || (r == 3 && c == 2)
+                                    Box(Modifier.size(10.dp).clip(RoundedCornerShape(1.dp)).background(if (on) theme.pixelOn else theme.pixelOff))
+                                } } }
+                            }
                         }
                     }
 
                 if (vis.getOrDefault(LayoutElements.SCORE, true))
-                    DraggableItem(LayoutElements.SCORE, "Score", pos[LayoutElements.SCORE] ?: ElementPosition(0.5f, 0.04f),
-                        100.dp, 22.dp, maxWPx, maxHPx, selectedElement == LayoutElements.SCORE, { selectedElement = it }, { onUpdateLayout(layout.copy(positions = pos + (it.first to snapPos(it.second)))) }) {
-                        Box(Modifier.size(100.dp, 22.dp).clip(RoundedCornerShape(4.dp)).background(theme.deviceColor), Alignment.Center) { Text("0001234", color = theme.accentColor, fontSize = 12.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace) }
+                    key(LayoutElements.SCORE) {
+                        DraggableItem(LayoutElements.SCORE, "Score", pos[LayoutElements.SCORE] ?: ElementPosition(0.5f, 0.04f),
+                            100.dp, 22.dp, maxWPx, maxHPx, selectedElement == LayoutElements.SCORE,
+                            onTap = { selectedElement = if (selectedElement == it) null else it },
+                            onDragEnd = { id, ep -> updateWithUndo(layout.copy(positions = pos + (id to snapPos(ep)))) }) {
+                            Box(Modifier.size(100.dp, 22.dp).clip(RoundedCornerShape(4.dp)).background(theme.deviceColor), Alignment.Center) { Text("0001234", color = theme.accentColor, fontSize = 12.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace) }
+                        }
                     }
 
                 if (vis.getOrDefault(LayoutElements.LEVEL, true))
-                    DraggableItem(LayoutElements.LEVEL, "Level", pos[LayoutElements.LEVEL] ?: ElementPosition(0.15f, 0.04f),
-                        40.dp, 18.dp, maxWPx, maxHPx, selectedElement == LayoutElements.LEVEL, { selectedElement = it }, { onUpdateLayout(layout.copy(positions = pos + (it.first to snapPos(it.second)))) }) {
-                        Box(Modifier.size(40.dp, 18.dp).clip(RoundedCornerShape(4.dp)).background(theme.deviceColor), Alignment.Center) { Text("LV1", color = theme.textSecondary, fontSize = 9.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace) }
+                    key(LayoutElements.LEVEL) {
+                        DraggableItem(LayoutElements.LEVEL, "Level", pos[LayoutElements.LEVEL] ?: ElementPosition(0.15f, 0.04f),
+                            40.dp, 18.dp, maxWPx, maxHPx, selectedElement == LayoutElements.LEVEL,
+                            onTap = { selectedElement = if (selectedElement == it) null else it },
+                            onDragEnd = { id, ep -> updateWithUndo(layout.copy(positions = pos + (id to snapPos(ep)))) }) {
+                            Box(Modifier.size(40.dp, 18.dp).clip(RoundedCornerShape(4.dp)).background(theme.deviceColor), Alignment.Center) { Text("LV1", color = theme.textSecondary, fontSize = 9.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace) }
+                        }
                     }
 
                 if (vis.getOrDefault(LayoutElements.LINES, true))
-                    DraggableItem(LayoutElements.LINES, "Lines", pos[LayoutElements.LINES] ?: ElementPosition(0.85f, 0.04f),
-                        36.dp, 18.dp, maxWPx, maxHPx, selectedElement == LayoutElements.LINES, { selectedElement = it }, { onUpdateLayout(layout.copy(positions = pos + (it.first to snapPos(it.second)))) }) {
-                        Box(Modifier.size(36.dp, 18.dp).clip(RoundedCornerShape(4.dp)).background(theme.deviceColor), Alignment.Center) { Text("0L", color = theme.textSecondary, fontSize = 9.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace) }
+                    key(LayoutElements.LINES) {
+                        DraggableItem(LayoutElements.LINES, "Lines", pos[LayoutElements.LINES] ?: ElementPosition(0.85f, 0.04f),
+                            36.dp, 18.dp, maxWPx, maxHPx, selectedElement == LayoutElements.LINES,
+                            onTap = { selectedElement = if (selectedElement == it) null else it },
+                            onDragEnd = { id, ep -> updateWithUndo(layout.copy(positions = pos + (id to snapPos(ep)))) }) {
+                            Box(Modifier.size(36.dp, 18.dp).clip(RoundedCornerShape(4.dp)).background(theme.deviceColor), Alignment.Center) { Text("0L", color = theme.textSecondary, fontSize = 9.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace) }
+                        }
                     }
 
                 if (vis.getOrDefault(LayoutElements.HOLD_PREVIEW, true))
-                    DraggableItem(LayoutElements.HOLD_PREVIEW, "Hold", pos[LayoutElements.HOLD_PREVIEW] ?: ElementPosition(0.08f, 0.12f),
-                        44.dp, 52.dp, maxWPx, maxHPx, selectedElement == LayoutElements.HOLD_PREVIEW, { selectedElement = it }, { onUpdateLayout(layout.copy(positions = pos + (it.first to snapPos(it.second)))) }) {
-                        Column(Modifier.size(44.dp, 52.dp).clip(RoundedCornerShape(4.dp)).background(theme.deviceColor).padding(2.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("HOLD", color = theme.textSecondary, fontSize = 7.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace); Box(Modifier.size(32.dp).clip(RoundedCornerShape(3.dp)).background(theme.screenBackground.copy(0.4f)))
+                    key(LayoutElements.HOLD_PREVIEW) {
+                        DraggableItem(LayoutElements.HOLD_PREVIEW, "Hold", pos[LayoutElements.HOLD_PREVIEW] ?: ElementPosition(0.08f, 0.12f),
+                            44.dp, 52.dp, maxWPx, maxHPx, selectedElement == LayoutElements.HOLD_PREVIEW,
+                            onTap = { selectedElement = if (selectedElement == it) null else it },
+                            onDragEnd = { id, ep -> updateWithUndo(layout.copy(positions = pos + (id to snapPos(ep)))) }) {
+                            Column(Modifier.size(44.dp, 52.dp).clip(RoundedCornerShape(4.dp)).background(theme.deviceColor).padding(2.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text("HOLD", color = theme.textSecondary, fontSize = 7.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace); Box(Modifier.size(32.dp).clip(RoundedCornerShape(3.dp)).background(theme.screenBackground.copy(0.4f)))
+                            }
                         }
                     }
 
                 if (vis.getOrDefault(LayoutElements.NEXT_PREVIEW, true))
-                    DraggableItem(LayoutElements.NEXT_PREVIEW, "Next", pos[LayoutElements.NEXT_PREVIEW] ?: ElementPosition(0.92f, 0.12f),
-                        44.dp, 52.dp, maxWPx, maxHPx, selectedElement == LayoutElements.NEXT_PREVIEW, { selectedElement = it }, { onUpdateLayout(layout.copy(positions = pos + (it.first to snapPos(it.second)))) }) {
-                        Column(Modifier.size(44.dp, 52.dp).clip(RoundedCornerShape(4.dp)).background(theme.deviceColor).padding(2.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("NEXT", color = theme.textSecondary, fontSize = 7.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace); Box(Modifier.size(32.dp).clip(RoundedCornerShape(3.dp)).background(theme.screenBackground.copy(0.4f)))
+                    key(LayoutElements.NEXT_PREVIEW) {
+                        DraggableItem(LayoutElements.NEXT_PREVIEW, "Next", pos[LayoutElements.NEXT_PREVIEW] ?: ElementPosition(0.92f, 0.12f),
+                            44.dp, 52.dp, maxWPx, maxHPx, selectedElement == LayoutElements.NEXT_PREVIEW,
+                            onTap = { selectedElement = if (selectedElement == it) null else it },
+                            onDragEnd = { id, ep -> updateWithUndo(layout.copy(positions = pos + (id to snapPos(ep)))) }) {
+                            Column(Modifier.size(44.dp, 52.dp).clip(RoundedCornerShape(4.dp)).background(theme.deviceColor).padding(2.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text("NEXT", color = theme.textSecondary, fontSize = 7.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace); Box(Modifier.size(32.dp).clip(RoundedCornerShape(3.dp)).background(theme.screenBackground.copy(0.4f)))
+                            }
                         }
                     }
 
                 if (vis.getOrDefault(LayoutElements.DPAD, true)) {
-                    val dSz = when (layout.controlSize) { "SMALL" -> 100.dp; "LARGE" -> 140.dp; else -> 120.dp }; val bSz = when (layout.controlSize) { "SMALL" -> 30.dp; "LARGE" -> 42.dp; else -> 36.dp }
-                    DraggableItem(LayoutElements.DPAD, "D-Pad", pos[LayoutElements.DPAD] ?: ElementPosition(0.22f, 0.82f),
-                        dSz, dSz, maxWPx, maxHPx, selectedElement == LayoutElements.DPAD, { selectedElement = it }, { onUpdateLayout(layout.copy(positions = pos + (it.first to snapPos(it.second)))) }) {
-                        Box(Modifier.size(dSz), Alignment.Center) {
-                            Box(Modifier.size(bSz).align(Alignment.TopCenter).clip(CircleShape).background(theme.buttonPrimary), Alignment.Center) { Text("▲", color = theme.buttonSecondary, fontSize = 12.sp) }
-                            Box(Modifier.size(bSz).align(Alignment.BottomCenter).clip(CircleShape).background(theme.buttonPrimary), Alignment.Center) { Text("▼", color = theme.buttonSecondary, fontSize = 12.sp) }
-                            Box(Modifier.size(bSz).align(Alignment.CenterStart).clip(CircleShape).background(theme.buttonPrimary), Alignment.Center) { Text("◄", color = theme.buttonSecondary, fontSize = 12.sp) }
-                            Box(Modifier.size(bSz).align(Alignment.CenterEnd).clip(CircleShape).background(theme.buttonPrimary), Alignment.Center) { Text("►", color = theme.buttonSecondary, fontSize = 12.sp) }
-                            Box(Modifier.size(bSz * 0.6f).clip(CircleShape).background(theme.buttonPrimaryPressed))
+                    val dSz = when (layout.controlSize) { "SMALL" -> 100.dp; "LARGE" -> 140.dp; else -> 120.dp }
+                    val bSz = when (layout.controlSize) { "SMALL" -> 30.dp; "LARGE" -> 42.dp; else -> 36.dp }
+                    key(LayoutElements.DPAD) {
+                        DraggableItem(LayoutElements.DPAD, "D-Pad", pos[LayoutElements.DPAD] ?: ElementPosition(0.22f, 0.82f),
+                            dSz, dSz, maxWPx, maxHPx, selectedElement == LayoutElements.DPAD,
+                            onTap = { selectedElement = if (selectedElement == it) null else it },
+                            onDragEnd = { id, ep -> updateWithUndo(layout.copy(positions = pos + (id to snapPos(ep)))) }) {
+                            Box(Modifier.size(dSz), Alignment.Center) {
+                                Box(Modifier.size(bSz).align(Alignment.TopCenter).clip(CircleShape).background(theme.buttonPrimary), Alignment.Center) { Text("▲", color = theme.buttonSecondary, fontSize = 12.sp) }
+                                Box(Modifier.size(bSz).align(Alignment.BottomCenter).clip(CircleShape).background(theme.buttonPrimary), Alignment.Center) { Text("▼", color = theme.buttonSecondary, fontSize = 12.sp) }
+                                Box(Modifier.size(bSz).align(Alignment.CenterStart).clip(CircleShape).background(theme.buttonPrimary), Alignment.Center) { Text("◄", color = theme.buttonSecondary, fontSize = 12.sp) }
+                                Box(Modifier.size(bSz).align(Alignment.CenterEnd).clip(CircleShape).background(theme.buttonPrimary), Alignment.Center) { Text("►", color = theme.buttonSecondary, fontSize = 12.sp) }
+                                Box(Modifier.size(bSz * 0.6f).clip(CircleShape).background(theme.buttonPrimaryPressed))
+                            }
                         }
                     }
                 }
 
                 if (vis.getOrDefault(LayoutElements.ROTATE_BTN, true)) {
                     val rSz = when (layout.controlSize) { "SMALL" -> 52.dp; "LARGE" -> 74.dp; else -> 64.dp }
-                    DraggableItem(LayoutElements.ROTATE_BTN, "Rotate", pos[LayoutElements.ROTATE_BTN] ?: ElementPosition(0.82f, 0.82f),
-                        rSz, rSz, maxWPx, maxHPx, selectedElement == LayoutElements.ROTATE_BTN, { selectedElement = it }, { onUpdateLayout(layout.copy(positions = pos + (it.first to snapPos(it.second)))) }) {
-                        Box(Modifier.size(rSz).shadow(6.dp, CircleShape).clip(CircleShape).background(theme.buttonPrimary), Alignment.Center) { Text("↻", color = theme.buttonSecondary, fontSize = 22.sp, fontWeight = FontWeight.Bold) }
+                    key(LayoutElements.ROTATE_BTN) {
+                        DraggableItem(LayoutElements.ROTATE_BTN, "Rotate", pos[LayoutElements.ROTATE_BTN] ?: ElementPosition(0.82f, 0.82f),
+                            rSz, rSz, maxWPx, maxHPx, selectedElement == LayoutElements.ROTATE_BTN,
+                            onTap = { selectedElement = if (selectedElement == it) null else it },
+                            onDragEnd = { id, ep -> updateWithUndo(layout.copy(positions = pos + (id to snapPos(ep)))) }) {
+                            Box(Modifier.size(rSz).shadow(6.dp, CircleShape).clip(CircleShape).background(theme.buttonPrimary), Alignment.Center) { Text("↻", color = theme.buttonSecondary, fontSize = 22.sp, fontWeight = FontWeight.Bold) }
+                        }
                     }
                 }
 
                 if (vis.getOrDefault(LayoutElements.HOLD_BTN, true))
-                    DraggableItem(LayoutElements.HOLD_BTN, "Hold Btn", pos[LayoutElements.HOLD_BTN] ?: ElementPosition(0.5f, 0.76f),
-                        78.dp, 32.dp, maxWPx, maxHPx, selectedElement == LayoutElements.HOLD_BTN, { selectedElement = it }, { onUpdateLayout(layout.copy(positions = pos + (it.first to snapPos(it.second)))) }) {
-                        Box(Modifier.size(78.dp, 32.dp).clip(RoundedCornerShape(16.dp)).background(theme.accentColor.copy(0.8f)), Alignment.Center) { Text("HOLD", color = theme.backgroundColor, fontSize = 11.sp, fontWeight = FontWeight.Bold) }
+                    key(LayoutElements.HOLD_BTN) {
+                        DraggableItem(LayoutElements.HOLD_BTN, "Hold Btn", pos[LayoutElements.HOLD_BTN] ?: ElementPosition(0.5f, 0.76f),
+                            78.dp, 32.dp, maxWPx, maxHPx, selectedElement == LayoutElements.HOLD_BTN,
+                            onTap = { selectedElement = if (selectedElement == it) null else it },
+                            onDragEnd = { id, ep -> updateWithUndo(layout.copy(positions = pos + (id to snapPos(ep)))) }) {
+                            Box(Modifier.size(78.dp, 32.dp).clip(RoundedCornerShape(16.dp)).background(theme.accentColor.copy(0.8f)), Alignment.Center) { Text("HOLD", color = theme.backgroundColor, fontSize = 11.sp, fontWeight = FontWeight.Bold) }
+                        }
                     }
 
                 if (vis.getOrDefault(LayoutElements.PAUSE_BTN, true))
-                    DraggableItem(LayoutElements.PAUSE_BTN, "Pause", pos[LayoutElements.PAUSE_BTN] ?: ElementPosition(0.5f, 0.84f),
-                        78.dp, 32.dp, maxWPx, maxHPx, selectedElement == LayoutElements.PAUSE_BTN, { selectedElement = it }, { onUpdateLayout(layout.copy(positions = pos + (it.first to snapPos(it.second)))) }) {
-                        Box(Modifier.size(78.dp, 32.dp).clip(RoundedCornerShape(16.dp)).background(theme.accentColor.copy(0.8f)), Alignment.Center) { Text("PAUSE", color = theme.backgroundColor, fontSize = 11.sp, fontWeight = FontWeight.Bold) }
+                    key(LayoutElements.PAUSE_BTN) {
+                        DraggableItem(LayoutElements.PAUSE_BTN, "Pause", pos[LayoutElements.PAUSE_BTN] ?: ElementPosition(0.5f, 0.84f),
+                            78.dp, 32.dp, maxWPx, maxHPx, selectedElement == LayoutElements.PAUSE_BTN,
+                            onTap = { selectedElement = if (selectedElement == it) null else it },
+                            onDragEnd = { id, ep -> updateWithUndo(layout.copy(positions = pos + (id to snapPos(ep)))) }) {
+                            Box(Modifier.size(78.dp, 32.dp).clip(RoundedCornerShape(16.dp)).background(theme.accentColor.copy(0.8f)), Alignment.Center) { Text("PAUSE", color = theme.backgroundColor, fontSize = 11.sp, fontWeight = FontWeight.Bold) }
+                        }
                     }
 
-                // Menu ≡ always visible
-                DraggableItem(LayoutElements.MENU_BTN, "Menu", pos[LayoutElements.MENU_BTN] ?: ElementPosition(0.5f, 0.92f),
-                    44.dp, 24.dp, maxWPx, maxHPx, selectedElement == LayoutElements.MENU_BTN, { selectedElement = it }, { onUpdateLayout(layout.copy(positions = pos + (it.first to snapPos(it.second)))) }) {
-                    Box(Modifier.size(44.dp, 24.dp).clip(RoundedCornerShape(12.dp)).background(theme.accentColor), Alignment.Center) { Text("≡", color = theme.backgroundColor, fontSize = 14.sp, fontWeight = FontWeight.Bold) }
+                key(LayoutElements.MENU_BTN) {
+                    DraggableItem(LayoutElements.MENU_BTN, "Menu", pos[LayoutElements.MENU_BTN] ?: ElementPosition(0.5f, 0.92f),
+                        44.dp, 24.dp, maxWPx, maxHPx, selectedElement == LayoutElements.MENU_BTN,
+                        onTap = { selectedElement = if (selectedElement == it) null else it },
+                        onDragEnd = { id, ep -> updateWithUndo(layout.copy(positions = pos + (id to snapPos(ep)))) }) {
+                        Box(Modifier.size(44.dp, 24.dp).clip(RoundedCornerShape(12.dp)).background(theme.accentColor), Alignment.Center) { Text("≡", color = theme.backgroundColor, fontSize = 14.sp, fontWeight = FontWeight.Bold) }
+                    }
                 }
 
-                // === ELEMENT POPUP (when tapped, not dragged) ===
-                if (selectedElement != null) {
-                    val elem = selectedElement!!
-                    val ePos = pos[elem] ?: ElementPosition(0.5f, 0.5f)
-                    val popX = with(density) { (ePos.x * maxWidth.toPx()).toDp() }
-                    val popY = with(density) { (ePos.y * maxHeight.toPx()).toDp() }
-                    // Position popup near element, but keep on screen
-                    val adjX = (popX - 70.dp).coerceIn(8.dp, maxWidth - 150.dp)
-                    val adjY = (popY + 30.dp).coerceIn(8.dp, maxHeight - 120.dp)
+                // ===== ELEMENT SETTINGS — bottom sheet popup =====
+                AnimatedVisibility(selectedElement != null,
+                    enter = slideInVertically { it } + fadeIn(),
+                    exit = slideOutVertically { it } + fadeOut(),
+                    modifier = Modifier.align(Alignment.BottomCenter).zIndex(200f)) {
+                    selectedElement?.let { elem ->
+                        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
+                            .background(Color(0xF0181818)).border(1.dp, ACC.copy(0.3f), RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
+                            .pointerInput(Unit) { detectTapGestures { /* consume tap so it doesn't close */ } }
+                            .padding(16.dp)) {
+                            // Drag handle
+                            Box(Modifier.width(40.dp).height(4.dp).clip(RoundedCornerShape(2.dp)).background(DIM.copy(0.4f)).align(Alignment.CenterHorizontally))
+                            Spacer(Modifier.height(8.dp))
+                            Text(elem.replace("_", " "), color = ACC, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                            Spacer(Modifier.height(10.dp))
 
-                    Column(Modifier.offset(x = adjX, y = adjY).width(140.dp).clip(RoundedCornerShape(10.dp)).background(Color(0xEE1A1A1A)).border(1.dp, ACC.copy(0.3f), RoundedCornerShape(10.dp)).padding(8.dp)) {
-                        Text(elem.replace("_", " "), color = ACC, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                        Spacer(Modifier.height(6.dp))
-                        // Hide toggle (not for MENU)
-                        if (elem != LayoutElements.MENU_BTN) {
-                            Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).background(Color(0xFF2A2A2A)).clickable {
-                                onUpdateLayout(layout.copy(visibility = vis + (elem to false))); selectedElement = null
-                            }.padding(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Text("👁 Hide", color = Color(0xFFFF6B6B), fontSize = 11.sp)
-                            }
-                            Spacer(Modifier.height(4.dp))
-                        }
-                        // Size (for controls only)
-                        if (elem in listOf(LayoutElements.DPAD, LayoutElements.ROTATE_BTN, LayoutElements.HOLD_BTN, LayoutElements.PAUSE_BTN)) {
-                            Text("Size", color = DIM, fontSize = 9.sp)
-                            Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-                                listOf("SMALL", "MEDIUM", "LARGE").forEach { s ->
-                                    val sel = layout.controlSize == s
-                                    Box(Modifier.clip(RoundedCornerShape(4.dp)).background(if (sel) ACC.copy(0.2f) else Color(0xFF333333)).clickable { onUpdateLayout(layout.copy(controlSize = s)) }.padding(horizontal = 6.dp, vertical = 3.dp)) { Text(s.take(1), color = if (sel) ACC else DIM, fontSize = 9.sp) }
+                            Row(Modifier.fillMaxWidth(), Arrangement.spacedBy(8.dp)) {
+                                // Hide button (not for menu)
+                                if (elem != LayoutElements.MENU_BTN) {
+                                    Box(Modifier.clip(RoundedCornerShape(8.dp)).background(Color(0xFF3A1A1A))
+                                        .clickable { updateWithUndo(layout.copy(visibility = vis + (elem to false))); selectedElement = null }
+                                        .padding(horizontal = 12.dp, vertical = 8.dp)) {
+                                        Text("👁 Hide", color = Color(0xFFFF6B6B), fontSize = 12.sp)
+                                    }
                                 }
                             }
-                            Spacer(Modifier.height(4.dp))
-                        }
-                        // Next queue size
-                        if (elem == LayoutElements.NEXT_PREVIEW) {
-                            Text("Queue", color = DIM, fontSize = 9.sp)
-                            Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-                                (1..3).forEach { n ->
-                                    val sel = layout.nextQueueSize == n
-                                    Box(Modifier.clip(RoundedCornerShape(4.dp)).background(if (sel) ACC.copy(0.2f) else Color(0xFF333333)).clickable { onUpdateLayout(layout.copy(nextQueueSize = n)) }.padding(horizontal = 6.dp, vertical = 3.dp)) { Text("$n", color = if (sel) ACC else DIM, fontSize = 9.sp) }
+
+                            // Size (for controls)
+                            if (elem in listOf(LayoutElements.DPAD, LayoutElements.ROTATE_BTN, LayoutElements.HOLD_BTN, LayoutElements.PAUSE_BTN)) {
+                                Spacer(Modifier.height(10.dp))
+                                Text("Control Size", color = DIM, fontSize = 11.sp)
+                                Spacer(Modifier.height(4.dp))
+                                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    listOf("SMALL" to "S", "MEDIUM" to "M", "LARGE" to "L").forEach { (k, v) ->
+                                        val sel = layout.controlSize == k
+                                        Box(Modifier.clip(RoundedCornerShape(8.dp)).background(if (sel) ACC.copy(0.2f) else Color(0xFF333333))
+                                            .border(1.dp, if (sel) ACC else Color.Transparent, RoundedCornerShape(8.dp))
+                                            .clickable { updateWithUndo(layout.copy(controlSize = k)) }
+                                            .padding(horizontal = 14.dp, vertical = 8.dp)) {
+                                            Text(v, color = if (sel) ACC else DIM, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                        }
+                                    }
                                 }
                             }
+
+                            // Next queue size
+                            if (elem == LayoutElements.NEXT_PREVIEW) {
+                                Spacer(Modifier.height(10.dp))
+                                Text("Next Queue Size", color = DIM, fontSize = 11.sp)
+                                Spacer(Modifier.height(4.dp))
+                                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    (1..3).forEach { n ->
+                                        val sel = layout.nextQueueSize == n
+                                        Box(Modifier.clip(RoundedCornerShape(8.dp)).background(if (sel) ACC.copy(0.2f) else Color(0xFF333333))
+                                            .border(1.dp, if (sel) ACC else Color.Transparent, RoundedCornerShape(8.dp))
+                                            .clickable { updateWithUndo(layout.copy(nextQueueSize = n)) }
+                                            .padding(horizontal = 14.dp, vertical = 8.dp)) {
+                                            Text("$n", color = if (sel) ACC else DIM, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                        }
+                                    }
+                                }
+                            }
+                            Spacer(Modifier.height(8.dp))
                         }
                     }
                 }
             }
         }
 
-        // === SIDE MENU (transparent overlay) ===
+        // ===== SIDE MENU =====
         AnimatedVisibility(showSideMenu, enter = slideInHorizontally { it } + fadeIn(), exit = slideOutHorizontally { it } + fadeOut(),
             modifier = Modifier.align(Alignment.CenterEnd)) {
-            Column(Modifier.width(180.dp).fillMaxHeight().background(Color(0xDD111111)).padding(16.dp), Arrangement.spacedBy(8.dp)) {
+            Column(Modifier.width(190.dp).fillMaxHeight().background(Color(0xEE111111))
+                .pointerInput(Unit) { detectTapGestures { /* consume */ } }.padding(16.dp),
+                Arrangement.spacedBy(6.dp)) {
                 Text("Layout Tools", color = ACC, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                Spacer(Modifier.height(8.dp))
-                // Grid snap toggle
+                Spacer(Modifier.height(4.dp))
+
+                // Undo / Redo
+                Row(Modifier.fillMaxWidth(), Arrangement.spacedBy(6.dp)) {
+                    Box(Modifier.weight(1f).clip(RoundedCornerShape(8.dp))
+                        .background(if (undoStack.isNotEmpty()) Color(0xFF2A2A3A) else CBG)
+                        .clickable(enabled = undoStack.isNotEmpty()) { undo() }.padding(10.dp), Alignment.Center) {
+                        Text("↶ Undo", color = if (undoStack.isNotEmpty()) Color(0xFF8AB4F8) else DIM.copy(0.4f), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    }
+                    Box(Modifier.weight(1f).clip(RoundedCornerShape(8.dp))
+                        .background(if (redoStack.isNotEmpty()) Color(0xFF2A2A3A) else CBG)
+                        .clickable(enabled = redoStack.isNotEmpty()) { redo() }.padding(10.dp), Alignment.Center) {
+                        Text("↷ Redo", color = if (redoStack.isNotEmpty()) Color(0xFF8AB4F8) else DIM.copy(0.4f), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+
+                // Grid snap
                 Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(if (gridSnap) ACC.copy(0.15f) else CBG).clickable { gridSnap = !gridSnap }.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(if (gridSnap) "⊞" else "⊟", fontSize = 16.sp, color = if (gridSnap) ACC else DIM)
                     Spacer(Modifier.width(8.dp))
                     Text("Grid Snap", color = if (gridSnap) ACC else TX, fontSize = 12.sp)
                 }
-                // Show hidden elements
-                val hiddenElems = LayoutElements.hideable.filter { !(layout.visibility.getOrDefault(it, true)) }
-                if (hiddenElems.isNotEmpty()) {
-                    Text("Hidden Elements", color = DIM, fontSize = 10.sp, modifier = Modifier.padding(top = 4.dp))
-                    hiddenElems.forEach { elem ->
-                        val label = elem.replace("_PREVIEW", "").replace("_BTN", "").lowercase().replaceFirstChar { it.uppercase() }
+
+                // Show hidden
+                val hidden = LayoutElements.hideable.filter { !(layout.visibility.getOrDefault(it, true)) }
+                if (hidden.isNotEmpty()) {
+                    Spacer(Modifier.height(4.dp))
+                    Text("Hidden", color = DIM, fontSize = 10.sp)
+                    hidden.forEach { elem ->
+                        val lbl = elem.replace("_PREVIEW", "").replace("_BTN", "").lowercase().replaceFirstChar { it.uppercase() }
                         Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).background(CBG).clickable {
-                            onUpdateLayout(layout.copy(visibility = layout.visibility + (elem to true)))
-                        }.padding(8.dp)) {
-                            Text("👁 Show $label", color = DRG, fontSize = 11.sp)
-                        }
+                            updateWithUndo(layout.copy(visibility = layout.visibility + (elem to true)))
+                        }.padding(8.dp)) { Text("👁 Show $lbl", color = DRG, fontSize = 11.sp) }
                     }
                 }
+
                 Spacer(Modifier.weight(1f))
-                // Reset all
+                // Reset All
                 Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(Color(0xFF4A1A1A)).clickable {
-                    onUpdateLayout(layout.copy(positions = CustomLayoutData.defaultPositions(), visibility = LayoutElements.allElements.associateWith { true }, controlSize = "MEDIUM", nextQueueSize = 1))
+                    updateWithUndo(layout.copy(positions = CustomLayoutData.defaultPositions(), visibility = LayoutElements.allElements.associateWith { true }, controlSize = "MEDIUM", nextQueueSize = 1))
                     showSideMenu = false
-                }.padding(10.dp)) {
-                    Text("↺ Reset All", color = Color(0xFFFF6B6B), fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                }
-                Spacer(Modifier.height(8.dp))
-                // Close
-                Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(CBG).clickable { showSideMenu = false }.padding(10.dp)) {
-                    Text("✕ Close", color = DIM, fontSize = 12.sp)
-                }
+                }.padding(10.dp)) { Text("↺ Reset All", color = Color(0xFFFF6B6B), fontSize = 12.sp, fontWeight = FontWeight.Bold) }
             }
         }
     }
 }
 
 // ======================================================================
-// DRAGGABLE ITEM — tap = select for popup, drag = move only this item
+// DRAGGABLE ITEM v5 — CRITICAL FIX: stable position tracking
+// Each item tracks its OWN pixel position independently.
+// LaunchedEffect only syncs from external when NOT currently dragging.
+// key(elementId) in the parent ensures compose identity is stable.
 // ======================================================================
 @Composable
 private fun BoxWithConstraintsScope.DraggableItem(
     elementId: String, label: String, position: ElementPosition,
     itemWidth: Dp, itemHeight: Dp, maxWPx: Float, maxHPx: Float,
     isSelected: Boolean,
-    onSelect: (String?) -> Unit,
-    onPositionChanged: (Pair<String, ElementPosition>) -> Unit,
+    onTap: (String) -> Unit,
+    onDragEnd: (String, ElementPosition) -> Unit,
     content: @Composable () -> Unit
 ) {
     val density = LocalDensity.current
     val itemWPx = with(density) { itemWidth.toPx() }
     val itemHPx = with(density) { itemHeight.toPx() }
 
+    // CRITICAL: own state, not derived from position on every recomposition
     var offsetX by remember { mutableStateOf(position.x * maxWPx - itemWPx / 2) }
     var offsetY by remember { mutableStateOf(position.y * maxHPx - itemHPx / 2) }
     var isDragging by remember { mutableStateOf(false) }
     var wasDragged by remember { mutableStateOf(false) }
 
+    // Only sync from external when NOT dragging
     LaunchedEffect(position) {
-        offsetX = position.x * maxWPx - itemWPx / 2
-        offsetY = position.y * maxHPx - itemHPx / 2
+        if (!isDragging) {
+            offsetX = position.x * maxWPx - itemWPx / 2
+            offsetY = position.y * maxHPx - itemHPx / 2
+        }
     }
 
     Box(
         Modifier
             .offset { IntOffset(offsetX.roundToInt(), offsetY.roundToInt()) }
-            .pointerInput(Unit) {
+            .zIndex(if (isDragging) 100f else if (isSelected) 50f else 1f)
+            .pointerInput(elementId) {
                 detectDragGestures(
                     onDragStart = { isDragging = true; wasDragged = false },
                     onDragEnd = {
@@ -319,7 +440,7 @@ private fun BoxWithConstraintsScope.DraggableItem(
                         if (wasDragged) {
                             val cx = (offsetX + itemWPx / 2) / maxWPx
                             val cy = (offsetY + itemHPx / 2) / maxHPx
-                            onPositionChanged(elementId to ElementPosition(cx.coerceIn(0.02f, 0.98f), cy.coerceIn(0.02f, 0.98f)))
+                            onDragEnd(elementId, ElementPosition(cx.coerceIn(0.02f, 0.98f), cy.coerceIn(0.02f, 0.98f)))
                         }
                     },
                     onDrag = { change, amt ->
@@ -330,25 +451,22 @@ private fun BoxWithConstraintsScope.DraggableItem(
                     }
                 )
             }
-            .pointerInput(Unit) {
-                detectTapGestures {
-                    // Tap = toggle selection for popup settings
-                    onSelect(if (isSelected) null else elementId)
-                }
+            .pointerInput(elementId) {
+                detectTapGestures { onTap(elementId) }
             }
     ) {
-        Box(Modifier.then(if (isDragging || isSelected) Modifier.border(2.dp, if (isDragging) DRG else ACC, RoundedCornerShape(6.dp)) else Modifier)
+        Box(Modifier
+            .then(if (isDragging || isSelected) Modifier.border(2.dp, if (isDragging) DRG else ACC, RoundedCornerShape(6.dp)) else Modifier)
             .shadow(if (isDragging) 12.dp else if (isSelected) 8.dp else 3.dp, RoundedCornerShape(6.dp))) {
             content()
         }
-        // Label
         Text(label, color = Color.White, fontSize = 8.sp, fontWeight = FontWeight.Bold,
             modifier = Modifier.align(Alignment.BottomCenter).offset(y = 14.dp).background(Color.Black.copy(0.7f), RoundedCornerShape(3.dp)).padding(horizontal = 5.dp, vertical = 1.dp))
     }
 }
 
 // ======================================================================
-// THEME EDITOR (unchanged from v3)
+// THEME EDITOR
 // ======================================================================
 private data class ThemeColorTarget(val label: String, val getColor: (GameTheme) -> Color, val setColor: (GameTheme, Color) -> GameTheme)
 private val themeTargets = listOf(
