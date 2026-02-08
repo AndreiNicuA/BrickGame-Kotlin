@@ -29,6 +29,9 @@ import com.brickgame.tetris.ui.layout.LayoutPreset
 import com.brickgame.tetris.ui.styles.AnimationStyle
 import com.brickgame.tetris.ui.theme.LocalGameTheme
 
+// CompositionLocal for multicolor mode — avoids threading through every layout function
+val LocalMultiColor = compositionLocalOf { false }
+
 @Composable
 fun GameScreen(
     gameState: GameState,
@@ -37,6 +40,7 @@ fun GameScreen(
     ghostEnabled: Boolean,
     animationStyle: AnimationStyle,
     animationDuration: Float,
+    multiColor: Boolean = false,
     customLayout: CustomLayoutData? = null,
     scoreHistory: List<com.brickgame.tetris.data.ScoreEntry> = emptyList(),
     onStartGame: () -> Unit, onPause: () -> Unit, onResume: () -> Unit,
@@ -49,6 +53,7 @@ fun GameScreen(
 ) {
     val theme = LocalGameTheme.current
 
+    CompositionLocalProvider(LocalMultiColor provides multiColor) {
     Box(Modifier.fillMaxSize().background(theme.backgroundColor).systemBarsPadding()) {
         when {
             gameState.status == GameStatus.MENU -> MenuOverlay(gameState.highScore, scoreHistory, onStartGame, onOpenSettings)
@@ -59,6 +64,7 @@ fun GameScreen(
                     LayoutPreset.PORTRAIT_CLASSIC -> ClassicLayout(gameState, dpadStyle, ghostEnabled, animationStyle, animationDuration, onRotate, onHardDrop, onHold, onLeftPress, onLeftRelease, onRightPress, onRightRelease, onDownPress, onDownRelease, onPause, onOpenSettings, onStartGame)
                     LayoutPreset.PORTRAIT_MODERN -> ModernLayout(gameState, dpadStyle, ghostEnabled, animationStyle, animationDuration, onRotate, onHardDrop, onHold, onLeftPress, onLeftRelease, onRightPress, onRightRelease, onDownPress, onDownRelease, onPause, onOpenSettings, onStartGame)
                     LayoutPreset.PORTRAIT_FULLSCREEN -> FullscreenLayout(gameState, dpadStyle, ghostEnabled, animationStyle, animationDuration, onRotate, onHardDrop, onHold, onLeftPress, onLeftRelease, onRightPress, onRightRelease, onDownPress, onDownRelease, onPause, onOpenSettings, onStartGame)
+                    LayoutPreset.PORTRAIT_ONEHAND -> OneHandLayout(gameState, ghostEnabled, animationStyle, animationDuration, onRotate, onHardDrop, onHold, onLeftPress, onLeftRelease, onRightPress, onRightRelease, onDownPress, onDownRelease, onPause, onOpenSettings, onStartGame)
                     LayoutPreset.LANDSCAPE_DEFAULT -> LandscapeLayout(gameState, dpadStyle, ghostEnabled, animationStyle, animationDuration, onRotate, onHardDrop, onHold, onLeftPress, onLeftRelease, onRightPress, onRightRelease, onDownPress, onDownRelease, onPause, onOpenSettings, false)
                     LayoutPreset.LANDSCAPE_LEFTY -> LandscapeLayout(gameState, dpadStyle, ghostEnabled, animationStyle, animationDuration, onRotate, onHardDrop, onHold, onLeftPress, onLeftRelease, onRightPress, onRightRelease, onDownPress, onDownRelease, onPause, onOpenSettings, true)
                 }
@@ -69,6 +75,7 @@ fun GameScreen(
         // Big centered action popup
         ActionPopup(gameState.lastActionLabel, gameState.linesCleared)
     }
+    } // end CompositionLocalProvider
 }
 
 // === CLASSIC: Device frame — Hold|Board|Next side by side ===
@@ -88,7 +95,7 @@ fun GameScreen(
                 ScoreBlock(gs.score, gs.level, gs.lines)
             }
             // Board
-            GameBoard(gs.board, Modifier.weight(1f).fillMaxHeight().padding(horizontal = 3.dp), gs.currentPiece, gs.ghostY, ghost, gs.clearedLineRows, anim, ad)
+            GameBoard(gs.board, Modifier.weight(1f).fillMaxHeight().padding(horizontal = 3.dp), gs.currentPiece, gs.ghostY, ghost, gs.clearedLineRows, anim, ad, multiColor = LocalMultiColor.current)
             // Right: Next
             Column(Modifier.width(58.dp).fillMaxHeight(), Arrangement.Top, Alignment.CenterHorizontally) {
                 Tag("NEXT")
@@ -122,7 +129,7 @@ fun GameScreen(
             Column(horizontalAlignment = Alignment.CenterHorizontally) { Tag("NEXT"); NextPiecePreview(gs.nextPieces.firstOrNull()?.shape, Modifier.size(34.dp)) }
         }
         Spacer(Modifier.height(4.dp))
-        GameBoard(gs.board, Modifier.weight(1f).aspectRatio(0.5f), gs.currentPiece, gs.ghostY, ghost, gs.clearedLineRows, anim, ad)
+        GameBoard(gs.board, Modifier.weight(1f).aspectRatio(0.5f), gs.currentPiece, gs.ghostY, ghost, gs.clearedLineRows, anim, ad, multiColor = LocalMultiColor.current)
         Spacer(Modifier.height(6.dp))
         FullControls(dp, onHD, onHold, onLP, onLR, onRP, onRR, onDP, onDR, onRotate, onPause, onSet, onStart, gs.status)
     }
@@ -137,7 +144,7 @@ fun GameScreen(
 ) {
     val theme = LocalGameTheme.current
     Column(Modifier.fillMaxSize().padding(horizontal = 4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        GameBoard(gs.board, Modifier.weight(1f).fillMaxWidth(), gs.currentPiece, gs.ghostY, ghost, gs.clearedLineRows, anim, ad)
+        GameBoard(gs.board, Modifier.weight(1f).fillMaxWidth(), gs.currentPiece, gs.ghostY, ghost, gs.clearedLineRows, anim, ad, multiColor = LocalMultiColor.current)
         // Tiny info strip
         Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 3.dp), Arrangement.SpaceBetween, Alignment.CenterVertically) {
             HoldPiecePreview(gs.holdPiece?.shape, gs.holdUsed, Modifier.size(28.dp))
@@ -147,6 +154,55 @@ fun GameScreen(
             NextPiecePreview(gs.nextPieces.firstOrNull()?.shape, Modifier.size(28.dp))
         }
         FullControls(dp, onHD, onHold, onLP, onLR, onRP, onRR, onDP, onDR, onRotate, onPause, onSet, onStart, gs.status)
+    }
+}
+
+// === ONE HAND: Board on top, D-Pad centered at bottom with rotate in center ===
+@Composable private fun OneHandLayout(
+    gs: GameState, ghost: Boolean, anim: AnimationStyle, ad: Float,
+    onRotate: () -> Unit, onHD: () -> Unit, onHold: () -> Unit,
+    onLP: () -> Unit, onLR: () -> Unit, onRP: () -> Unit, onRR: () -> Unit,
+    onDP: () -> Unit, onDR: () -> Unit, onPause: () -> Unit, onSet: () -> Unit, onStart: () -> Unit
+) {
+    val theme = LocalGameTheme.current
+    Column(Modifier.fillMaxSize().padding(4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        // Compact info row
+        Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 2.dp), Arrangement.SpaceBetween, Alignment.CenterVertically) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) { Tag("HOLD"); HoldPiecePreview(gs.holdPiece?.shape, gs.holdUsed, Modifier.size(36.dp)) }
+            }
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(gs.score.toString(), fontSize = 16.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, color = theme.accentColor)
+                Tag("LV${gs.level}  ${gs.lines}L")
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Tag("NEXT")
+                    gs.nextPieces.take(2).forEachIndexed { i, p ->
+                        NextPiecePreview(p.shape, Modifier.size(if (i == 0) 36.dp else 26.dp).padding(1.dp), if (i == 0) 1f else 0.5f)
+                    }
+                }
+            }
+        }
+        // Board — takes up most of the space
+        GameBoard(gs.board, Modifier.weight(1f).fillMaxWidth().padding(horizontal = 2.dp), gs.currentPiece, gs.ghostY, ghost, gs.clearedLineRows, anim, ad, multiColor = LocalMultiColor.current)
+        Spacer(Modifier.height(2.dp))
+        // Centered D-Pad with rotate in center + action buttons on sides
+        Row(Modifier.fillMaxWidth().padding(bottom = 4.dp), Arrangement.Center, Alignment.CenterVertically) {
+            // Hold + Pause on left
+            Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                ActionButton("HOLD", onHold, width = 58.dp, height = 28.dp)
+                ActionButton(if (gs.status == GameStatus.MENU) "START" else "PAUSE",
+                    { if (gs.status == GameStatus.MENU) onStart() else onPause() }, width = 58.dp, height = 28.dp)
+                ActionButton("···", onSet, width = 42.dp, height = 22.dp)
+            }
+            // Central D-Pad — always rotate-in-center style
+            DPad(60.dp, rotateInCenter = true,
+                onUpPress = onHD, onDownPress = onDP, onDownRelease = onDR,
+                onLeftPress = onLP, onLeftRelease = onLR, onRightPress = onRP, onRightRelease = onRR, onRotate = onRotate)
+            // Spacer for balance
+            Spacer(Modifier.weight(1f))
+        }
     }
 }
 
@@ -235,7 +291,7 @@ fun GameScreen(
                 else -> Modifier.fillMaxHeight().aspectRatio(0.5f)
             }
             Box(boardMod) {
-                GameBoard(gs.board, Modifier.fillMaxSize(), gs.currentPiece, gs.ghostY, ghost, gs.clearedLineRows, anim, ad)
+                GameBoard(gs.board, Modifier.fillMaxSize(), gs.currentPiece, gs.ghostY, ghost, gs.clearedLineRows, anim, ad, multiColor = LocalMultiColor.current)
                 // Info overlay when top bar is hidden
                 if (!cl.topBarVisible && cl.boardInfoOverlay != "HIDDEN") {
                     Box(Modifier.fillMaxWidth().align(Alignment.TopCenter).background(Color.Black.copy(0.35f)).padding(horizontal = 6.dp, vertical = 3.dp)) {
@@ -316,7 +372,7 @@ fun GameScreen(
 ) {
     Row(Modifier.fillMaxSize().padding(6.dp)) {
         Box(Modifier.weight(1f).fillMaxHeight(), Alignment.Center) { if (lefty) LandInfo(gs, onPause, onSet) else LandCtrl(dp, onHD, onHold, onLP, onLR, onRP, onRR, onDP, onDR, onRotate, onPause) }
-        GameBoard(gs.board, Modifier.fillMaxHeight().aspectRatio(0.5f).padding(horizontal = 6.dp), gs.currentPiece, gs.ghostY, ghost, gs.clearedLineRows, anim, ad)
+        GameBoard(gs.board, Modifier.fillMaxHeight().aspectRatio(0.5f).padding(horizontal = 6.dp), gs.currentPiece, gs.ghostY, ghost, gs.clearedLineRows, anim, ad, multiColor = LocalMultiColor.current)
         Box(Modifier.weight(1f).fillMaxHeight(), Alignment.Center) { if (lefty) LandCtrl(dp, onHD, onHold, onLP, onLR, onRP, onRR, onDP, onDR, onRotate, onPause) else LandInfo(gs, onPause, onSet) }
     }
 }
@@ -397,7 +453,7 @@ fun GameScreen(
         if (isVisible(LayoutElements.BOARD)) {
             val bp = pos[LayoutElements.BOARD] ?: ElementPosition(0.5f, 0.38f)
             Box(Modifier.size(maxW * 0.85f, maxH * 0.6f).offset(x = maxW * bp.x - maxW * 0.425f, y = maxH * bp.y - maxH * 0.3f)) {
-                GameBoard(gs.board, Modifier.fillMaxSize(), gs.currentPiece, gs.ghostY, ghost, gs.clearedLineRows, anim, ad)
+                GameBoard(gs.board, Modifier.fillMaxSize(), gs.currentPiece, gs.ghostY, ghost, gs.clearedLineRows, anim, ad, multiColor = LocalMultiColor.current)
             }
         }
         // Score
@@ -503,11 +559,12 @@ fun GameScreen(
     }
 }
 
-// Falling transparent tetris pieces — matrix rain style with colored pieces and green trails
+// Falling transparent tetris pieces — matrix rain style with colored pieces, long green trails, and sparkle
 @Composable
 private fun FallingPiecesBackground(theme: com.brickgame.tetris.ui.theme.GameTheme) {
     data class FP(val col: Float, val speed: Float, val sz: Float, val shape: Int,
-                  val alpha: Float, val startY: Float, val colorIdx: Int, val trailLen: Int)
+                  val alpha: Float, val startY: Float, val colorIdx: Int, val trailLen: Int,
+                  val sparkle: Boolean, val sparklePhase: Float)
 
     val pieces = remember {
         val rng = java.util.Random(42)
@@ -516,18 +573,19 @@ private fun FallingPiecesBackground(theme: com.brickgame.tetris.ui.theme.GameThe
                sz = 5f + rng.nextFloat() * 8f, shape = it % 7,
                alpha = 0.12f + rng.nextFloat() * 0.25f,
                startY = -(rng.nextFloat() * 3000f),
-               colorIdx = it % 7, trailLen = 2 + rng.nextInt(5))
+               colorIdx = it % 7, trailLen = 4 + rng.nextInt(8),
+               sparkle = rng.nextFloat() < 0.15f,
+               sparklePhase = rng.nextFloat() * 6.28f)
         }
     }
     val t = rememberInfiniteTransition(label = "bg")
     val anim by t.animateFloat(0f, 20000f, infiniteRepeatable(tween(30000, easing = LinearEasing)), label = "fall")
 
-    // Piece colors — bright and varied
     val pieceColors = remember { listOf(
         Color(0xFFFF4444), Color(0xFF44AAFF), Color(0xFFFFAA00), Color(0xFF44FF44),
         Color(0xFFFF44FF), Color(0xFF44FFFF), Color(0xFFF4D03F)
     ) }
-    val trailColor = Color(0xFF22C55E) // Green trail
+    val trailColor = Color(0xFF22C55E)
 
     val shapes = remember { listOf(
         listOf(0 to 0, 1 to 0, 0 to 1, 1 to 1),       // O
@@ -548,15 +606,16 @@ private fun FallingPiecesBackground(theme: com.brickgame.tetris.ui.theme.GameThe
             val shape = shapes[p.shape % shapes.size]
             val pColor = pieceColors[p.colorIdx]
 
-            // Draw green trail (fading upward)
+            // Draw long green trail (fading upward) — bigger trail
             for (ti in 1..p.trailLen) {
-                val trailY = baseY - ti * (s + 2) * 1.5f
-                val trailAlpha = p.alpha * 0.4f * (1f - ti.toFloat() / (p.trailLen + 1))
+                val trailY = baseY - ti * (s + 2) * 1.2f
+                val trailAlpha = p.alpha * 0.5f * (1f - ti.toFloat() / (p.trailLen + 1))
+                val trailSz = s * (1f - ti * 0.04f).coerceAtLeast(0.3f)
                 shape.forEach { (dx, dy) ->
                     drawRoundRect(
                         color = trailColor.copy(alpha = trailAlpha.coerceIn(0f, 1f)),
                         topLeft = androidx.compose.ui.geometry.Offset(x + dx * (s + 2), trailY + dy * (s + 2)),
-                        size = androidx.compose.ui.geometry.Size(s, s),
+                        size = androidx.compose.ui.geometry.Size(trailSz, trailSz),
                         cornerRadius = androidx.compose.ui.geometry.CornerRadius(2f, 2f)
                     )
                 }
@@ -569,6 +628,24 @@ private fun FallingPiecesBackground(theme: com.brickgame.tetris.ui.theme.GameThe
                     topLeft = androidx.compose.ui.geometry.Offset(x + dx * (s + 2), baseY + dy * (s + 2)),
                     size = androidx.compose.ui.geometry.Size(s, s),
                     cornerRadius = androidx.compose.ui.geometry.CornerRadius(2f, 2f)
+                )
+            }
+
+            // Sparkle effect on some pieces — a bright white dot that pulses
+            if (p.sparkle) {
+                val sparkleAlpha = (0.3f + 0.4f * kotlin.math.sin(anim * 0.01f + p.sparklePhase)).coerceIn(0f, 0.7f)
+                val sparkX = x + (s + 2) * 0.5f
+                val sparkY = baseY - s * 0.5f
+                drawCircle(
+                    color = Color.White.copy(alpha = sparkleAlpha * p.alpha * 3f),
+                    radius = s * 0.35f,
+                    center = androidx.compose.ui.geometry.Offset(sparkX, sparkY)
+                )
+                // Small outer glow
+                drawCircle(
+                    color = pColor.copy(alpha = sparkleAlpha * p.alpha * 1.5f),
+                    radius = s * 0.6f,
+                    center = androidx.compose.ui.geometry.Offset(sparkX, sparkY)
                 )
             }
         }

@@ -32,6 +32,7 @@ class MainActivity : ComponentActivity() {
             val animDur by vm.animationDuration.collectAsState()
             val sound by vm.soundEnabled.collectAsState()
             val vib by vm.vibrationEnabled.collectAsState()
+            val multiColor by vm.multiColorEnabled.collectAsState()
             val name by vm.playerName.collectAsState()
             val hs by vm.highScore.collectAsState()
             val history by vm.scoreHistory.collectAsState()
@@ -61,7 +62,7 @@ class MainActivity : ComponentActivity() {
                         portraitLayout = portraitLayout, landscapeLayout = landscapeLayout, dpadStyle = dpadStyle,
                         difficulty = diff, gameMode = mode, ghostEnabled = ghost,
                         animationStyle = anim, animationDuration = animDur,
-                        soundEnabled = sound, vibrationEnabled = vib,
+                        soundEnabled = sound, vibrationEnabled = vib, multiColorEnabled = multiColor,
                         playerName = name, highScore = hs, scoreHistory = history,
                         customThemes = customThemes, editingTheme = editingTheme,
                         customLayouts = customLayouts, editingLayout = editingLayout,
@@ -81,6 +82,7 @@ class MainActivity : ComponentActivity() {
                         onSetGhostEnabled = vm::setGhostPieceEnabled, onSetAnimationStyle = vm::setAnimationStyle,
                         onSetAnimationDuration = vm::setAnimationDuration, onSetSoundEnabled = vm::setSoundEnabled,
                         onSetVibrationEnabled = vm::setVibrationEnabled, onSetPlayerName = vm::setPlayerName,
+                        onSetMultiColorEnabled = vm::setMultiColorEnabled,
                         onNewTheme = vm::startNewTheme, onEditTheme = vm::editTheme,
                         onUpdateEditingTheme = vm::updateEditingTheme, onSaveTheme = vm::saveEditingTheme,
                         onDeleteTheme = vm::deleteCustomTheme,
@@ -93,6 +95,7 @@ class MainActivity : ComponentActivity() {
                     GameScreen(
                         gameState = gs.copy(highScore = hs), layoutPreset = activeLayout, dpadStyle = dpadStyle,
                         ghostEnabled = ghost, animationStyle = anim, animationDuration = animDur,
+                        multiColor = multiColor,
                         customLayout = activeCustomLayout, scoreHistory = history,
                         onStartGame = vm::startGame, onPause = vm::pauseGame, onResume = vm::resumeGame,
                         onRotate = vm::rotate, onRotateCCW = vm::rotateCounterClockwise,

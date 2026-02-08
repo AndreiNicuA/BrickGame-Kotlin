@@ -6,6 +6,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
@@ -19,7 +20,20 @@ import com.brickgame.tetris.game.PieceState
 import com.brickgame.tetris.game.TetrisGame
 import com.brickgame.tetris.ui.styles.AnimationStyle
 import com.brickgame.tetris.ui.theme.LocalGameTheme
+import kotlin.math.cos
 import kotlin.math.sin
+
+// Standard Tetris piece colors
+val PIECE_COLORS = listOf(
+    Color.Transparent,         // 0 = empty
+    Color(0xFF00D4FF),         // 1 = I — Cyan
+    Color(0xFFF4D03F),         // 2 = O — Yellow
+    Color(0xFFAA44FF),         // 3 = T — Purple
+    Color(0xFF44DD44),         // 4 = S — Green
+    Color(0xFFFF4444),         // 5 = Z — Red
+    Color(0xFF4488FF),         // 6 = J — Blue
+    Color(0xFFFF8800),         // 7 = L — Orange
+)
 
 @Composable
 fun GameBoard(
@@ -30,42 +44,28 @@ fun GameBoard(
     showGhost: Boolean = true,
     clearingLines: List<Int> = emptyList(),
     animationStyle: AnimationStyle = AnimationStyle.MODERN,
-    animationDuration: Float = 0.5f
+    animationDuration: Float = 0.5f,
+    multiColor: Boolean = false
 ) {
     val theme = LocalGameTheme.current
-
-    // FIXED: Use finite animation instead of infiniteTransition
-    // This animatable goes from 0→1 over the animation duration, then stays at 1
     val clearProgress = remember { Animatable(0f) }
 
-    // When clearingLines changes, restart the animation
     LaunchedEffect(clearingLines) {
         if (clearingLines.isNotEmpty()) {
             clearProgress.snapTo(0f)
-            clearProgress.animateTo(
-                targetValue = 1f,
-                animationSpec = tween(
-                    durationMillis = (animationDuration * 500).toInt().coerceAtLeast(150),
-                    easing = LinearEasing
-                )
-            )
-        } else {
-            clearProgress.snapTo(0f)
-        }
+            clearProgress.animateTo(1f, tween((animationDuration * 500).toInt().coerceAtLeast(150), easing = LinearEasing))
+        } else clearProgress.snapTo(0f)
     }
 
     val progress = clearProgress.value
     val isClearing = clearingLines.isNotEmpty()
+    val isTetris = clearingLines.size >= 4
 
     BoxWithConstraints(
-        modifier = modifier
-            .clip(RoundedCornerShape(6.dp))
-            .background(theme.screenBackground)
-            .padding(2.dp)
+        modifier = modifier.clip(RoundedCornerShape(6.dp)).background(theme.screenBackground).padding(2.dp),
+        contentAlignment = Alignment.Center
     ) {
-        val pixelWidth = maxWidth / TetrisGame.BOARD_WIDTH
-        val pixelHeight = maxHeight / TetrisGame.BOARD_HEIGHT
-        val pixelSize = minOf(pixelWidth, pixelHeight)
+        val pixelSize = minOf(maxWidth / TetrisGame.BOARD_WIDTH, maxHeight / TetrisGame.BOARD_HEIGHT)
         val boardWidth = pixelSize * TetrisGame.BOARD_WIDTH
         val boardHeight = pixelSize * TetrisGame.BOARD_HEIGHT
 
@@ -74,6 +74,7 @@ fun GameBoard(
             val gap = cellSize * 0.06f
             val corner = cellSize * 0.15f
 
+            // Draw board cells
             for (y in 0 until TetrisGame.BOARD_HEIGHT) {
                 for (x in 0 until TetrisGame.BOARD_WIDTH) {
                     val cellValue = board[y][x]
@@ -81,139 +82,132 @@ fun GameBoard(
                     val offset = Offset(x * cellSize + gap, y * cellSize + gap)
                     val cs = Size(cellSize - gap * 2, cellSize - gap * 2)
 
-                    // Background cell
-                    drawRoundRect(
-                        color = theme.pixelOff,
-                        topLeft = offset, size = cs,
-                        cornerRadius = CornerRadius(corner)
-                    )
+                    drawRoundRect(theme.pixelOff, offset, cs, CornerRadius(corner))
 
                     if (cellValue > 0) {
+                        val pieceColor = if (multiColor && cellValue in 1..7) PIECE_COLORS[cellValue] else theme.pixelOn
+
                         if (isClearingRow && isClearing && animationStyle != AnimationStyle.NONE) {
-                            // Animate clearing row
-                            val (color, scale) = clearingEffect(animationStyle, progress, x, y, theme.pixelOn, clearingLines.size)
-                            val ss = Size(cs.width * scale, cs.height * scale)
-                            val so = Offset(offset.x + (cs.width - ss.width) / 2, offset.y + (cs.height - ss.height) / 2)
-                            drawRoundRect(color = color, topLeft = so, size = ss, cornerRadius = CornerRadius(corner * scale))
+                            if (isTetris && animationStyle == AnimationStyle.FLASHY) {
+                                drawTetrisExplosion(progress, x, y, cellSize, gap, corner, pieceColor)
+                            } else {
+                                val (color, scale) = clearingEffect(animationStyle, progress, x, y, pieceColor, clearingLines.size)
+                                val ss = Size(cs.width * scale, cs.height * scale)
+                                val so = Offset(offset.x + (cs.width - ss.width) / 2, offset.y + (cs.height - ss.height) / 2)
+                                drawRoundRect(color, so, ss, CornerRadius(corner * scale))
+                            }
                         } else {
-                            drawRoundRect(color = theme.pixelOn, topLeft = offset, size = cs, cornerRadius = CornerRadius(corner))
+                            drawRoundRect(pieceColor, offset, cs, CornerRadius(corner))
+                            if (multiColor && cellValue in 1..7) {
+                                drawRoundRect(Color.White.copy(alpha = 0.15f), offset, Size(cs.width, cs.height * 0.35f), CornerRadius(corner))
+                            }
                         }
                     }
                 }
             }
 
-            // Ghost piece
+            // Current piece
+            if (currentPiece != null) {
+                val pColor = if (multiColor) PIECE_COLORS.getOrElse(currentPiece.type.ordinal + 1) { theme.pixelOn } else theme.pixelOn
+                for (py in currentPiece.shape.indices) for (px in currentPiece.shape[py].indices) {
+                    if (currentPiece.shape[py][px] > 0) {
+                        val bx = currentPiece.position.x + px; val by = currentPiece.position.y + py
+                        if (bx in 0 until TetrisGame.BOARD_WIDTH && by in 0 until TetrisGame.BOARD_HEIGHT) {
+                            val offset = Offset(bx * cellSize + gap, by * cellSize + gap)
+                            val cs = Size(cellSize - gap * 2, cellSize - gap * 2)
+                            drawRoundRect(pColor, offset, cs, CornerRadius(corner))
+                            if (multiColor) drawRoundRect(Color.White.copy(alpha = 0.15f), offset, Size(cs.width, cs.height * 0.35f), CornerRadius(corner))
+                        }
+                    }
+                }
+            }
+
+            // Ghost
             if (showGhost && currentPiece != null && ghostY > currentPiece.position.y) {
-                drawGhost(currentPiece, ghostY, cellSize, gap, corner, theme.pixelOn)
+                val gc = if (multiColor) PIECE_COLORS.getOrElse(currentPiece.type.ordinal + 1) { theme.pixelOn } else theme.pixelOn
+                drawGhost(currentPiece, ghostY, cellSize, gap, corner, gc)
             }
         }
     }
 }
 
-private fun clearingEffect(
-    style: AnimationStyle, progress: Float, x: Int, y: Int,
-    baseColor: Color, lineCount: Int
-): Pair<Color, Float> = when (style) {
+private fun DrawScope.drawTetrisExplosion(
+    progress: Float, x: Int, y: Int, cellSize: Float,
+    gap: Float, corner: Float, baseColor: Color
+) {
+    val offset = Offset(x * cellSize + gap, y * cellSize + gap)
+    val cs = Size(cellSize - gap * 2, cellSize - gap * 2)
+    val cx = offset.x + cs.width / 2; val cy = offset.y + cs.height / 2
+
+    if (progress < 0.3f) {
+        val flash = if ((progress * 12).toInt() % 2 == 0) Color.White else baseColor
+        val g = 1f + progress * 0.5f
+        drawRoundRect(flash, Offset(cx - cs.width * g / 2, cy - cs.height * g / 2), Size(cs.width * g, cs.height * g), CornerRadius(corner * g))
+    } else {
+        val t = (progress - 0.3f) / 0.7f
+        val alpha = (1f - t).coerceIn(0f, 1f)
+        val angle = (x * 37 + y * 53).toFloat() * 0.1f
+        val dist = cellSize * 3 * t
+        val px = cx + cos(angle) * dist; val py = cy + sin(angle) * dist - cellSize * 2 * t * t
+        val pSize = cs.width * (1f - t * 0.7f)
+        drawRoundRect(baseColor.copy(alpha = alpha), Offset(px - pSize / 2, py - pSize / 2), Size(pSize, pSize), CornerRadius(pSize / 2))
+        if (t < 0.6f) drawCircle(Color.White.copy(alpha = alpha * 0.4f), pSize * 0.25f, Offset(px, py))
+    }
+}
+
+private fun clearingEffect(style: AnimationStyle, progress: Float, x: Int, y: Int, baseColor: Color, lineCount: Int): Pair<Color, Float> = when (style) {
     AnimationStyle.NONE -> baseColor to 1f
     AnimationStyle.RETRO -> {
-        // Simple blink: alternate white/base, then fade out
         val blink = if ((progress * 6).toInt() % 2 == 0) Color.White else baseColor
         val fade = if (progress > 0.7f) 1f - ((progress - 0.7f) / 0.3f) * 0.3f else 1f
         blink.copy(alpha = fade) to 1f
     }
     AnimationStyle.MODERN -> {
-        // Smooth fade to white then shrink away
-        val fadeToWhite = Color(
-            red = baseColor.red + (1f - baseColor.red) * progress,
-            green = baseColor.green + (1f - baseColor.green) * progress,
-            blue = baseColor.blue + (1f - baseColor.blue) * progress,
-            alpha = 1f - progress * 0.5f
-        )
-        val shrink = 1f - progress * 0.3f
-        fadeToWhite to shrink
+        val c = Color(baseColor.red + (1f - baseColor.red) * progress, baseColor.green + (1f - baseColor.green) * progress, baseColor.blue + (1f - baseColor.blue) * progress, 1f - progress * 0.5f)
+        c to (1f - progress * 0.3f)
     }
     AnimationStyle.FLASHY -> {
-        // Rainbow sweep across the row
-        val colors = listOf(
-            Color(0xFFFF0000), Color(0xFFFF7F00), Color(0xFFFFFF00),
-            Color(0xFF00FF00), Color(0xFF00FFFF), Color(0xFF0000FF),
-            Color(0xFF8B00FF), Color(0xFFFF00FF)
-        )
+        val colors = listOf(Color(0xFFFF0000), Color(0xFFFF7F00), Color(0xFFFFFF00), Color(0xFF00FF00), Color(0xFF00FFFF), Color(0xFF0000FF), Color(0xFF8B00FF), Color(0xFFFF00FF))
         val idx = ((x + progress * 16).toInt() % colors.size)
-        val pulse = 1f + sin(progress * 12.56f) * 0.1f
         val alpha = if (progress > 0.6f) 1f - ((progress - 0.6f) / 0.4f) else 1f
-        colors[idx].copy(alpha = alpha) to pulse
+        colors[idx].copy(alpha = alpha) to (1f + sin(progress * 12.56f) * 0.1f)
     }
 }
 
-private fun DrawScope.drawGhost(
-    piece: PieceState, ghostY: Int,
-    cellSize: Float, gap: Float, corner: Float, baseColor: Color
-) {
-    val ghostColor = baseColor.copy(alpha = 0.15f)
-    val outlineColor = baseColor.copy(alpha = 0.35f)
-
-    for (py in piece.shape.indices) {
-        for (px in piece.shape[py].indices) {
-            if (piece.shape[py][px] > 0) {
-                val bx = piece.position.x + px
-                val by = ghostY + py
-                if (bx in 0 until TetrisGame.BOARD_WIDTH && by in 0 until TetrisGame.BOARD_HEIGHT) {
-                    val offset = Offset(bx * cellSize + gap, by * cellSize + gap)
-                    val cs = Size(cellSize - gap * 2, cellSize - gap * 2)
-                    drawRoundRect(ghostColor, offset, cs, CornerRadius(corner))
-                    drawRoundRect(outlineColor, offset, cs, CornerRadius(corner), style = Stroke(gap * 0.8f))
-                }
+private fun DrawScope.drawGhost(piece: PieceState, ghostY: Int, cellSize: Float, gap: Float, corner: Float, baseColor: Color) {
+    val gc = baseColor.copy(alpha = 0.15f); val oc = baseColor.copy(alpha = 0.35f)
+    for (py in piece.shape.indices) for (px in piece.shape[py].indices) {
+        if (piece.shape[py][px] > 0) {
+            val bx = piece.position.x + px; val by = ghostY + py
+            if (bx in 0 until TetrisGame.BOARD_WIDTH && by in 0 until TetrisGame.BOARD_HEIGHT) {
+                val o = Offset(bx * cellSize + gap, by * cellSize + gap); val s = Size(cellSize - gap * 2, cellSize - gap * 2)
+                drawRoundRect(gc, o, s, CornerRadius(corner)); drawRoundRect(oc, o, s, CornerRadius(corner), style = Stroke(gap * 0.8f))
             }
         }
     }
 }
 
 // ===== Piece Previews =====
-
 @Composable
 fun NextPiecePreview(shape: List<List<Int>>?, modifier: Modifier = Modifier, alpha: Float = 1f) {
     val theme = LocalGameTheme.current
     Box(modifier.clip(RoundedCornerShape(6.dp)).background(theme.pixelOff.copy(alpha = 0.5f)).padding(4.dp)) {
-        if (shape != null) {
-            Canvas(Modifier.fillMaxSize()) {
-                val rows = shape.size; val cols = shape.maxOfOrNull { it.size } ?: 0
-                if (rows == 0 || cols == 0) return@Canvas
-                val cs = minOf(size.width / cols, size.height / rows)
-                val ox = (size.width - cs * cols) / 2; val oy = (size.height - cs * rows) / 2
-                val gap = cs * 0.1f; val corner = cs * 0.2f
-                for (y in shape.indices) for (x in shape[y].indices) {
-                    if (shape[y][x] > 0) drawRoundRect(
-                        theme.pixelOn.copy(alpha = alpha),
-                        Offset(ox + x * cs + gap, oy + y * cs + gap),
-                        Size(cs - gap * 2, cs - gap * 2), CornerRadius(corner)
-                    )
-                }
-            }
+        if (shape != null) Canvas(Modifier.fillMaxSize()) {
+            val rows = shape.size; val cols = shape.maxOfOrNull { it.size } ?: 0; if (rows == 0 || cols == 0) return@Canvas
+            val cs = minOf(size.width / cols, size.height / rows); val ox = (size.width - cs * cols) / 2; val oy = (size.height - cs * rows) / 2; val g = cs * 0.1f; val c = cs * 0.2f
+            for (y in shape.indices) for (x in shape[y].indices) if (shape[y][x] > 0) drawRoundRect(theme.pixelOn.copy(alpha = alpha), Offset(ox + x * cs + g, oy + y * cs + g), Size(cs - g * 2, cs - g * 2), CornerRadius(c))
         }
     }
 }
 
 @Composable
 fun HoldPiecePreview(shape: List<List<Int>>?, isUsed: Boolean = false, modifier: Modifier = Modifier) {
-    val theme = LocalGameTheme.current
-    val a = if (isUsed) 0.3f else 1f
+    val theme = LocalGameTheme.current; val a = if (isUsed) 0.3f else 1f
     Box(modifier.clip(RoundedCornerShape(6.dp)).background(theme.pixelOff.copy(alpha = if (isUsed) 0.3f else 0.5f)).padding(4.dp)) {
-        if (shape != null) {
-            Canvas(Modifier.fillMaxSize()) {
-                val rows = shape.size; val cols = shape.maxOfOrNull { it.size } ?: 0
-                if (rows == 0 || cols == 0) return@Canvas
-                val cs = minOf(size.width / cols, size.height / rows)
-                val ox = (size.width - cs * cols) / 2; val oy = (size.height - cs * rows) / 2
-                val gap = cs * 0.1f; val corner = cs * 0.2f
-                for (y in shape.indices) for (x in shape[y].indices) {
-                    if (shape[y][x] > 0) drawRoundRect(
-                        theme.pixelOn.copy(alpha = a),
-                        Offset(ox + x * cs + gap, oy + y * cs + gap),
-                        Size(cs - gap * 2, cs - gap * 2), CornerRadius(corner)
-                    )
-                }
-            }
+        if (shape != null) Canvas(Modifier.fillMaxSize()) {
+            val rows = shape.size; val cols = shape.maxOfOrNull { it.size } ?: 0; if (rows == 0 || cols == 0) return@Canvas
+            val cs = minOf(size.width / cols, size.height / rows); val ox = (size.width - cs * cols) / 2; val oy = (size.height - cs * rows) / 2; val g = cs * 0.1f; val c = cs * 0.2f
+            for (y in shape.indices) for (x in shape[y].indices) if (shape[y][x] > 0) drawRoundRect(theme.pixelOn.copy(alpha = a), Offset(ox + x * cs + g, oy + y * cs + g), Size(cs - g * 2, cs - g * 2), CornerRadius(c))
         }
     }
 }

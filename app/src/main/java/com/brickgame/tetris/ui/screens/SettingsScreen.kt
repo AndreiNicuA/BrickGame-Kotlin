@@ -42,7 +42,7 @@ fun SettingsScreen(
     portraitLayout: LayoutPreset, landscapeLayout: LayoutPreset, dpadStyle: DPadStyle,
     difficulty: Difficulty, gameMode: GameMode, ghostEnabled: Boolean,
     animationStyle: AnimationStyle, animationDuration: Float,
-    soundEnabled: Boolean, vibrationEnabled: Boolean,
+    soundEnabled: Boolean, vibrationEnabled: Boolean, multiColorEnabled: Boolean,
     playerName: String, highScore: Int, scoreHistory: List<ScoreEntry>,
     customThemes: List<GameTheme>, editingTheme: GameTheme?,
     customLayouts: List<CustomLayoutData>, editingLayout: CustomLayoutData?,
@@ -54,6 +54,7 @@ fun SettingsScreen(
     onSetGhostEnabled: (Boolean) -> Unit, onSetAnimationStyle: (AnimationStyle) -> Unit,
     onSetAnimationDuration: (Float) -> Unit, onSetSoundEnabled: (Boolean) -> Unit,
     onSetVibrationEnabled: (Boolean) -> Unit, onSetPlayerName: (String) -> Unit,
+    onSetMultiColorEnabled: (Boolean) -> Unit,
     onNewTheme: () -> Unit, onEditTheme: (GameTheme) -> Unit,
     onUpdateEditingTheme: (GameTheme) -> Unit, onSaveTheme: () -> Unit, onDeleteTheme: (String) -> Unit,
     onNewLayout: () -> Unit, onEditLayout: (CustomLayoutData) -> Unit,
@@ -65,7 +66,7 @@ fun SettingsScreen(
         when (page) {
             GameViewModel.SettingsPage.MAIN -> MainPage(onNavigate, onBack)
             GameViewModel.SettingsPage.PROFILE -> ProfilePage(playerName, highScore, scoreHistory, onSetPlayerName) { onNavigate(GameViewModel.SettingsPage.MAIN) }
-            GameViewModel.SettingsPage.THEME -> ThemePage(currentTheme, customThemes, onSetTheme, onNewTheme, onEditTheme, onDeleteTheme) { onNavigate(GameViewModel.SettingsPage.MAIN) }
+            GameViewModel.SettingsPage.THEME -> ThemePage(currentTheme, customThemes, multiColorEnabled, onSetTheme, onSetMultiColorEnabled, onNewTheme, onEditTheme, onDeleteTheme) { onNavigate(GameViewModel.SettingsPage.MAIN) }
             GameViewModel.SettingsPage.THEME_EDITOR -> if (editingTheme != null) ThemeEditorScreen(editingTheme, onUpdateEditingTheme, onSaveTheme) { onNavigate(GameViewModel.SettingsPage.THEME) }
             GameViewModel.SettingsPage.LAYOUT -> LayoutPage(portraitLayout, landscapeLayout, dpadStyle, customLayouts, activeCustomLayout, onSetPortraitLayout, onSetLandscapeLayout, onSetDPadStyle, onNewLayout, onEditLayout, onSelectCustomLayout, onClearCustomLayout, onDeleteLayout) { onNavigate(GameViewModel.SettingsPage.MAIN) }
             GameViewModel.SettingsPage.LAYOUT_EDITOR -> if (editingLayout != null) LayoutEditorScreen(editingLayout, currentTheme, portraitLayout, dpadStyle, onUpdateEditingLayout, onSaveLayout) { onNavigate(GameViewModel.SettingsPage.LAYOUT) }
@@ -137,9 +138,22 @@ fun SettingsScreen(
 }
 
 // ===== THEME =====
-@Composable private fun ThemePage(current: GameTheme, custom: List<GameTheme>, onSet: (GameTheme) -> Unit, onNew: () -> Unit, onEdit: (GameTheme) -> Unit, onDelete: (String) -> Unit, onBack: () -> Unit) {
+@Composable private fun ThemePage(current: GameTheme, custom: List<GameTheme>, multiColor: Boolean, onSet: (GameTheme) -> Unit, onMultiColor: (Boolean) -> Unit, onNew: () -> Unit, onEdit: (GameTheme) -> Unit, onDelete: (String) -> Unit, onBack: () -> Unit) {
     LazyColumn(Modifier.fillMaxSize().padding(20.dp)) {
         item { Header("Theme", onBack); Spacer(Modifier.height(16.dp)) }
+        // Multicolor toggle
+        item { Card {
+            Toggle("Multicolor Pieces", multiColor, onMultiColor)
+            Text("Each piece type has its own color (Cyan, Yellow, Purple, Green, Red, Blue, Orange)", color = DIM, fontSize = 11.sp)
+            if (multiColor) {
+                Spacer(Modifier.height(6.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    listOf(Color(0xFF00D4FF), Color(0xFFF4D03F), Color(0xFFAA44FF), Color(0xFF44DD44), Color(0xFFFF4444), Color(0xFF4488FF), Color(0xFFFF8800)).forEach {
+                        Box(Modifier.size(20.dp).clip(RoundedCornerShape(4.dp)).background(it))
+                    }
+                }
+            }
+        } }
         item { Lbl("Built-in") }
         items(GameThemes.builtInThemes.size) { i -> val t = GameThemes.builtInThemes[i]; ThemeRow(t, t.id == current.id) { onSet(t) } }
         if (custom.isNotEmpty()) {
@@ -226,7 +240,7 @@ fun SettingsScreen(
     LazyColumn(Modifier.fillMaxSize().padding(20.dp)) {
         item { Header("About", onBack); Spacer(Modifier.height(24.dp)) }
         item { Card { Text("BRICK GAME", color = ACC, fontSize = 24.sp, fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace); Text("Kotlin Edition", color = TX, fontSize = 14.sp) } }
-        item { Card { Info("Version", "3.3.0"); Info("Build", "18"); Info("Platform", "Android 8.0+"); Info("Engine", "Compose + Canvas") } }
+        item { Card { Info("Version", "3.4.1"); Info("Build", "21"); Info("Platform", "Android 8.0+"); Info("Engine", "Compose + Canvas") } }
         item { Card { Text("Developer", color = DIM, fontSize = 12.sp); Text("Andrei Anton", color = TX, fontSize = 16.sp, fontWeight = FontWeight.Bold) } }
         item { Lbl("Features") }
         item { Card {
