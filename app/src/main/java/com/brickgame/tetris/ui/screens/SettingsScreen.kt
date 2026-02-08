@@ -223,12 +223,24 @@ fun SettingsScreen(
 
 // ===== ABOUT =====
 @Composable private fun AboutPage(onBack: () -> Unit) {
-    Column(Modifier.fillMaxSize().padding(20.dp)) {
-        Header("About", onBack); Spacer(Modifier.height(24.dp))
-        Card { Text("BRICK GAME", color = ACC, fontSize = 24.sp, fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace); Text("Kotlin Edition", color = TX, fontSize = 16.sp) }
-        Card { Info("Version", "3.2.0"); Info("Build", "12"); Info("Min Android", "8.0 (API 26)") }
-        Card { Text("Developer", color = DIM, fontSize = 12.sp); Text("Andrei Anton", color = TX, fontSize = 16.sp, fontWeight = FontWeight.Bold) }
-        Card { Text("v3.2.0 — Custom Theme & Layout", color = ACC, fontSize = 14.sp, fontWeight = FontWeight.Bold); Text("Theme editor with RGB sliders, hex, presets", color = TX, fontSize = 12.sp); Text("Layout editor with board/info/control config", color = TX, fontSize = 12.sp) }
+    LazyColumn(Modifier.fillMaxSize().padding(20.dp)) {
+        item { Header("About", onBack); Spacer(Modifier.height(24.dp)) }
+        item { Card { Text("BRICK GAME", color = ACC, fontSize = 24.sp, fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace); Text("Kotlin Edition", color = TX, fontSize = 14.sp) } }
+        item { Card { Info("Version", "3.2.0"); Info("Build", "17"); Info("Platform", "Android 8.0+"); Info("Engine", "Compose + Canvas") } }
+        item { Card { Text("Developer", color = DIM, fontSize = 12.sp); Text("Andrei Anton", color = TX, fontSize = 16.sp, fontWeight = FontWeight.Bold) } }
+        item { Lbl("Features") }
+        item { Card {
+            Text("5 built-in themes + custom theme editor", color = TX, fontSize = 12.sp)
+            Text("3 layouts (Classic, Modern, Fullscreen) + custom layout editor", color = TX, fontSize = 12.sp)
+            Text("Hold piece, Next queue (1-3), Ghost piece", color = TX, fontSize = 12.sp)
+            Text("D-Pad and Swipe control styles", color = TX, fontSize = 12.sp)
+            Text("Score history with sort & filter", color = TX, fontSize = 12.sp)
+            Text("SRS rotation + wall kicks", color = TX, fontSize = 12.sp)
+        } }
+        item { Lbl("Changelog") }
+        item { Card { Text("v3.2.0", color = ACC, fontSize = 13.sp, fontWeight = FontWeight.Bold); Text("Custom theme & layout editors, drag-and-drop positioning, RGB color picker, grid snap, undo/redo", color = TX, fontSize = 12.sp) } }
+        item { Card { Text("v3.0.0", color = ACC, fontSize = 13.sp, fontWeight = FontWeight.Bold); Text("Complete rewrite — new game engine, Canvas rendering, 5 themes, 3 layouts, custom controls, score tracking", color = TX, fontSize = 12.sp) } }
+        item { Spacer(Modifier.height(20.dp)) }
     }
 }
 

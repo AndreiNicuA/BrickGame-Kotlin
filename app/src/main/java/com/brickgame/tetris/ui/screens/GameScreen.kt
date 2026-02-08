@@ -1,6 +1,7 @@
 package com.brickgame.tetris.ui.screens
 
 import androidx.compose.animation.core.*
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -316,15 +317,71 @@ fun GameScreen(
 // === Overlays ===
 @Composable private fun MenuOverlay(hs: Int, onStart: () -> Unit, onSet: () -> Unit) {
     val theme = LocalGameTheme.current
-    Box(Modifier.fillMaxSize().background(theme.backgroundColor), Alignment.Center) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("BRICK", fontSize = 40.sp, fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace, color = theme.textPrimary, letterSpacing = 6.sp)
-            Text("GAME", fontSize = 40.sp, fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace, color = theme.accentColor, letterSpacing = 6.sp)
-            Spacer(Modifier.height(8.dp)); Text("v3.0.0", fontSize = 12.sp, color = theme.textSecondary, fontFamily = FontFamily.Monospace)
+    Box(Modifier.fillMaxSize().background(theme.backgroundColor)) {
+        // Falling tetris pieces background
+        FallingPiecesBackground(theme)
+        // Content
+        Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+            Text("BRICK", fontSize = 38.sp, fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace, color = theme.textPrimary.copy(alpha = 0.9f), letterSpacing = 8.sp)
+            Text("GAME", fontSize = 38.sp, fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace, color = theme.accentColor, letterSpacing = 8.sp)
             Spacer(Modifier.height(32.dp))
-            if (hs > 0) { Text("BEST  $hs", fontSize = 18.sp, fontFamily = FontFamily.Monospace, color = theme.accentColor, fontWeight = FontWeight.Bold); Spacer(Modifier.height(24.dp)) }
-            ActionButton("PLAY", onStart, width = 160.dp, height = 52.dp, backgroundColor = theme.accentColor)
-            Spacer(Modifier.height(14.dp)); ActionButton("SETTINGS", onSet, width = 160.dp, height = 44.dp)
+            if (hs > 0) {
+                Text("$hs", fontSize = 28.sp, fontFamily = FontFamily.Monospace, color = theme.accentColor, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(4.dp))
+                Text("HIGH SCORE", fontSize = 10.sp, fontFamily = FontFamily.Monospace, color = theme.textSecondary, letterSpacing = 4.sp)
+                Spacer(Modifier.height(32.dp))
+            }
+            ActionButton("PLAY", onStart, width = 180.dp, height = 52.dp, backgroundColor = theme.accentColor)
+            Spacer(Modifier.height(12.dp))
+            ActionButton("SETTINGS", onSet, width = 180.dp, height = 44.dp)
+        }
+    }
+}
+
+// Falling transparent tetris pieces — matrix-style
+@Composable
+private fun FallingPiecesBackground(theme: GameTheme) {
+    data class FallingPiece(val col: Float, val speed: Float, val size: Float, val shape: Int, val alpha: Float, var y: Float)
+    val pieces = remember {
+        (0..14).map {
+            FallingPiece(
+                col = (it * 0.07f) + (it % 3) * 0.01f,
+                speed = 0.2f + (it % 5) * 0.12f,
+                size = 8f + (it % 3) * 4f,
+                shape = it % 7,
+                alpha = 0.04f + (it % 4) * 0.02f,
+                y = -(it * 120f + (it % 3) * 80f)
+            )
+        }
+    }
+    val t = rememberInfiniteTransition(label = "bg")
+    val anim by t.animateFloat(0f, 10000f, infiniteRepeatable(tween(60000, easing = LinearEasing)), label = "fall")
+
+    Canvas(Modifier.fillMaxSize()) {
+        val w = size.width; val h = size.height
+        // Each piece has a tetromino pattern
+        val shapes = listOf(
+            listOf(0 to 0, 1 to 0, 0 to 1, 1 to 1), // O
+            listOf(0 to 0, 1 to 0, 2 to 0, 3 to 0), // I
+            listOf(0 to 0, 1 to 0, 2 to 0, 2 to 1), // L
+            listOf(0 to 0, 1 to 0, 2 to 0, 0 to 1), // J
+            listOf(0 to 0, 1 to 0, 1 to 1, 2 to 1), // S
+            listOf(1 to 0, 2 to 0, 0 to 1, 1 to 1), // Z
+            listOf(0 to 0, 1 to 0, 2 to 0, 1 to 1), // T
+        )
+        pieces.forEach { p ->
+            val baseY = ((p.y + anim * p.speed) % (h + 400f)) - 200f
+            val x = p.col * w
+            val sz = p.size
+            val shape = shapes[p.shape % shapes.size]
+            shape.forEach { (dx, dy) ->
+                drawRoundRect(
+                    color = theme.pixelOn.copy(alpha = p.alpha),
+                    topLeft = androidx.compose.ui.geometry.Offset(x + dx * (sz + 2), baseY + dy * (sz + 2)),
+                    size = androidx.compose.ui.geometry.Size(sz, sz),
+                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(2f, 2f)
+                )
+            }
         }
     }
 }
