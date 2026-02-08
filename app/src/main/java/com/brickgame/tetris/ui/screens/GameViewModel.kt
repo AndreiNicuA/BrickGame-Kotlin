@@ -239,26 +239,29 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     // ===== Freeform Layout =====
     fun enterFreeformEditMode() { _freeformEditMode.value = true }
     fun exitFreeformEditMode() { _freeformEditMode.value = false }
-    fun updateFreeformControlPosition(key: String, pos: FreeformPosition) {
-        // Immediate visual update
+    fun updateFreeformElement(element: FreeformElement) {
         _playerProfile.value = _playerProfile.value.copy(
-            freeformPositions = _playerProfile.value.freeformPositions + (key to pos)
+            freeformElements = _playerProfile.value.freeformElements + (element.key to element)
         )
-        // Persist
-        viewModelScope.launch { profileRepo.updateFreeformPosition(key, pos) }
+        viewModelScope.launch { profileRepo.updateFreeformElement(element) }
     }
-    fun updateFreeformInfoPosition(key: String, pos: FreeformPosition) {
+    fun addFreeformElement(element: FreeformElement) {
         _playerProfile.value = _playerProfile.value.copy(
-            freeformInfoPositions = _playerProfile.value.freeformInfoPositions + (key to pos)
+            freeformElements = _playerProfile.value.freeformElements + (element.key to element)
         )
-        viewModelScope.launch { profileRepo.updateFreeformInfoPosition(key, pos) }
+        viewModelScope.launch { profileRepo.addFreeformElement(element) }
     }
-    fun resetFreeformPositions() {
+    fun removeFreeformElement(key: String) {
         _playerProfile.value = _playerProfile.value.copy(
-            freeformPositions = PlayerProfile.defaultFreeformPositions(),
-            freeformInfoPositions = PlayerProfile.defaultFreeformInfoPositions()
+            freeformElements = _playerProfile.value.freeformElements - key
         )
-        viewModelScope.launch { profileRepo.resetFreeformPositions() }
+        viewModelScope.launch { profileRepo.removeFreeformElement(key) }
+    }
+    fun resetFreeformElements() {
+        _playerProfile.value = _playerProfile.value.copy(
+            freeformElements = PlayerProfile.defaultFreeformElements()
+        )
+        viewModelScope.launch { profileRepo.resetFreeformElements() }
     }
 
     // ===== Profile save (syncs both profile + legacy) =====

@@ -50,10 +50,7 @@ class MainActivity : ComponentActivity() {
             val activeLayout = if (isLandscape) landscapeLayout else portraitLayout
 
             BrickGameTheme(gameTheme = theme) {
-                // Back handler: freeform editor takes priority
-                BackHandler(enabled = freeformEditMode) {
-                    vm.exitFreeformEditMode()
-                }
+                BackHandler(enabled = freeformEditMode) { vm.exitFreeformEditMode() }
                 BackHandler(enabled = ui.showSettings && !freeformEditMode) {
                     when (ui.settingsPage) {
                         GameViewModel.SettingsPage.MAIN -> vm.closeSettings()
@@ -64,19 +61,17 @@ class MainActivity : ComponentActivity() {
                 }
 
                 when {
-                    // Freeform editor — standalone full-screen with empty preview board
                     freeformEditMode -> {
                         FreeformEditorScreen(
-                            controlPositions = profile.freeformPositions,
-                            infoPositions = profile.freeformInfoPositions,
-                            onControlMoved = vm::updateFreeformControlPosition,
-                            onInfoMoved = vm::updateFreeformInfoPosition,
-                            onReset = vm::resetFreeformPositions,
+                            elements = profile.freeformElements,
+                            onElementUpdated = vm::updateFreeformElement,
+                            onElementAdded = vm::addFreeformElement,
+                            onElementRemoved = vm::removeFreeformElement,
+                            onReset = vm::resetFreeformElements,
                             onDone = vm::exitFreeformEditMode
                         )
                     }
 
-                    // Settings overlay
                     ui.showSettings -> {
                         SettingsScreen(
                             page = ui.settingsPage, currentTheme = theme,
@@ -115,20 +110,13 @@ class MainActivity : ComponentActivity() {
                         )
                     }
 
-                    // Normal game screen
                     else -> {
                         GameScreen(
                             gameState = gs.copy(highScore = hs), layoutPreset = activeLayout, dpadStyle = dpadStyle,
                             ghostEnabled = ghost, animationStyle = anim, animationDuration = animDur,
                             multiColor = multiColor,
                             customLayout = activeCustomLayout, scoreHistory = history,
-                            freeformControlPositions = profile.freeformPositions,
-                            freeformInfoPositions = profile.freeformInfoPositions,
-                            freeformEditMode = false,
-                            onFreeformControlMoved = vm::updateFreeformControlPosition,
-                            onFreeformInfoMoved = vm::updateFreeformInfoPosition,
-                            onFreeformReset = vm::resetFreeformPositions,
-                            onFreeformEditDone = vm::exitFreeformEditMode,
+                            freeformElements = profile.freeformElements,
                             onStartGame = vm::startGame, onPause = vm::pauseGame, onResume = vm::resumeGame,
                             onRotate = vm::rotate, onRotateCCW = vm::rotateCounterClockwise,
                             onHardDrop = vm::hardDrop, onHold = vm::holdPiece,

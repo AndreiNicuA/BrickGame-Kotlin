@@ -22,12 +22,11 @@ import kotlinx.coroutines.delay
 import com.brickgame.tetris.game.*
 import com.brickgame.tetris.data.CustomLayoutData
 import com.brickgame.tetris.data.ElementPosition
-import com.brickgame.tetris.data.FreeformPosition
+import com.brickgame.tetris.data.FreeformElement
 import com.brickgame.tetris.data.LayoutElements
 import com.brickgame.tetris.ui.components.*
 import com.brickgame.tetris.ui.layout.DPadStyle
 import com.brickgame.tetris.ui.layout.FreeformGameLayout
-import com.brickgame.tetris.ui.layout.FreeformEditor
 import com.brickgame.tetris.ui.layout.LayoutPreset
 import com.brickgame.tetris.ui.styles.AnimationStyle
 import com.brickgame.tetris.ui.theme.LocalGameTheme
@@ -47,13 +46,7 @@ fun GameScreen(
     customLayout: CustomLayoutData? = null,
     scoreHistory: List<com.brickgame.tetris.data.ScoreEntry> = emptyList(),
     // Freeform layout
-    freeformControlPositions: Map<String, FreeformPosition> = emptyMap(),
-    freeformInfoPositions: Map<String, FreeformPosition> = emptyMap(),
-    freeformEditMode: Boolean = false,
-    onFreeformControlMoved: (String, FreeformPosition) -> Unit = { _, _ -> },
-    onFreeformInfoMoved: (String, FreeformPosition) -> Unit = { _, _ -> },
-    onFreeformReset: () -> Unit = {},
-    onFreeformEditDone: () -> Unit = {},
+    freeformElements: Map<String, FreeformElement> = emptyMap(),
     onStartGame: () -> Unit, onPause: () -> Unit, onResume: () -> Unit,
     onRotate: () -> Unit, onRotateCCW: () -> Unit,
     onHardDrop: () -> Unit, onHold: () -> Unit,
@@ -76,21 +69,9 @@ fun GameScreen(
                     LayoutPreset.PORTRAIT_MODERN -> ModernLayout(gameState, dpadStyle, ghostEnabled, animationStyle, animationDuration, onRotate, onHardDrop, onHold, onLeftPress, onLeftRelease, onRightPress, onRightRelease, onDownPress, onDownRelease, onPause, onOpenSettings, onStartGame)
                     LayoutPreset.PORTRAIT_FULLSCREEN -> FullscreenLayout(gameState, dpadStyle, ghostEnabled, animationStyle, animationDuration, onRotate, onHardDrop, onHold, onLeftPress, onLeftRelease, onRightPress, onRightRelease, onDownPress, onDownRelease, onPause, onOpenSettings, onStartGame)
                     LayoutPreset.PORTRAIT_ONEHAND -> OneHandLayout(gameState, ghostEnabled, animationStyle, animationDuration, onRotate, onHardDrop, onHold, onLeftPress, onLeftRelease, onRightPress, onRightRelease, onDownPress, onDownRelease, onPause, onOpenSettings, onStartGame)
-                    LayoutPreset.PORTRAIT_FREEFORM -> FreeformGameLayout(gameState, dpadStyle, ghostEnabled, animationStyle, animationDuration, freeformControlPositions, freeformInfoPositions, onRotate, onHardDrop, onHold, onLeftPress, onLeftRelease, onRightPress, onRightRelease, onDownPress, onDownRelease, onPause, onOpenSettings, onStartGame)
+                    LayoutPreset.PORTRAIT_FREEFORM -> FreeformGameLayout(gameState, dpadStyle, ghostEnabled, animationStyle, animationDuration, freeformElements, onRotate, onHardDrop, onHold, onLeftPress, onLeftRelease, onRightPress, onRightRelease, onDownPress, onDownRelease, onPause, onOpenSettings, onStartGame)
                     LayoutPreset.LANDSCAPE_DEFAULT -> LandscapeLayout(gameState, dpadStyle, ghostEnabled, animationStyle, animationDuration, onRotate, onHardDrop, onHold, onLeftPress, onLeftRelease, onRightPress, onRightRelease, onDownPress, onDownRelease, onPause, onOpenSettings, false)
                     LayoutPreset.LANDSCAPE_LEFTY -> LandscapeLayout(gameState, dpadStyle, ghostEnabled, animationStyle, animationDuration, onRotate, onHardDrop, onHold, onLeftPress, onLeftRelease, onRightPress, onRightRelease, onDownPress, onDownRelease, onPause, onOpenSettings, true)
-                }
-                // Freeform editor overlay (shown on top of the game when editing)
-                if (layoutPreset == LayoutPreset.PORTRAIT_FREEFORM) {
-                    FreeformEditor(
-                        isEditMode = freeformEditMode,
-                        controlPositions = freeformControlPositions,
-                        infoPositions = freeformInfoPositions,
-                        onControlPositionChanged = onFreeformControlMoved,
-                        onInfoPositionChanged = onFreeformInfoMoved,
-                        onResetPositions = onFreeformReset,
-                        onExitEditMode = onFreeformEditDone
-                    )
                 }
                 if (gameState.status == GameStatus.PAUSED) PauseOverlay(onResume, onOpenSettings)
                 if (gameState.status == GameStatus.GAME_OVER) GameOverOverlay(gameState.score, gameState.level, gameState.lines, onStartGame, onOpenSettings)
