@@ -186,11 +186,7 @@ private fun RenderEditorPreview(type: FreeformElementType, scale: Float) {
     Box(Modifier.pointerInput(Unit) { /* absorb touches */ }) {
         when (type) {
             FreeformElementType.BOARD -> {
-                // Show empty grid preview — same size as in gameplay
-                val bs = elementBaseSize(type)
-                Box(Modifier.size(bs.first * scale, bs.second * scale).background(theme.backgroundColor, RoundedCornerShape(4.dp)).border(1.dp, theme.pixelOff.copy(0.5f), RoundedCornerShape(4.dp))) {
-                    EmptyBoardPreview(Modifier.fillMaxSize(), theme.pixelOff.copy(0.3f))
-                }
+                // Board: DO NOT render here — board uses BoardOutlineHandle instead
             }
             else -> RenderElement(type, scale, dummyGs, noop, noop, noop, noop, noop, noop, noop, noop, noop, noop, noop, noop)
         }
@@ -229,33 +225,84 @@ fun FreeformEditorScreen(
             val maxWidthPx = with(density) { maxWidth.toPx() }
             val maxHeightPx = with(density) { maxHeight.toPx() }
 
-            elements.values.filter { it.visible }.forEach { elem ->
+            elements.values.filter { it.visible }.sortedBy {
+                // Board outline renders first (behind everything), other elements on top
+                if (it.key == "BOARD") 0 else 1
+            }.forEach { elem ->
                 val type = FreeformElementType.fromKey(elem.key) ?: return@forEach
                 val isSelected = elem.key == selectedKey
                 val scale = elem.size
 
-                // Calculate element size for dragging bounds
-                val baseSize = elementBaseSize(type)
-                val elemSizeDp = when (type) {
-                    FreeformElementType.BOARD -> minOf(baseSize.first * scale, baseSize.second * scale)
-                    FreeformElementType.DPAD, FreeformElementType.DPAD_ROTATE -> (150 * scale).dp
-                    else -> minOf(baseSize.first, baseSize.second) * scale
-                }
-                val elemSizePx = with(density) { elemSizeDp.toPx() }
+                if (type == FreeformElementType.BOARD) {
+                    // Board: outline + centered text handle (non-blocking)
+                    val bs = elementBaseSize(type)
+                    val bw = bs.first * scale
+                    val bh = bs.second * scale
+                    val bwPx = with(density) { bw.toPx() }
+                    val bhPx = with(density) { bh.toPx() }
 
-                DraggableRealElement(
-                    key = elem.key,
-                    label = type.displayName,
-                    position = elem,
-                    type = type,
-                    scale = scale,
-                    maxWidthPx = maxWidthPx,
-                    maxHeightPx = maxHeightPx,
-                    elemSizePx = elemSizePx,
-                    isSelected = isSelected,
-                    onTap = { selectedKey = if (selectedKey == elem.key) null else elem.key },
-                    onDragEnd = { newX, newY -> onElementUpdated(elem.copy(x = newX, y = newY)) }
-                )
+                    // Dashed outline (not interactive — just shows size)
+                    Box(
+                        Modifier
+                            .offset(x = maxWidth * elem.x - bw / 2, y = maxHeight * elem.y - bh / 2)
+                            .size(bw, bh)
+                            .border(
+                                width = if (isSelected) 2.dp else 1.dp,
+                                color = if (isSelected) Color(0xFF22C55E) else Color.White.copy(0.4f),
+                                shape = RoundedCornerShape(6.dp)
+                            )
+                    )
+
+                    // Draggable text handle at center of the outline
+                    val handleSizePx = with(density) { 60.dp.toPx() }
+                    DraggableRealElement(
+                        key = elem.key,
+                        label = "Board",
+                        position = elem,
+                        type = type,
+                        scale = scale,
+                        maxWidthPx = maxWidthPx,
+                        maxHeightPx = maxHeightPx,
+                        elemSizePx = handleSizePx,
+                        isSelected = isSelected,
+                        onTap = { selectedKey = if (selectedKey == elem.key) null else elem.key },
+                        onDragEnd = { newX, newY -> onElementUpdated(elem.copy(x = newX, y = newY)) },
+                        customContent = {
+                            // Small "Board" label as the drag handle
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = if (isSelected) Color(0xFF22C55E).copy(0.9f) else Color(0xFF8B5CF6).copy(0.7f),
+                                shadowElevation = 4.dp
+                            ) {
+                                Text("Board", fontSize = 12.sp, fontWeight = FontWeight.Bold,
+                                    color = Color.White,
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp))
+                            }
+                        }
+                    )
+                } else {
+                    // Normal elements — same as before
+                    val baseSize = elementBaseSize(type)
+                    val elemSizeDp = when (type) {
+                        FreeformElementType.DPAD, FreeformElementType.DPAD_ROTATE -> (150 * scale).dp
+                        else -> minOf(baseSize.first, baseSize.second) * scale
+                    }
+                    val elemSizePx = with(density) { elemSizeDp.toPx() }
+
+                    DraggableRealElement(
+                        key = elem.key,
+                        label = type.displayName,
+                        position = elem,
+                        type = type,
+                        scale = scale,
+                        maxWidthPx = maxWidthPx,
+                        maxHeightPx = maxHeightPx,
+                        elemSizePx = elemSizePx,
+                        isSelected = isSelected,
+                        onTap = { selectedKey = if (selectedKey == elem.key) null else elem.key },
+                        onDragEnd = { newX, newY -> onElementUpdated(elem.copy(x = newX, y = newY)) }
+                    )
+                }
             }
         }
 
@@ -312,25 +359,29 @@ fun FreeformEditorScreen(
                     // Selected element properties
                     if (selectedElement != null) {
                         val selType = FreeformElementType.fromKey(selectedElement.key)
+                        val selKey = selectedElement.key
                         Surface(Modifier.fillMaxWidth(), shape = RoundedCornerShape(10.dp), color = Color(0xFF222222)) {
                             Column(Modifier.padding(12.dp)) {
                                 Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Box(Modifier.size(10.dp).background(Color(0xFF22C55E), CircleShape))
                                         Spacer(Modifier.width(6.dp))
-                                        Text(selType?.displayName ?: selectedElement.key, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                        Text(selType?.displayName ?: selKey, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                                     }
                                     Text("Remove", color = Color(0xFFFF4444), fontSize = 12.sp, fontWeight = FontWeight.Bold,
                                         modifier = Modifier.clickable {
-                                            onElementRemoved(selectedElement.key); selectedKey = null
+                                            onElementRemoved(selKey); selectedKey = null
                                         }.padding(4.dp))
                                 }
                                 Spacer(Modifier.height(8.dp))
-                                SliderRow("Size", selectedElement.size, 0.4f, 2.0f) {
-                                    onElementUpdated(selectedElement.copy(size = it))
+                                SliderRow("Size", selectedElement.size, 0.4f, 2.0f) { newSize ->
+                                    // Read fresh from elements map to avoid stale captures
+                                    val fresh = elements[selKey] ?: return@SliderRow
+                                    onElementUpdated(fresh.copy(size = newSize))
                                 }
-                                SliderRow("Opacity", selectedElement.alpha, 0.05f, 1.0f) {
-                                    onElementUpdated(selectedElement.copy(alpha = it))
+                                SliderRow("Opacity", selectedElement.alpha, 0.05f, 1.0f) { newAlpha ->
+                                    val fresh = elements[selKey] ?: return@SliderRow
+                                    onElementUpdated(fresh.copy(alpha = newAlpha))
                                 }
                             }
                         }
@@ -401,7 +452,8 @@ private fun BoxWithConstraintsScope.DraggableRealElement(
     elemSizePx: Float,
     isSelected: Boolean,
     onTap: () -> Unit,
-    onDragEnd: (Float, Float) -> Unit
+    onDragEnd: (Float, Float) -> Unit,
+    customContent: (@Composable () -> Unit)? = null
 ) {
     // Use position + size as remember keys so offset recalculates on ANY property change
     var offsetX by remember(key, position.x, position.y, elemSizePx) {
@@ -448,16 +500,22 @@ private fun BoxWithConstraintsScope.DraggableRealElement(
             .alpha(position.alpha)
     ) {
         // Selection highlight border
-        if (isSelected) {
+        if (isSelected && customContent == null) {
             Box(Modifier.matchParentSize().border(2.dp, Color(0xFF22C55E), RoundedCornerShape(8.dp)))
         }
-        // Render the actual button/component
-        RenderEditorPreview(type, scale)
-        // Small label underneath
-        Text(label, fontSize = 9.sp, color = Color.White.copy(0.8f),
-            modifier = Modifier.align(Alignment.BottomCenter).offset(y = 14.dp)
-                .background(Color.Black.copy(0.6f), RoundedCornerShape(3.dp))
-                .padding(horizontal = 3.dp, vertical = 1.dp))
+        // Render the actual button/component or custom content
+        if (customContent != null) {
+            customContent()
+        } else {
+            RenderEditorPreview(type, scale)
+        }
+        // Small label underneath (skip for custom content — it has its own label)
+        if (customContent == null) {
+            Text(label, fontSize = 9.sp, color = Color.White.copy(0.8f),
+                modifier = Modifier.align(Alignment.BottomCenter).offset(y = 14.dp)
+                    .background(Color.Black.copy(0.6f), RoundedCornerShape(3.dp))
+                    .padding(horizontal = 3.dp, vertical = 1.dp))
+        }
     }
 }
 
