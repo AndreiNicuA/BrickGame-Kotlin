@@ -70,9 +70,10 @@ fun FreeformGameLayout(
             val scale = elem.size
 
             if (type == FreeformElementType.BOARD) {
-                // Board: rendered as a sized box
-                val bw = maxW * scale
-                val bh = maxH * 0.65f * scale
+                // Board uses same base size as editor
+                val baseSize = elementBaseSize(type)
+                val bw = baseSize.first * scale
+                val bh = baseSize.second * scale
                 Box(
                     Modifier
                         .offset(x = maxW * elem.x - bw / 2, y = maxH * elem.y - bh / 2)
@@ -107,7 +108,7 @@ fun FreeformGameLayout(
 
 /** Base width×height in dp for each element type at scale=1.0 */
 private fun elementBaseSize(type: FreeformElementType): Pair<Dp, Dp> = when (type) {
-    FreeformElementType.BOARD -> 300.dp to 500.dp // not used directly, board has special sizing
+    FreeformElementType.BOARD -> 200.dp to 360.dp
     FreeformElementType.DPAD -> 150.dp to 150.dp
     FreeformElementType.DPAD_ROTATE -> 150.dp to 150.dp
     FreeformElementType.BTN_UP, FreeformElementType.BTN_DOWN,
@@ -185,8 +186,9 @@ private fun RenderEditorPreview(type: FreeformElementType, scale: Float) {
     Box(Modifier.pointerInput(Unit) { /* absorb touches */ }) {
         when (type) {
             FreeformElementType.BOARD -> {
-                // Show empty grid preview
-                Box(Modifier.size((120 * scale).dp, (180 * scale).dp).background(theme.backgroundColor, RoundedCornerShape(4.dp)).border(1.dp, theme.pixelOff.copy(0.5f), RoundedCornerShape(4.dp))) {
+                // Show empty grid preview — same size as in gameplay
+                val bs = elementBaseSize(type)
+                Box(Modifier.size(bs.first * scale, bs.second * scale).background(theme.backgroundColor, RoundedCornerShape(4.dp)).border(1.dp, theme.pixelOff.copy(0.5f), RoundedCornerShape(4.dp))) {
                     EmptyBoardPreview(Modifier.fillMaxSize(), theme.pixelOff.copy(0.3f))
                 }
             }
@@ -233,10 +235,11 @@ fun FreeformEditorScreen(
                 val scale = elem.size
 
                 // Calculate element size for dragging bounds
+                val baseSize = elementBaseSize(type)
                 val elemSizeDp = when (type) {
-                    FreeformElementType.BOARD -> (120 * scale).dp
+                    FreeformElementType.BOARD -> minOf(baseSize.first * scale, baseSize.second * scale)
                     FreeformElementType.DPAD, FreeformElementType.DPAD_ROTATE -> (150 * scale).dp
-                    else -> minOf(elementBaseSize(type).first, elementBaseSize(type).second) * scale
+                    else -> minOf(baseSize.first, baseSize.second) * scale
                 }
                 val elemSizePx = with(density) { elemSizeDp.toPx() }
 
