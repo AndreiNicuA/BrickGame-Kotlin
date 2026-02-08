@@ -400,33 +400,44 @@ private fun BoxWithConstraintsScope.DraggableRealElement(
     onTap: () -> Unit,
     onDragEnd: (Float, Float) -> Unit
 ) {
-    var offsetX by remember(key, position.x) { mutableFloatStateOf(position.x * maxWidthPx - elemSizePx / 2) }
-    var offsetY by remember(key, position.y) { mutableFloatStateOf(position.y * maxHeightPx - elemSizePx / 2) }
+    // Use position + size as remember keys so offset recalculates on ANY property change
+    var offsetX by remember(key, position.x, position.y, elemSizePx) {
+        mutableFloatStateOf(position.x * maxWidthPx - elemSizePx / 2)
+    }
+    var offsetY by remember(key, position.x, position.y, elemSizePx) {
+        mutableFloatStateOf(position.y * maxHeightPx - elemSizePx / 2)
+    }
     var isDragging by remember { mutableStateOf(false) }
 
-    LaunchedEffect(position.x, position.y) {
+    // Sync position when changed externally (and not currently dragging)
+    LaunchedEffect(position.x, position.y, elemSizePx) {
         if (!isDragging) {
             offsetX = position.x * maxWidthPx - elemSizePx / 2
             offsetY = position.y * maxHeightPx - elemSizePx / 2
         }
     }
 
+    // Capture current elemSizePx for use inside drag lambda
+    val currentElemSizePx by rememberUpdatedState(elemSizePx)
+
     Box(
         modifier = Modifier
             .offset { IntOffset(offsetX.roundToInt(), offsetY.roundToInt()) }
-            .pointerInput(key) {
+            .pointerInput(key, elemSizePx) {
                 detectDragGestures(
                     onDragStart = { isDragging = true; onTap() },
                     onDragEnd = {
                         isDragging = false
-                        val cx = (offsetX + elemSizePx / 2) / maxWidthPx
-                        val cy = (offsetY + elemSizePx / 2) / maxHeightPx
+                        val sz = currentElemSizePx
+                        val cx = (offsetX + sz / 2) / maxWidthPx
+                        val cy = (offsetY + sz / 2) / maxHeightPx
                         onDragEnd(cx.coerceIn(0.03f, 0.97f), cy.coerceIn(0.03f, 0.97f))
                     },
                     onDrag = { change, dragAmount ->
                         change.consume()
-                        offsetX = (offsetX + dragAmount.x).coerceIn(0f, maxWidthPx - elemSizePx)
-                        offsetY = (offsetY + dragAmount.y).coerceIn(0f, maxHeightPx - elemSizePx)
+                        val sz = currentElemSizePx
+                        offsetX = (offsetX + dragAmount.x).coerceIn(0f, maxWidthPx - sz)
+                        offsetY = (offsetY + dragAmount.y).coerceIn(0f, maxHeightPx - sz)
                     }
                 )
             }

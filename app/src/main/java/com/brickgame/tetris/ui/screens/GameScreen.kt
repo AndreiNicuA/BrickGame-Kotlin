@@ -576,14 +576,17 @@ private fun FallingPiecesBackground(theme: com.brickgame.tetris.ui.theme.GameThe
             FP(col = rng.nextFloat(), speed = 0.4f + rng.nextFloat() * 1.2f,
                sz = 5f + rng.nextFloat() * 8f, shape = it % 7,
                alpha = 0.12f + rng.nextFloat() * 0.25f,
-               startY = -(rng.nextFloat() * 3000f),
+               // Large random startY spread ensures pieces are uniformly distributed
+               startY = rng.nextFloat() * 10000f,
                colorIdx = it % 7, trailLen = 4 + rng.nextInt(8),
                sparkle = rng.nextFloat() < 0.15f,
                sparklePhase = rng.nextFloat() * 6.28f)
         }
     }
     val t = rememberInfiniteTransition(label = "bg")
-    val anim by t.animateFloat(0f, 20000f, infiniteRepeatable(tween(30000, easing = LinearEasing)), label = "fall")
+    // Very large target value so the animation never visibly restarts
+    // Each piece wraps independently via modulo on screen height
+    val anim by t.animateFloat(0f, 1_000_000f, infiniteRepeatable(tween(1_500_000, easing = LinearEasing)), label = "fall")
 
     val pieceColors = remember { listOf(
         Color(0xFFFF4444), Color(0xFF44AAFF), Color(0xFFFFAA00), Color(0xFF44FF44),
@@ -603,8 +606,11 @@ private fun FallingPiecesBackground(theme: com.brickgame.tetris.ui.theme.GameThe
 
     Canvas(Modifier.fillMaxSize()) {
         val w = size.width; val h = size.height
+        val wrapH = h + 600f  // total travel distance before wrapping
         pieces.forEach { p ->
-            val baseY = ((p.startY + anim * p.speed) % (h + 600f)) - 300f
+            // Each piece wraps independently based on its own startY offset
+            val rawY = p.startY + anim * p.speed
+            val baseY = (rawY % wrapH) - 300f
             val x = p.col * w
             val s = p.sz
             val shape = shapes[p.shape % shapes.size]
