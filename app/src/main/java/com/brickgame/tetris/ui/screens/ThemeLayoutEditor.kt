@@ -187,7 +187,7 @@ fun LayoutEditorScreen(
                 if (vis.getOrDefault(LayoutElements.NEXT_PREVIEW, true)) {
                     val elem = LayoutElements.NEXT_PREVIEW; val ep = pos[elem] ?: ElementPosition(0.92f, 0.08f)
                     val offX = maxW * ep.x - 24.dp; val offY = maxH * ep.y - 12.dp
-                    val queueH = 34.dp + (layout.nextQueueSize - 1) * 28.dp
+                    val queueH = 34.dp + 28.dp * (layout.nextQueueSize - 1)
                     DragHandle(elem, ep, 48.dp, 16.dp + queueH, offX, offY, maxWPx, maxHPx, maxW, maxH,
                         selectedElement == elem, { selectedElement = if (selectedElement == it) null else it },
                         { id, newEp -> withUndo(layout.copy(positions = pos + (id to snap(newEp)))) }) {
