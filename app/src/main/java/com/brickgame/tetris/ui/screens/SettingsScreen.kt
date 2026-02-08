@@ -61,11 +61,12 @@ fun SettingsScreen(
     onUpdateEditingLayout: (CustomLayoutData) -> Unit, onSaveLayout: () -> Unit,
     onSelectCustomLayout: (CustomLayoutData) -> Unit, onClearCustomLayout: () -> Unit,
     onDeleteLayout: (String) -> Unit,
-    onEditFreeform: () -> Unit = {}
+    onEditFreeform: () -> Unit = {},
+    on3DMode: () -> Unit = {}
 ) {
     Box(Modifier.fillMaxSize().background(BG).systemBarsPadding()) {
         when (page) {
-            GameViewModel.SettingsPage.MAIN -> MainPage(onNavigate, onBack)
+            GameViewModel.SettingsPage.MAIN -> MainPage(onNavigate, onBack, on3DMode)
             GameViewModel.SettingsPage.PROFILE -> ProfilePage(playerName, highScore, scoreHistory, onSetPlayerName) { onNavigate(GameViewModel.SettingsPage.MAIN) }
             GameViewModel.SettingsPage.THEME -> ThemePage(currentTheme, customThemes, multiColorEnabled, onSetTheme, onSetMultiColorEnabled, onNewTheme, onEditTheme, onDeleteTheme) { onNavigate(GameViewModel.SettingsPage.MAIN) }
             GameViewModel.SettingsPage.THEME_EDITOR -> if (editingTheme != null) ThemeEditorScreen(editingTheme, onUpdateEditingTheme, onSaveTheme) { onNavigate(GameViewModel.SettingsPage.THEME) }
@@ -79,7 +80,7 @@ fun SettingsScreen(
 }
 
 // ===== MAIN =====
-@Composable private fun MainPage(onNav: (GameViewModel.SettingsPage) -> Unit, onBack: () -> Unit) {
+@Composable private fun MainPage(onNav: (GameViewModel.SettingsPage) -> Unit, onBack: () -> Unit, on3D: () -> Unit = {}) {
     Column(Modifier.fillMaxSize().padding(20.dp)) {
         Header("Settings", onBack); Spacer(Modifier.height(16.dp))
         MenuItem("Profile", "Name, scores") { onNav(GameViewModel.SettingsPage.PROFILE) }
@@ -87,6 +88,21 @@ fun SettingsScreen(
         MenuItem("Layout", "Screen arrangement") { onNav(GameViewModel.SettingsPage.LAYOUT) }
         MenuItem("Gameplay", "Difficulty, mode") { onNav(GameViewModel.SettingsPage.GAMEPLAY) }
         MenuItem("Experience", "Animation, sound") { onNav(GameViewModel.SettingsPage.EXPERIENCE) }
+        Spacer(Modifier.height(12.dp))
+        Row(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
+                .background(Color(0xFF22C55E).copy(0.1f))
+                .clickable { on3D() }
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text("3D MODE", color = Color(0xFF22C55E), fontSize = 16.sp, fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace, letterSpacing = 2.sp)
+                Text("Isometric 3D Tetris experience", color = DIM, fontSize = 12.sp)
+            }
+            Text("→", color = Color(0xFF22C55E), fontSize = 20.sp, fontWeight = FontWeight.Bold)
+        }
+        Spacer(Modifier.height(12.dp))
         MenuItem("About", "Version, credits") { onNav(GameViewModel.SettingsPage.ABOUT) }
     }
 }

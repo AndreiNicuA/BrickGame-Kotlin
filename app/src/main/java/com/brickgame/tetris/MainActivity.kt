@@ -8,7 +8,9 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.*
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.brickgame.tetris.game.GameStatus
 import com.brickgame.tetris.ui.layout.FreeformEditorScreen
+import com.brickgame.tetris.ui.screens.Game3DScreen
 import com.brickgame.tetris.ui.screens.GameScreen
 import com.brickgame.tetris.ui.screens.GameViewModel
 import com.brickgame.tetris.ui.screens.SettingsScreen
@@ -44,14 +46,17 @@ class MainActivity : ComponentActivity() {
             val activeCustomLayout by vm.activeCustomLayout.collectAsState()
             val profile by vm.playerProfile.collectAsState()
             val freeformEditMode by vm.freeformEditMode.collectAsState()
+            val show3D by vm.show3D.collectAsState()
+            val game3DState by vm.game3DState.collectAsState()
 
             val config = LocalConfiguration.current
             val isLandscape = config.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
             val activeLayout = if (isLandscape) landscapeLayout else portraitLayout
 
             BrickGameTheme(gameTheme = theme) {
-                BackHandler(enabled = freeformEditMode) { vm.exitFreeformEditMode() }
-                BackHandler(enabled = ui.showSettings && !freeformEditMode) {
+                BackHandler(enabled = show3D) { vm.exit3D() }
+                BackHandler(enabled = freeformEditMode && !show3D) { vm.exitFreeformEditMode() }
+                BackHandler(enabled = ui.showSettings && !freeformEditMode && !show3D) {
                     when (ui.settingsPage) {
                         GameViewModel.SettingsPage.MAIN -> vm.closeSettings()
                         GameViewModel.SettingsPage.THEME_EDITOR -> vm.navigateSettings(GameViewModel.SettingsPage.THEME)
@@ -61,6 +66,21 @@ class MainActivity : ComponentActivity() {
                 }
 
                 when {
+                    show3D -> {
+                        Game3DScreen(
+                            state = game3DState,
+                            onMoveX = vm::move3DX,
+                            onMoveZ = vm::move3DZ,
+                            onRotateXZ = vm::rotate3DXZ,
+                            onRotateXY = vm::rotate3DXY,
+                            onHardDrop = vm::hardDrop3D,
+                            onHold = vm::hold3D,
+                            onPause = { if (game3DState.status == GameStatus.PLAYING) vm.pause3D() else vm.resume3D() },
+                            onStart = vm::start3DGame,
+                            onOpenSettings = { vm.exit3D(); vm.openSettings() }
+                        )
+                    }
+
                     freeformEditMode -> {
                         FreeformEditorScreen(
                             elements = profile.freeformElements,
@@ -106,7 +126,8 @@ class MainActivity : ComponentActivity() {
                             onUpdateEditingLayout = vm::updateEditingLayout, onSaveLayout = vm::saveEditingLayout,
                             onSelectCustomLayout = vm::selectCustomLayout, onClearCustomLayout = vm::clearCustomLayout,
                             onDeleteLayout = vm::deleteCustomLayout,
-                            onEditFreeform = { vm.closeSettings(); vm.enterFreeformEditMode() }
+                            onEditFreeform = { vm.closeSettings(); vm.enterFreeformEditMode() },
+                            on3DMode = { vm.closeSettings(); vm.enter3D() }
                         )
                     }
 
