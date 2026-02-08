@@ -22,6 +22,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private val playerRepo = PlayerRepository(application)
     private val customThemeRepo = CustomThemeRepository(application)
     private val customLayoutRepo = CustomLayoutRepository(application)
+    private val profileRepo = PlayerProfileRepository(application)
     val soundManager = SoundManager(application)
     val vibrationManager = VibrationManager(application)
 
@@ -75,12 +76,27 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private val _activeCustomLayout = MutableStateFlow<CustomLayoutData?>(null)
     val activeCustomLayout: StateFlow<CustomLayoutData?> = _activeCustomLayout.asStateFlow()
 
+    // Player profile & freeform layout
+    private val _playerProfile = MutableStateFlow(PlayerProfile())
+    val playerProfile: StateFlow<PlayerProfile> = _playerProfile.asStateFlow()
+    private val _freeformEditMode = MutableStateFlow(false)
+    val freeformEditMode: StateFlow<Boolean> = _freeformEditMode.asStateFlow()
+
     private var gravityJob: Job? = null
     private var lockDelayJob: Job? = null
     private var dasJob: Job? = null
     @Volatile private var handlingLineClear = false
 
-    init { loadSettings() }
+    init { loadSettings(); loadProfile() }
+
+    private fun loadProfile() {
+        viewModelScope.launch {
+            // Migrate legacy settings into profile on first run
+            profileRepo.migrateIfNeeded(settingsRepo, playerRepo)
+            // Observe profile changes
+            profileRepo.profile.collect { _playerProfile.value = it }
+        }
+    }
 
     private fun loadSettings() {
         viewModelScope.launch { settingsRepo.themeName.collect { _currentTheme.value = GameThemes.getThemeByName(it) } }
@@ -218,6 +234,39 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     fun deleteCustomLayout(id: String) {
         viewModelScope.launch { customLayoutRepo.deleteLayout(id) }
         if (_activeCustomLayout.value?.id == id) _activeCustomLayout.value = null
+    }
+
+    // ===== Freeform Layout =====
+    fun enterFreeformEditMode() { _freeformEditMode.value = true }
+    fun exitFreeformEditMode() { _freeformEditMode.value = false }
+    fun updateFreeformControlPosition(key: String, pos: FreeformPosition) {
+        // Immediate visual update
+        _playerProfile.value = _playerProfile.value.copy(
+            freeformPositions = _playerProfile.value.freeformPositions + (key to pos)
+        )
+        // Persist
+        viewModelScope.launch { profileRepo.updateFreeformPosition(key, pos) }
+    }
+    fun updateFreeformInfoPosition(key: String, pos: FreeformPosition) {
+        _playerProfile.value = _playerProfile.value.copy(
+            freeformInfoPositions = _playerProfile.value.freeformInfoPositions + (key to pos)
+        )
+        viewModelScope.launch { profileRepo.updateFreeformInfoPosition(key, pos) }
+    }
+    fun resetFreeformPositions() {
+        _playerProfile.value = _playerProfile.value.copy(
+            freeformPositions = PlayerProfile.defaultFreeformPositions(),
+            freeformInfoPositions = PlayerProfile.defaultFreeformInfoPositions()
+        )
+        viewModelScope.launch { profileRepo.resetFreeformPositions() }
+    }
+
+    // ===== Profile save (syncs both profile + legacy) =====
+    fun saveProfile(profile: PlayerProfile) {
+        viewModelScope.launch {
+            profileRepo.saveProfile(profile)
+            profileRepo.syncToLegacy(profile, settingsRepo, playerRepo)
+        }
     }
 
     override fun onCleared() { super.onCleared(); stopGameLoop(); soundManager.release() }

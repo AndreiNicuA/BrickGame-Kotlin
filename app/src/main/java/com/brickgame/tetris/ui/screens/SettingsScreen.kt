@@ -60,7 +60,8 @@ fun SettingsScreen(
     onNewLayout: () -> Unit, onEditLayout: (CustomLayoutData) -> Unit,
     onUpdateEditingLayout: (CustomLayoutData) -> Unit, onSaveLayout: () -> Unit,
     onSelectCustomLayout: (CustomLayoutData) -> Unit, onClearCustomLayout: () -> Unit,
-    onDeleteLayout: (String) -> Unit
+    onDeleteLayout: (String) -> Unit,
+    onEditFreeform: () -> Unit = {}
 ) {
     Box(Modifier.fillMaxSize().background(BG).systemBarsPadding()) {
         when (page) {
@@ -68,7 +69,7 @@ fun SettingsScreen(
             GameViewModel.SettingsPage.PROFILE -> ProfilePage(playerName, highScore, scoreHistory, onSetPlayerName) { onNavigate(GameViewModel.SettingsPage.MAIN) }
             GameViewModel.SettingsPage.THEME -> ThemePage(currentTheme, customThemes, multiColorEnabled, onSetTheme, onSetMultiColorEnabled, onNewTheme, onEditTheme, onDeleteTheme) { onNavigate(GameViewModel.SettingsPage.MAIN) }
             GameViewModel.SettingsPage.THEME_EDITOR -> if (editingTheme != null) ThemeEditorScreen(editingTheme, onUpdateEditingTheme, onSaveTheme) { onNavigate(GameViewModel.SettingsPage.THEME) }
-            GameViewModel.SettingsPage.LAYOUT -> LayoutPage(portraitLayout, landscapeLayout, dpadStyle, customLayouts, activeCustomLayout, onSetPortraitLayout, onSetLandscapeLayout, onSetDPadStyle, onNewLayout, onEditLayout, onSelectCustomLayout, onClearCustomLayout, onDeleteLayout) { onNavigate(GameViewModel.SettingsPage.MAIN) }
+            GameViewModel.SettingsPage.LAYOUT -> LayoutPage(portraitLayout, landscapeLayout, dpadStyle, customLayouts, activeCustomLayout, onSetPortraitLayout, onSetLandscapeLayout, onSetDPadStyle, onNewLayout, onEditLayout, onSelectCustomLayout, onClearCustomLayout, onDeleteLayout, onEditFreeform = { onEditFreeform() }) { onNavigate(GameViewModel.SettingsPage.MAIN) }
             GameViewModel.SettingsPage.LAYOUT_EDITOR -> if (editingLayout != null) LayoutEditorScreen(editingLayout, currentTheme, portraitLayout, dpadStyle, onUpdateEditingLayout, onSaveLayout) { onNavigate(GameViewModel.SettingsPage.LAYOUT) }
             GameViewModel.SettingsPage.GAMEPLAY -> GameplayPage(difficulty, gameMode, ghostEnabled, onSetDifficulty, onSetGameMode, onSetGhostEnabled) { onNavigate(GameViewModel.SettingsPage.MAIN) }
             GameViewModel.SettingsPage.EXPERIENCE -> ExperiencePage(animationStyle, animationDuration, soundEnabled, vibrationEnabled, onSetAnimationStyle, onSetAnimationDuration, onSetSoundEnabled, onSetVibrationEnabled) { onNavigate(GameViewModel.SettingsPage.MAIN) }
@@ -191,11 +192,25 @@ fun SettingsScreen(
 // ===== LAYOUT =====
 @Composable private fun LayoutPage(p: LayoutPreset, l: LayoutPreset, d: DPadStyle, custom: List<CustomLayoutData>, active: CustomLayoutData?,
                                     onP: (LayoutPreset) -> Unit, onL: (LayoutPreset) -> Unit, onD: (DPadStyle) -> Unit,
-                                    onNew: () -> Unit, onEdit: (CustomLayoutData) -> Unit, onSelect: (CustomLayoutData) -> Unit, onClear: () -> Unit, onDelete: (String) -> Unit, onBack: () -> Unit) {
+                                    onNew: () -> Unit, onEdit: (CustomLayoutData) -> Unit, onSelect: (CustomLayoutData) -> Unit, onClear: () -> Unit, onDelete: (String) -> Unit,
+                                    onEditFreeform: () -> Unit = {}, onBack: () -> Unit) {
     LazyColumn(Modifier.fillMaxSize().padding(20.dp)) {
         item { Header("Layout", onBack) }
         item { Lbl("Portrait") }
         items(LayoutPreset.portraitPresets().size) { i -> val x = LayoutPreset.portraitPresets()[i]; Sel(x.displayName, x == p && active == null) { onClear(); onP(x) } }
+        // Freeform hint + edit button
+        if (p == LayoutPreset.PORTRAIT_FREEFORM && active == null) {
+            item {
+                Column(Modifier.fillMaxWidth().padding(vertical = 4.dp).clip(RoundedCornerShape(8.dp)).background(ACC.copy(0.08f)).padding(12.dp)) {
+                    Text("Board fills the screen. Drag controls and info to any position.", color = DIM, fontSize = 12.sp)
+                    Spacer(Modifier.height(8.dp))
+                    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(ACC.copy(0.15f)).clickable { onEditFreeform() }.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
+                        Text("✎ Edit Element Positions", color = ACC, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
         if (custom.isNotEmpty()) {
             item { Lbl("Custom Layouts") }
             items(custom.size) { i ->

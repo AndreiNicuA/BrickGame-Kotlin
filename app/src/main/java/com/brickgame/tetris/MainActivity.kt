@@ -41,6 +41,8 @@ class MainActivity : ComponentActivity() {
             val customLayouts by vm.customLayouts.collectAsState()
             val editingLayout by vm.editingLayout.collectAsState()
             val activeCustomLayout by vm.activeCustomLayout.collectAsState()
+            val profile by vm.playerProfile.collectAsState()
+            val freeformEditMode by vm.freeformEditMode.collectAsState()
 
             val config = LocalConfiguration.current
             val isLandscape = config.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
@@ -89,7 +91,8 @@ class MainActivity : ComponentActivity() {
                         onNewLayout = vm::startNewLayout, onEditLayout = vm::editLayout,
                         onUpdateEditingLayout = vm::updateEditingLayout, onSaveLayout = vm::saveEditingLayout,
                         onSelectCustomLayout = vm::selectCustomLayout, onClearCustomLayout = vm::clearCustomLayout,
-                        onDeleteLayout = vm::deleteCustomLayout
+                        onDeleteLayout = vm::deleteCustomLayout,
+                        onEditFreeform = { vm.closeSettings(); vm.enterFreeformEditMode() }
                     )
                 } else {
                     GameScreen(
@@ -97,6 +100,13 @@ class MainActivity : ComponentActivity() {
                         ghostEnabled = ghost, animationStyle = anim, animationDuration = animDur,
                         multiColor = multiColor,
                         customLayout = activeCustomLayout, scoreHistory = history,
+                        freeformControlPositions = profile.freeformPositions,
+                        freeformInfoPositions = profile.freeformInfoPositions,
+                        freeformEditMode = freeformEditMode,
+                        onFreeformControlMoved = vm::updateFreeformControlPosition,
+                        onFreeformInfoMoved = vm::updateFreeformInfoPosition,
+                        onFreeformReset = vm::resetFreeformPositions,
+                        onFreeformEditDone = vm::exitFreeformEditMode,
                         onStartGame = vm::startGame, onPause = vm::pauseGame, onResume = vm::resumeGame,
                         onRotate = vm::rotate, onRotateCCW = vm::rotateCounterClockwise,
                         onHardDrop = vm::hardDrop, onHold = vm::holdPiece,
