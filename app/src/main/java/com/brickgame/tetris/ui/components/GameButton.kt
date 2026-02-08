@@ -199,7 +199,7 @@ fun ActionButton(
 ) {
     val theme = LocalGameTheme.current
     var isPressed by remember { mutableStateOf(false) }
-    val bg = backgroundColor ?: theme.buttonSecondary
+    val bg = backgroundColor ?: theme.buttonPrimary
     val scale by animateFloatAsState(if (isPressed) 0.93f else 1f, spring(stiffness = Spring.StiffnessHigh), label = "s")
     val rounding = height / 2
 

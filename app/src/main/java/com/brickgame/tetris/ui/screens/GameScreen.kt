@@ -198,7 +198,7 @@ fun GameScreen(
                 ActionButton("HOLD", onHold, width = 58.dp, height = 28.dp)
                 ActionButton(if (gs.status == GameStatus.MENU) "START" else "PAUSE",
                     { if (gs.status == GameStatus.MENU) onStart() else onPause() }, width = 58.dp, height = 28.dp)
-                ActionButton("···", onSet, width = 42.dp, height = 22.dp)
+                ActionButton("···", onSet, width = 42.dp, height = 22.dp, backgroundColor = theme.buttonSecondary)
             }
             // Central D-Pad — always rotate-in-center style, left/right spread out
             DPad(60.dp, rotateInCenter = true, horizontalSpread = 16.dp,
@@ -363,7 +363,7 @@ fun GameScreen(
 
         // Menu button (always visible)
         val mp = positions[LayoutElements.MENU_BTN] ?: ElementPosition(0.5f, 0.88f)
-        Box(Modifier.offset(x = mw * mp.x - 23.dp, y = mh * mp.y - 12.dp)) { ActionButton("···", onSet, width = 46.dp, height = 24.dp) }
+        Box(Modifier.offset(x = mw * mp.x - 23.dp, y = mh * mp.y - 12.dp)) { ActionButton("···", onSet, width = 46.dp, height = 24.dp, backgroundColor = theme.buttonSecondary) }
     }
 }
 
@@ -390,7 +390,7 @@ fun GameScreen(
             Tag("NEXT")
             gs.nextPieces.take(3).forEachIndexed { i, p -> NextPiecePreview(p.shape, Modifier.size(when(i){0->40.dp;1->32.dp;else->26.dp}), when(i){0->1f;1->0.6f;else->0.35f}) }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) { ActionButton("PAUSE", onPause, width = 64.dp, height = 28.dp); ActionButton("...", onSet, width = 36.dp, height = 28.dp) }
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) { ActionButton("PAUSE", onPause, width = 64.dp, height = 28.dp); ActionButton("...", onSet, width = 36.dp, height = 28.dp, backgroundColor = theme.buttonSecondary) }
     }
 }
 
@@ -427,7 +427,7 @@ fun GameScreen(
                 { if (status == GameStatus.MENU) onStart() else onPause() },
                 width = 72.dp, height = 30.dp
             )
-            ActionButton("...", onSet, width = 42.dp, height = 22.dp)
+            ActionButton("...", onSet, width = 42.dp, height = 22.dp, backgroundColor = theme.buttonSecondary)
         }
         // Rotate
         if (dp == DPadStyle.STANDARD) RotateButton(onRotate, 60.dp) else Spacer(Modifier.size(60.dp))
@@ -519,7 +519,7 @@ fun GameScreen(
         }
         // Menu (always visible — sandwich icon style)
         val mp = pos[LayoutElements.MENU_BTN] ?: ElementPosition(0.5f, 0.94f)
-        Box(Modifier.offset(x = maxW * mp.x - 23.dp, y = maxH * mp.y - 12.dp)) { ActionButton("≡", onSet, width = 46.dp, height = 24.dp) }
+        Box(Modifier.offset(x = maxW * mp.x - 23.dp, y = maxH * mp.y - 12.dp)) { ActionButton("≡", onSet, width = 46.dp, height = 24.dp, backgroundColor = theme.buttonSecondary) }
     }
 }
 
@@ -558,7 +558,7 @@ fun GameScreen(
             }
             ActionButton("PLAY", onStart, width = 180.dp, height = 52.dp, backgroundColor = theme.accentColor)
             Spacer(Modifier.height(12.dp))
-            ActionButton("SETTINGS", onSet, width = 180.dp, height = 44.dp)
+            ActionButton("SETTINGS", onSet, width = 180.dp, height = 44.dp, backgroundColor = theme.buttonSecondary)
         }
     }
 }
@@ -661,7 +661,7 @@ private fun FallingPiecesBackground(theme: com.brickgame.tetris.ui.theme.GameThe
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text("PAUSED", fontSize = 28.sp, fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace, color = Color.White, letterSpacing = 4.sp)
             Spacer(Modifier.height(28.dp)); ActionButton("RESUME", onResume, width = 160.dp, height = 48.dp)
-            Spacer(Modifier.height(12.dp)); ActionButton("SETTINGS", onSet, width = 160.dp, height = 42.dp)
+            Spacer(Modifier.height(12.dp)); ActionButton("SETTINGS", onSet, width = 160.dp, height = 42.dp, backgroundColor = theme.buttonSecondary)
         }
     }
 }

@@ -2,115 +2,85 @@ package com.brickgame.tetris.data
 
 import kotlinx.serialization.Serializable
 
-/**
- * Unified player profile — all player settings in one serializable object.
- * Stored as a single JSON blob in DataStore.
- */
 @Serializable
 data class PlayerProfile(
-    // Identity
     val name: String = "Player",
     val avatarId: String = "default",
     val createdAt: Long = System.currentTimeMillis(),
-
-    // Game preferences
     val difficulty: String = "NORMAL",
     val ghostPieceEnabled: Boolean = true,
     val multiColorPieces: Boolean = false,
-
-    // Theme
     val themeName: String = "Classic Green",
-
-    // Layout
     val portraitLayout: String = "PORTRAIT_CLASSIC",
     val landscapeLayout: String = "LANDSCAPE_DEFAULT",
     val dpadStyle: String = "STANDARD",
     val activeCustomLayoutId: String? = null,
-
-    // Freeform layout — unified element map
     val freeformElements: Map<String, FreeformElement> = defaultFreeformElements(),
-
-    // Sound
     val soundEnabled: Boolean = true,
     val soundVolume: Float = 0.7f,
     val soundStyle: String = "RETRO_BEEP",
-
-    // Vibration
     val vibrationEnabled: Boolean = true,
     val vibrationIntensity: Float = 0.7f,
     val vibrationStyle: String = "CLASSIC",
-
-    // Animation
     val animationStyle: String = "MODERN",
     val animationDuration: Float = 0.5f,
-
-    // Stats
     val highScore: Int = 0,
     val totalGamesPlayed: Int = 0,
     val totalLinesCleared: Int = 0,
     val totalPlayTimeSeconds: Long = 0,
-
-    // Legacy compat — kept for migration, ignored after first load
+    // Legacy compat
     val freeformPositions: Map<String, FreeformPosition> = emptyMap(),
     val freeformInfoPositions: Map<String, FreeformPosition> = emptyMap()
 ) {
     companion object {
         fun defaultFreeformElements(): Map<String, FreeformElement> = mapOf(
+            // Board
+            "BOARD" to FreeformElement("BOARD", 0.5f, 0.38f, size = 0.85f),
             // Controls
-            FreeformElementType.DPAD.key to FreeformElement(FreeformElementType.DPAD.key, 0.15f, 0.82f),
-            FreeformElementType.ROTATE.key to FreeformElement(FreeformElementType.ROTATE.key, 0.85f, 0.82f),
-            FreeformElementType.HOLD_BTN.key to FreeformElement(FreeformElementType.HOLD_BTN.key, 0.5f, 0.72f),
-            FreeformElementType.PAUSE_BTN.key to FreeformElement(FreeformElementType.PAUSE_BTN.key, 0.5f, 0.78f),
-            FreeformElementType.MENU_BTN.key to FreeformElement(FreeformElementType.MENU_BTN.key, 0.5f, 0.95f, size = 0.6f),
+            "DPAD" to FreeformElement("DPAD", 0.15f, 0.82f),
+            "ROTATE" to FreeformElement("ROTATE", 0.85f, 0.82f),
+            "HOLD_BTN" to FreeformElement("HOLD_BTN", 0.5f, 0.72f),
+            "PAUSE_BTN" to FreeformElement("PAUSE_BTN", 0.5f, 0.78f),
+            "MENU_BTN" to FreeformElement("MENU_BTN", 0.5f, 0.95f, size = 0.6f),
             // Info
-            FreeformElementType.SCORE.key to FreeformElement(FreeformElementType.SCORE.key, 0.5f, 0.02f),
-            FreeformElementType.LEVEL.key to FreeformElement(FreeformElementType.LEVEL.key, 0.15f, 0.02f),
-            FreeformElementType.LINES.key to FreeformElement(FreeformElementType.LINES.key, 0.85f, 0.02f),
-            FreeformElementType.HOLD_PREVIEW.key to FreeformElement(FreeformElementType.HOLD_PREVIEW.key, 0.08f, 0.07f),
-            FreeformElementType.NEXT_PREVIEW.key to FreeformElement(FreeformElementType.NEXT_PREVIEW.key, 0.92f, 0.07f)
+            "SCORE" to FreeformElement("SCORE", 0.5f, 0.02f),
+            "LEVEL" to FreeformElement("LEVEL", 0.15f, 0.02f),
+            "LINES" to FreeformElement("LINES", 0.85f, 0.02f),
+            "HOLD_PREVIEW" to FreeformElement("HOLD_PREVIEW", 0.08f, 0.07f),
+            "NEXT_PREVIEW" to FreeformElement("NEXT_PREVIEW", 0.92f, 0.07f)
         )
 
-        /** All available element types the user can add to their layout */
         fun availableElements(): List<FreeformElementType> = FreeformElementType.entries.toList()
     }
 }
 
-/**
- * Single freeform element — position, size, alpha, and visibility.
- */
 @Serializable
 data class FreeformElement(
     val key: String,
-    val x: Float,                     // normalized 0-1
-    val y: Float,                     // normalized 0-1
-    val size: Float = 1.0f,           // scale multiplier: 0.5 = half, 2.0 = double
-    val alpha: Float = 1.0f,          // transparency: 0.0 = invisible, 1.0 = opaque
-    val visible: Boolean = true       // whether to render at all
+    val x: Float,
+    val y: Float,
+    val size: Float = 1.0f,
+    val alpha: Float = 1.0f,
+    val visible: Boolean = true
 )
 
-/**
- * All possible freeform elements. Each has a key, display name, and category.
- */
 enum class FreeformElementType(
     val key: String,
     val displayName: String,
     val category: ElementCategory,
     val description: String
 ) {
-    // Compound controls
+    BOARD("BOARD", "Game Board", ElementCategory.BOARD, "The LCD game screen"),
     DPAD("DPAD", "D-Pad Cross", ElementCategory.CONTROL, "4-directional cross"),
-    DPAD_ROTATE("DPAD_ROTATE", "D-Pad + Rotate", ElementCategory.CONTROL, "Cross with rotate in center"),
-    // Individual directional buttons
+    DPAD_ROTATE("DPAD_ROTATE", "D-Pad + Rotate", ElementCategory.CONTROL, "Cross with rotate center"),
     BTN_UP("BTN_UP", "Up Button", ElementCategory.CONTROL, "Hard drop"),
     BTN_DOWN("BTN_DOWN", "Down Button", ElementCategory.CONTROL, "Soft drop"),
     BTN_LEFT("BTN_LEFT", "Left Button", ElementCategory.CONTROL, "Move left"),
     BTN_RIGHT("BTN_RIGHT", "Right Button", ElementCategory.CONTROL, "Move right"),
-    // Action buttons
     ROTATE("ROTATE", "Rotate", ElementCategory.CONTROL, "Rotate piece"),
     HOLD_BTN("HOLD_BTN", "Hold", ElementCategory.CONTROL, "Hold piece"),
-    PAUSE_BTN("PAUSE_BTN", "Pause/Start", ElementCategory.CONTROL, "Pause or start game"),
+    PAUSE_BTN("PAUSE_BTN", "Pause/Start", ElementCategory.CONTROL, "Pause or start"),
     MENU_BTN("MENU_BTN", "Menu ···", ElementCategory.CONTROL, "Open settings"),
-    // Info elements
     SCORE("SCORE", "Score", ElementCategory.INFO, "Score display"),
     LEVEL("LEVEL", "Level", ElementCategory.INFO, "Level indicator"),
     LINES("LINES", "Lines", ElementCategory.INFO, "Lines cleared"),
@@ -122,13 +92,7 @@ enum class FreeformElementType(
     }
 }
 
-enum class ElementCategory { CONTROL, INFO }
+enum class ElementCategory { CONTROL, INFO, BOARD }
 
-/**
- * Legacy compat — still used by some code paths
- */
 @Serializable
-data class FreeformPosition(
-    val x: Float,
-    val y: Float
-)
+data class FreeformPosition(val x: Float, val y: Float)
