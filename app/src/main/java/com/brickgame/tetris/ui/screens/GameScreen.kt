@@ -188,20 +188,20 @@ fun GameScreen(
         GameBoard(gs.board, Modifier.weight(1f).fillMaxWidth().padding(horizontal = 2.dp), gs.currentPiece, gs.ghostY, ghost, gs.clearedLineRows, anim, ad, multiColor = LocalMultiColor.current)
         Spacer(Modifier.height(2.dp))
         // Centered D-Pad with rotate in center + action buttons on sides
-        Row(Modifier.fillMaxWidth().padding(bottom = 4.dp), Arrangement.Center, Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), Arrangement.SpaceBetween, Alignment.CenterVertically) {
             // Hold + Pause on left
-            Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 ActionButton("HOLD", onHold, width = 58.dp, height = 28.dp)
                 ActionButton(if (gs.status == GameStatus.MENU) "START" else "PAUSE",
                     { if (gs.status == GameStatus.MENU) onStart() else onPause() }, width = 58.dp, height = 28.dp)
                 ActionButton("···", onSet, width = 42.dp, height = 22.dp)
             }
-            // Central D-Pad — always rotate-in-center style
-            DPad(60.dp, rotateInCenter = true,
+            // Central D-Pad — always rotate-in-center style, bigger for thumb reach
+            DPad(68.dp, rotateInCenter = true,
                 onUpPress = onHD, onDownPress = onDP, onDownRelease = onDR,
                 onLeftPress = onLP, onLeftRelease = onLR, onRightPress = onRP, onRightRelease = onRR, onRotate = onRotate)
-            // Spacer for balance
-            Spacer(Modifier.weight(1f))
+            // Right spacer to balance — same width as left column
+            Spacer(Modifier.width(58.dp))
         }
     }
 }

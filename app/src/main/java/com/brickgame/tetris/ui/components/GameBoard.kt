@@ -99,7 +99,12 @@ fun GameBoard(
                         } else {
                             drawRoundRect(pieceColor, offset, cs, CornerRadius(corner))
                             if (multiColor && cellValue in 1..7) {
-                                drawRoundRect(Color.White.copy(alpha = 0.15f), offset, Size(cs.width, cs.height * 0.35f), CornerRadius(corner))
+                                // Dark outline for definition
+                                drawRoundRect(Color.Black.copy(alpha = 0.35f), offset, cs, CornerRadius(corner), style = Stroke(gap * 1.2f))
+                                // Bottom shadow
+                                drawRoundRect(Color.Black.copy(alpha = 0.2f), Offset(offset.x, offset.y + cs.height * 0.65f), Size(cs.width, cs.height * 0.35f), CornerRadius(corner))
+                                // Top highlight
+                                drawRoundRect(Color.White.copy(alpha = 0.2f), offset, Size(cs.width, cs.height * 0.3f), CornerRadius(corner))
                             }
                         }
                     }
@@ -116,7 +121,11 @@ fun GameBoard(
                             val offset = Offset(bx * cellSize + gap, by * cellSize + gap)
                             val cs = Size(cellSize - gap * 2, cellSize - gap * 2)
                             drawRoundRect(pColor, offset, cs, CornerRadius(corner))
-                            if (multiColor) drawRoundRect(Color.White.copy(alpha = 0.15f), offset, Size(cs.width, cs.height * 0.35f), CornerRadius(corner))
+                            if (multiColor) {
+                                drawRoundRect(Color.Black.copy(alpha = 0.35f), offset, cs, CornerRadius(corner), style = Stroke(gap * 1.2f))
+                                drawRoundRect(Color.Black.copy(alpha = 0.2f), Offset(offset.x, offset.y + cs.height * 0.65f), Size(cs.width, cs.height * 0.35f), CornerRadius(corner))
+                                drawRoundRect(Color.White.copy(alpha = 0.2f), offset, Size(cs.width, cs.height * 0.3f), CornerRadius(corner))
+                            }
                         }
                     }
                 }
