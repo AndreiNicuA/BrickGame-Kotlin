@@ -4,9 +4,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.*
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -273,12 +271,10 @@ fun LayoutEditorScreen(
                 }
 
                 // ===== ELEMENT SETTINGS — bottom sheet popup =====
-                AnimatedVisibility(selectedElement != null,
-                    enter = slideInVertically { it } + fadeIn(),
-                    exit = slideOutVertically { it } + fadeOut(),
-                    modifier = Modifier.align(Alignment.BottomCenter).zIndex(200f)) {
+                if (selectedElement != null) {
                     selectedElement?.let { elem ->
-                        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
+                        Column(Modifier.align(Alignment.BottomCenter).zIndex(200f).fillMaxWidth()
+                            .clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
                             .background(Color(0xF0181818)).border(1.dp, ACC.copy(0.3f), RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
                             .pointerInput(Unit) { detectTapGestures { /* consume tap so it doesn't close */ } }
                             .padding(16.dp)) {
