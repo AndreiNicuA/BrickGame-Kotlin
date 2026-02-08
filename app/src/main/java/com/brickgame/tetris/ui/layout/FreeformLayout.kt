@@ -9,10 +9,6 @@ import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.DragHandle
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -232,7 +228,7 @@ fun FreeformEditor(
                     Modifier.padding(16.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Icon(Icons.Default.DragHandle, null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
+                    Text("✥", fontSize = 24.sp, color = MaterialTheme.colorScheme.onPrimaryContainer)
                     Spacer(Modifier.height(6.dp))
                     Text(
                         "Drag elements to reposition",
@@ -308,7 +304,7 @@ fun FreeformEditor(
                     colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
                     border = ButtonDefaults.outlinedButtonBorder(enabled = true)
                 ) {
-                    Icon(Icons.Default.Refresh, null, modifier = Modifier.size(18.dp))
+                    Text("↺", fontSize = 16.sp)
                     Spacer(Modifier.width(6.dp))
                     Text("Reset")
                 }
@@ -318,7 +314,7 @@ fun FreeformEditor(
                     onClick = onExitEditMode,
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF22C55E))
                 ) {
-                    Icon(Icons.Default.Check, null)
+                    Text("✓", fontSize = 16.sp, color = Color.White)
                     Spacer(Modifier.width(6.dp))
                     Text("Done")
                 }
