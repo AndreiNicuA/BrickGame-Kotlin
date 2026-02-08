@@ -218,7 +218,7 @@ private fun clearingEffect(style: AnimationStyle, progress: Float, x: Int, y: In
         val colors = listOf(Color(0xFFFF0000), Color(0xFFFF7F00), Color(0xFFFFFF00), Color(0xFF00FF00), Color(0xFF00FFFF), Color(0xFF0000FF), Color(0xFF8B00FF), Color(0xFFFF00FF))
         val idx = ((x + progress * 16).toInt() % colors.size)
         val alpha = if (progress > 0.6f) 1f - ((progress - 0.6f) / 0.4f) else 1f
-        colors[idx].copy(alpha = alpha) to (1f + sin(progress * 12.56f) * 0.1f)
+        colors[idx].copy(alpha = alpha) to (1f + kotlin.math.sin(progress * 12.56f) * 0.1f)
     }
 }
 
