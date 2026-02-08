@@ -340,45 +340,35 @@ fun GameScreen(
 
 // Falling transparent tetris pieces — matrix-style
 @Composable
-private fun FallingPiecesBackground(theme: GameTheme) {
-    data class FallingPiece(val col: Float, val speed: Float, val size: Float, val shape: Int, val alpha: Float, var y: Float)
+private fun FallingPiecesBackground(theme: com.brickgame.tetris.ui.theme.GameTheme) {
+    data class FP(val col: Float, val speed: Float, val sz: Float, val shape: Int, val alpha: Float, val startY: Float)
     val pieces = remember {
-        (0..14).map {
-            FallingPiece(
-                col = (it * 0.07f) + (it % 3) * 0.01f,
-                speed = 0.2f + (it % 5) * 0.12f,
-                size = 8f + (it % 3) * 4f,
-                shape = it % 7,
-                alpha = 0.04f + (it % 4) * 0.02f,
-                y = -(it * 120f + (it % 3) * 80f)
-            )
-        }
+        (0..14).map { FP(col = it * 0.067f + (it % 3) * 0.01f, speed = 0.2f + (it % 5) * 0.12f, sz = 8f + (it % 3) * 4f, shape = it % 7, alpha = 0.04f + (it % 4) * 0.02f, startY = -(it * 120f + (it % 3) * 80f)) }
     }
     val t = rememberInfiniteTransition(label = "bg")
     val anim by t.animateFloat(0f, 10000f, infiniteRepeatable(tween(60000, easing = LinearEasing)), label = "fall")
+    val pixelColor = theme.pixelOn
 
     Canvas(Modifier.fillMaxSize()) {
         val w = size.width; val h = size.height
-        // Each piece has a tetromino pattern
         val shapes = listOf(
-            listOf(0 to 0, 1 to 0, 0 to 1, 1 to 1), // O
-            listOf(0 to 0, 1 to 0, 2 to 0, 3 to 0), // I
-            listOf(0 to 0, 1 to 0, 2 to 0, 2 to 1), // L
-            listOf(0 to 0, 1 to 0, 2 to 0, 0 to 1), // J
-            listOf(0 to 0, 1 to 0, 1 to 1, 2 to 1), // S
-            listOf(1 to 0, 2 to 0, 0 to 1, 1 to 1), // Z
-            listOf(0 to 0, 1 to 0, 2 to 0, 1 to 1), // T
+            listOf(0 to 0, 1 to 0, 0 to 1, 1 to 1),
+            listOf(0 to 0, 1 to 0, 2 to 0, 3 to 0),
+            listOf(0 to 0, 1 to 0, 2 to 0, 2 to 1),
+            listOf(0 to 0, 1 to 0, 2 to 0, 0 to 1),
+            listOf(0 to 0, 1 to 0, 1 to 1, 2 to 1),
+            listOf(1 to 0, 2 to 0, 0 to 1, 1 to 1),
+            listOf(0 to 0, 1 to 0, 2 to 0, 1 to 1),
         )
         pieces.forEach { p ->
-            val baseY = ((p.y + anim * p.speed) % (h + 400f)) - 200f
+            val baseY = ((p.startY + anim * p.speed) % (h + 400f)) - 200f
             val x = p.col * w
-            val sz = p.size
-            val shape = shapes[p.shape % shapes.size]
-            shape.forEach { (dx, dy) ->
+            val s = p.sz
+            shapes[p.shape % shapes.size].forEach { (dx, dy) ->
                 drawRoundRect(
-                    color = theme.pixelOn.copy(alpha = p.alpha),
-                    topLeft = androidx.compose.ui.geometry.Offset(x + dx * (sz + 2), baseY + dy * (sz + 2)),
-                    size = androidx.compose.ui.geometry.Size(sz, sz),
+                    color = pixelColor.copy(alpha = p.alpha),
+                    topLeft = androidx.compose.ui.geometry.Offset(x + dx * (s + 2), baseY + dy * (s + 2)),
+                    size = androidx.compose.ui.geometry.Size(s, s),
                     cornerRadius = androidx.compose.ui.geometry.CornerRadius(2f, 2f)
                 )
             }
