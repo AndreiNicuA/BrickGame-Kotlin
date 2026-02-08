@@ -360,7 +360,7 @@ private fun FallingPiecesBackground(theme: com.brickgame.tetris.ui.theme.GameThe
     }
     val t = rememberInfiniteTransition(label = "bg")
     val anim by t.animateFloat(0f, 10000f, infiniteRepeatable(tween(60000, easing = LinearEasing)), label = "fall")
-    val pixelColor = theme.pixelOn
+    val pixelColor = theme.accentColor
 
     Canvas(Modifier.fillMaxSize()) {
         val w = size.width; val h = size.height
