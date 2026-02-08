@@ -20,8 +20,6 @@ import com.brickgame.tetris.game.PieceState
 import com.brickgame.tetris.game.TetrisGame
 import com.brickgame.tetris.ui.styles.AnimationStyle
 import com.brickgame.tetris.ui.theme.LocalGameTheme
-import kotlin.math.cos
-import kotlin.math.sin
 
 // Standard Tetris piece colors
 val PIECE_COLORS = listOf(
@@ -148,19 +146,60 @@ private fun DrawScope.drawTetrisExplosion(
     val cs = Size(cellSize - gap * 2, cellSize - gap * 2)
     val cx = offset.x + cs.width / 2; val cy = offset.y + cs.height / 2
 
-    if (progress < 0.3f) {
-        val flash = if ((progress * 12).toInt() % 2 == 0) Color.White else baseColor
-        val g = 1f + progress * 0.5f
-        drawRoundRect(flash, Offset(cx - cs.width * g / 2, cy - cs.height * g / 2), Size(cs.width * g, cs.height * g), CornerRadius(corner * g))
+    if (progress < 0.15f) {
+        // Phase 1: Bright flash — cell turns white with glow
+        val flashP = progress / 0.15f
+        val glow = 1f + flashP * 0.6f
+        val gs = Size(cs.width * glow, cs.height * glow)
+        val go = Offset(cx - gs.width / 2, cy - gs.height / 2)
+        // White-hot center
+        drawRoundRect(Color.White.copy(alpha = 1f - flashP * 0.3f), go, gs, CornerRadius(corner * glow))
+        // Color glow ring
+        drawRoundRect(baseColor.copy(alpha = 0.6f), Offset(go.x - 2, go.y - 2), Size(gs.width + 4, gs.height + 4), CornerRadius(corner * glow + 2), style = Stroke(3f))
     } else {
-        val t = (progress - 0.3f) / 0.7f
-        val alpha = (1f - t).coerceIn(0f, 1f)
-        val angle = (x * 37 + y * 53).toFloat() * 0.1f
-        val dist = cellSize * 3 * t
-        val px = cx + cos(angle) * dist; val py = cy + sin(angle) * dist - cellSize * 2 * t * t
-        val pSize = cs.width * (1f - t * 0.7f)
-        drawRoundRect(baseColor.copy(alpha = alpha), Offset(px - pSize / 2, py - pSize / 2), Size(pSize, pSize), CornerRadius(pSize / 2))
-        if (t < 0.6f) drawCircle(Color.White.copy(alpha = alpha * 0.4f), pSize * 0.25f, Offset(px, py))
+        // Phase 2: Multiple particles explode outward with gravity
+        val t = (progress - 0.15f) / 0.85f
+        val gravity = cellSize * 8f * t * t // accelerating downward
+        val fadeStart = 0.4f
+
+        // 4 particles per cell — each with unique angle and speed
+        for (i in 0..3) {
+            val seed = (x * 37 + y * 53 + i * 97).toFloat()
+            val angle = seed * 0.7f + i * 1.57f // spread evenly
+            val speed = cellSize * (1.5f + (seed % 3f) * 0.8f)
+            val px = cx + kotlin.math.cos(angle) * speed * t
+            val py = cy + kotlin.math.sin(angle) * speed * t * 0.6f - cellSize * 1.5f * t + gravity
+            val alpha = if (t > fadeStart) ((1f - (t - fadeStart) / (1f - fadeStart))).coerceIn(0f, 1f) else 1f
+            val pSize = cs.width * (0.5f - i * 0.08f) * (1f - t * 0.6f)
+
+            if (pSize > 0 && alpha > 0) {
+                // Particle
+                drawRoundRect(
+                    baseColor.copy(alpha = alpha * 0.9f),
+                    Offset(px - pSize / 2, py - pSize / 2),
+                    Size(pSize, pSize),
+                    CornerRadius(pSize / 3)
+                )
+                // Hot white core
+                val coreSize = pSize * 0.4f
+                drawCircle(Color.White.copy(alpha = alpha * 0.5f), coreSize / 2, Offset(px, py))
+            }
+        }
+
+        // 2 extra small spark particles
+        for (i in 0..1) {
+            val seed = (x * 19 + y * 71 + i * 143).toFloat()
+            val angle = seed * 1.3f
+            val speed = cellSize * (2.5f + (seed % 2f))
+            val px = cx + kotlin.math.cos(angle) * speed * t
+            val py = cy + kotlin.math.sin(angle) * speed * t * 0.4f - cellSize * 2f * t + gravity * 1.3f
+            val alpha = if (t > 0.3f) ((1f - (t - 0.3f) / 0.7f)).coerceIn(0f, 1f) else 1f
+            val sparkSize = cs.width * 0.18f * (1f - t)
+
+            if (sparkSize > 0 && alpha > 0) {
+                drawCircle(Color.White.copy(alpha = alpha * 0.7f), sparkSize, Offset(px, py))
+            }
+        }
     }
 }
 

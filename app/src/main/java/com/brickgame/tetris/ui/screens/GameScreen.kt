@@ -196,8 +196,8 @@ fun GameScreen(
                     { if (gs.status == GameStatus.MENU) onStart() else onPause() }, width = 58.dp, height = 28.dp)
                 ActionButton("···", onSet, width = 42.dp, height = 22.dp)
             }
-            // Central D-Pad — always rotate-in-center style, bigger for thumb reach
-            DPad(68.dp, rotateInCenter = true,
+            // Central D-Pad — always rotate-in-center style, left/right spread out
+            DPad(60.dp, rotateInCenter = true, horizontalSpread = 16.dp,
                 onUpPress = onHD, onDownPress = onDP, onDownRelease = onDR,
                 onLeftPress = onLP, onLeftRelease = onLR, onRightPress = onRP, onRightRelease = onRR, onRotate = onRotate)
             // Right spacer to balance — same width as left column
