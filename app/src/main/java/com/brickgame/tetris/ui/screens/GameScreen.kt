@@ -78,7 +78,7 @@ fun GameScreen(
     } // end CompositionLocalProvider
 }
 
-// === CLASSIC: Device frame — Hold|Board|Next side by side ===
+// === CLASSIC: Device frame — Board + info on right side ===
 @Composable private fun ClassicLayout(
     gs: GameState, dp: DPadStyle, ghost: Boolean, anim: AnimationStyle, ad: Float,
     onRotate: () -> Unit, onHD: () -> Unit, onHold: () -> Unit,
@@ -89,18 +89,17 @@ fun GameScreen(
     Column(Modifier.fillMaxSize().padding(6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         // Device frame
         Row(Modifier.fillMaxWidth().weight(1f).clip(RoundedCornerShape(10.dp)).background(theme.deviceColor).padding(6.dp)) {
-            // Left: Hold + Score
-            Column(Modifier.width(58.dp).fillMaxHeight(), Arrangement.SpaceEvenly, Alignment.CenterHorizontally) {
+            // Board — takes all remaining space
+            GameBoard(gs.board, Modifier.weight(1f).fillMaxHeight().padding(end = 4.dp), gs.currentPiece, gs.ghostY, ghost, gs.clearedLineRows, anim, ad, multiColor = LocalMultiColor.current)
+            // Right: Hold + Score + Next — all stacked
+            Column(Modifier.width(62.dp).fillMaxHeight(), Arrangement.SpaceEvenly, Alignment.CenterHorizontally) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) { Tag("HOLD"); HoldPiecePreview(gs.holdPiece?.shape, gs.holdUsed, Modifier.size(48.dp)) }
                 ScoreBlock(gs.score, gs.level, gs.lines)
-            }
-            // Board
-            GameBoard(gs.board, Modifier.weight(1f).fillMaxHeight().padding(horizontal = 3.dp), gs.currentPiece, gs.ghostY, ghost, gs.clearedLineRows, anim, ad, multiColor = LocalMultiColor.current)
-            // Right: Next
-            Column(Modifier.width(58.dp).fillMaxHeight(), Arrangement.Top, Alignment.CenterHorizontally) {
-                Tag("NEXT")
-                gs.nextPieces.take(3).forEachIndexed { i, p ->
-                    NextPiecePreview(p.shape, Modifier.size(when(i){0->46.dp;1->36.dp;else->28.dp}).padding(1.dp), when(i){0->1f;1->0.55f;else->0.3f})
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Tag("NEXT")
+                    gs.nextPieces.take(3).forEachIndexed { i, p ->
+                        NextPiecePreview(p.shape, Modifier.size(when(i){0->46.dp;1->36.dp;else->28.dp}).padding(1.dp), when(i){0->1f;1->0.55f;else->0.3f})
+                    }
                 }
             }
         }
@@ -129,8 +128,8 @@ fun GameScreen(
             Column(horizontalAlignment = Alignment.CenterHorizontally) { Tag("NEXT"); NextPiecePreview(gs.nextPieces.firstOrNull()?.shape, Modifier.size(34.dp)) }
         }
         Spacer(Modifier.height(4.dp))
-        GameBoard(gs.board, Modifier.weight(1f).aspectRatio(0.5f), gs.currentPiece, gs.ghostY, ghost, gs.clearedLineRows, anim, ad, multiColor = LocalMultiColor.current)
-        Spacer(Modifier.height(6.dp))
+        GameBoard(gs.board, Modifier.weight(1f).fillMaxWidth().padding(horizontal = 16.dp), gs.currentPiece, gs.ghostY, ghost, gs.clearedLineRows, anim, ad, multiColor = LocalMultiColor.current)
+        Spacer(Modifier.height(4.dp))
         FullControls(dp, onHD, onHold, onLP, onLR, onRP, onRR, onDP, onDR, onRotate, onPause, onSet, onStart, gs.status)
     }
 }
@@ -410,23 +409,23 @@ fun GameScreen(
     onDP: () -> Unit, onDR: () -> Unit, onRotate: () -> Unit,
     onPause: () -> Unit, onSet: () -> Unit, onStart: () -> Unit, status: GameStatus
 ) {
-    Row(Modifier.fillMaxWidth().padding(bottom = 4.dp), Arrangement.SpaceBetween, Alignment.CenterVertically) {
-        // D-Pad
-        DPad(54.dp, rotateInCenter = dp == DPadStyle.ROTATE_CENTRE,
+    Row(Modifier.fillMaxWidth().padding(horizontal = 2.dp, vertical = 2.dp), Arrangement.SpaceBetween, Alignment.CenterVertically) {
+        // D-Pad — compact size
+        DPad(50.dp, rotateInCenter = dp == DPadStyle.ROTATE_CENTRE,
             onUpPress = onHD, onDownPress = onDP, onDownRelease = onDR,
             onLeftPress = onLP, onLeftRelease = onLR, onRightPress = onRP, onRightRelease = onRR, onRotate = onRotate)
         // Centre: HOLD + PAUSE/START + SETTINGS
-        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            ActionButton("HOLD", onHold, width = 78.dp, height = 34.dp)
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            ActionButton("HOLD", onHold, width = 72.dp, height = 30.dp)
             ActionButton(
                 if (status == GameStatus.MENU) "START" else "PAUSE",
                 { if (status == GameStatus.MENU) onStart() else onPause() },
-                width = 78.dp, height = 34.dp
+                width = 72.dp, height = 30.dp
             )
-            ActionButton("...", onSet, width = 46.dp, height = 24.dp)
+            ActionButton("...", onSet, width = 42.dp, height = 22.dp)
         }
         // Rotate
-        if (dp == DPadStyle.STANDARD) RotateButton(onRotate, 66.dp) else Spacer(Modifier.size(66.dp))
+        if (dp == DPadStyle.STANDARD) RotateButton(onRotate, 60.dp) else Spacer(Modifier.size(60.dp))
     }
 }
 
