@@ -131,21 +131,23 @@ class GamepadController {
     companion object {
         /** Get list of connected game controllers. */
         fun getConnectedControllers(): List<ControllerInfo> {
-            return InputDevice.getDeviceIds()
-                .mapNotNull { InputDevice.getDevice(it) }
-                .filter { device ->
-                    val sources = device.sources
-                    (sources and InputDevice.SOURCE_GAMEPAD) == InputDevice.SOURCE_GAMEPAD ||
-                    (sources and InputDevice.SOURCE_JOYSTICK) == InputDevice.SOURCE_JOYSTICK
-                }
-                .map { device ->
-                    ControllerInfo(
+            val result = mutableListOf<ControllerInfo>()
+            val deviceIds = InputDevice.getDeviceIds()
+            for (id in deviceIds) {
+                val device = InputDevice.getDevice(id) ?: continue
+                val sources = device.sources
+                val isGamepad = (sources and InputDevice.SOURCE_GAMEPAD) == InputDevice.SOURCE_GAMEPAD
+                val isJoystick = (sources and InputDevice.SOURCE_JOYSTICK) == InputDevice.SOURCE_JOYSTICK
+                if (isGamepad || isJoystick) {
+                    result.add(ControllerInfo(
                         name = device.name,
                         vendorId = device.vendorId,
                         productId = device.productId,
                         isConnected = true
-                    )
+                    ))
                 }
+            }
+            return result
         }
     }
 }
