@@ -183,22 +183,25 @@ private fun FreeCameraBoard(
             val ry = dx * sinAz + dy * cosAz; return dz * sinEl + ry * cosEl + camDist
         }
 
-        // Wireframe
-        val wireColor = themeColor.copy(0.18f); val wireDim = themeColor.copy(0.08f)
+        // Wireframe — always visible with contrasting edge color
+        val wireColor = Color.White.copy(0.22f); val wireDim = Color.White.copy(0.10f)
         fun edge(x1: Float,y1: Float,z1: Float,x2: Float,y2: Float,z2: Float,c: Color=wireColor,sw: Float=1.2f) {
             val a = project(x1,y1,z1); val b = project(x2,y2,z2); if (a!=null && b!=null) drawLine(c,a,b,sw)
         }
+        // Vertical edges (bright — top frame)
         edge(0f,0f,0f,0f,0f,bz); edge(bx,0f,0f,bx,0f,bz); edge(0f,by,0f,0f,by,bz); edge(bx,by,0f,bx,by,bz)
+        // Top edges (bright frame)
         edge(0f,0f,bz,bx,0f,bz); edge(0f,by,bz,bx,by,bz); edge(0f,0f,bz,0f,by,bz); edge(bx,0f,bz,bx,by,bz)
+        // Bottom edges (dimmer)
         edge(0f,0f,0f,bx,0f,0f,wireDim); edge(0f,by,0f,bx,by,0f,wireDim); edge(0f,0f,0f,0f,by,0f,wireDim); edge(bx,0f,0f,bx,by,0f,wireDim)
 
         // Floor grid
-        val gridColor = themeColor.copy(0.06f)
+        val gridColor = Color.White.copy(0.06f)
         for (ix in 0..bx.toInt()) { val a = project(ix.toFloat(),0f,0f); val b = project(ix.toFloat(),by,0f); if (a!=null&&b!=null) drawLine(gridColor,a,b,0.5f) }
         for (iy in 0..by.toInt()) { val a = project(0f,iy.toFloat(),0f); val b = project(bx,iy.toFloat(),0f); if (a!=null&&b!=null) drawLine(gridColor,a,b,0.5f) }
 
-        // Walls
-        val wallColor = themeColor.copy(0.02f)
+        // Walls — semi-transparent
+        val wallColor = Color.White.copy(0.02f)
         fun wallQ(x1:Float,y1:Float,z1:Float,x2:Float,y2:Float,z2:Float,x3:Float,y3:Float,z3:Float,x4:Float,y4:Float,z4:Float) {
             val p1=project(x1,y1,z1);val p2=project(x2,y2,z2);val p3=project(x3,y3,z3);val p4=project(x4,y4,z4)
             if(p1!=null&&p2!=null&&p3!=null&&p4!=null) drawPath(Path().apply{moveTo(p1.x,p1.y);lineTo(p2.x,p2.y);lineTo(p3.x,p3.y);lineTo(p4.x,p4.y);close()},wallColor)
@@ -238,23 +241,35 @@ private fun FreeCameraBoard(
 
             val baseColor = if (clearFlash) brighten(color, 1.8f) else color
 
-            // Material-based shading
+            // Material-based shading — each material has different look
             val (topMul, frontMul, backMul, leftMul, rightMul, botMul, edgeAlpha, shineAlpha) = when (material) {
-                PieceMaterial.STONE -> MaterialParams(1.05f, 0.55f, 0.38f, 0.42f, 0.65f, 0.15f, 0.04f, 0.08f)
-                PieceMaterial.GRANITE -> MaterialParams(1.0f, 0.5f, 0.35f, 0.4f, 0.6f, 0.12f, 0.03f, 0.05f)
-                PieceMaterial.GLASS -> MaterialParams(1.3f, 0.85f, 0.75f, 0.8f, 0.9f, 0.6f, 0.15f, 0.35f)
-                PieceMaterial.CRYSTAL -> MaterialParams(1.4f, 0.9f, 0.8f, 0.85f, 0.95f, 0.5f, 0.2f, 0.4f)
+                PieceMaterial.STONE -> MaterialParams(1.05f, 0.55f, 0.38f, 0.42f, 0.65f, 0.15f, 0.03f, 0.05f)
+                PieceMaterial.GRANITE -> MaterialParams(0.95f, 0.45f, 0.32f, 0.38f, 0.55f, 0.12f, 0.02f, 0.03f)
+                PieceMaterial.GLASS -> MaterialParams(1.3f, 0.85f, 0.75f, 0.8f, 0.9f, 0.6f, 0.25f, 0.4f)
+                PieceMaterial.CRYSTAL -> MaterialParams(1.5f, 0.95f, 0.85f, 0.9f, 1.0f, 0.5f, 0.3f, 0.5f)
                 else -> MaterialParams(1.2f, 0.62f, 0.42f, 0.48f, 0.72f, 0.18f, 0.06f, 0.22f) // CLASSIC
             }
 
-            val ca = clearAlpha
+            // Glass and Crystal have reduced base alpha for transparency effect
+            val matAlpha = when (material) {
+                PieceMaterial.GLASS -> 0.55f
+                PieceMaterial.CRYSTAL -> 0.45f
+                else -> 1f
+            }
+
+            val ca = clearAlpha * matAlpha
             val topC = brighten(baseColor, topMul).copy(ca)
             val botC = darken(baseColor, botMul).copy(ca)
             val frontC = darken(baseColor, frontMul).copy(ca)
             val backC = darken(baseColor, backMul).copy(ca)
             val leftC = darken(baseColor, leftMul).copy(ca)
             val rightC = darken(baseColor, rightMul).copy(ca)
-            val edgeC = if(highlight) Color.White.copy(0.4f*ca) else Color.White.copy(edgeAlpha*ca)
+            val edgeC = when (material) {
+                PieceMaterial.GLASS -> Color.White.copy(0.4f * clearAlpha)
+                PieceMaterial.CRYSTAL -> Color.White.copy(0.5f * clearAlpha)
+                PieceMaterial.STONE, PieceMaterial.GRANITE -> Color.Black.copy(0.15f * clearAlpha)
+                else -> if(highlight) Color.White.copy(0.4f*clearAlpha) else Color.White.copy(edgeAlpha*clearAlpha)
+            }
             val mx=x+0.5f;val my=y+0.5f;val mz=z+0.5f
 
             faces.add(Face(listOf(p001,p101,p111,p011),topC,edgeC,highlight,depth(mx,my,z+1)))
@@ -264,13 +279,46 @@ private fun FreeCameraBoard(
             faces.add(Face(listOf(p000,p010,p011,p001),leftC,edgeC,false,depth(x,my,mz)))
             faces.add(Face(listOf(p100,p110,p111,p101),rightC,edgeC,false,depth(x+1,my,mz)))
 
-            // Extra material effects
+            // Extra material effects — visible patterns
             if (material == PieceMaterial.GLASS || material == PieceMaterial.CRYSTAL) {
-                // Specular reflection stripe on top face
-                val p0=p001;val p1=p101
-                val stripeY = p0.y + (p011.y - p0.y) * 0.2f
-                faces.add(Face(listOf(p0, p1, Offset(p1.x, stripeY), Offset(p0.x, stripeY)),
-                    Color.White.copy(shineAlpha * ca), null, false, depth(mx,my,z+1) + 0.01f))
+                // Bright specular reflection stripe across top face
+                val p0=p001;val p1=p101;val p2=p111;val p3=p011
+                val t1=0.1f;val t2=0.3f
+                val s0=Offset(p0.x+(p3.x-p0.x)*t1,p0.y+(p3.y-p0.y)*t1)
+                val s1=Offset(p1.x+(p2.x-p1.x)*t1,p1.y+(p2.y-p1.y)*t1)
+                val s2=Offset(p1.x+(p2.x-p1.x)*t2,p1.y+(p2.y-p1.y)*t2)
+                val s3=Offset(p0.x+(p3.x-p0.x)*t2,p0.y+(p3.y-p0.y)*t2)
+                faces.add(Face(listOf(s0,s1,s2,s3), Color.White.copy(shineAlpha * clearAlpha), null, false, depth(mx,my,z+1)+0.01f))
+                // Side reflection line
+                val sr0=Offset(p001.x+(p011.x-p001.x)*0.15f, p001.y+(p011.y-p001.y)*0.15f)
+                val sr1=Offset(p000.x+(p010.x-p000.x)*0.15f, p000.y+(p010.y-p000.y)*0.15f)
+                faces.add(Face(listOf(sr0,Offset(sr0.x+2f,sr0.y),Offset(sr1.x+2f,sr1.y),sr1),
+                    Color.White.copy(shineAlpha * 0.5f * clearAlpha), null, false, depth(x,my,mz)+0.01f))
+            }
+            if (material == PieceMaterial.STONE || material == PieceMaterial.GRANITE) {
+                // Rough surface — dark grain spots on top face
+                val topD = depth(mx,my,z+1)+0.01f
+                val grainCount = if (material == PieceMaterial.GRANITE) 5 else 3
+                for (i in 0 until grainCount) {
+                    val t1 = 0.1f + i * (0.8f / grainCount)
+                    val t2 = 0.2f + (i * 0.37f) % 0.6f
+                    val gx = p001.x + (p111.x - p001.x) * t1
+                    val gy = p001.y + (p111.y - p001.y) * t2
+                    val grainColor = if (material == PieceMaterial.GRANITE) Color.Black.copy(0.18f * clearAlpha) else Color.Black.copy(0.12f * clearAlpha)
+                    faces.add(Face(listOf(
+                        Offset(gx-2f,gy-1f), Offset(gx+2f,gy-1f), Offset(gx+2f,gy+1f), Offset(gx-2f,gy+1f)
+                    ), grainColor, null, false, topD))
+                }
+                // Granite gets fine horizontal lines across front face
+                if (material == PieceMaterial.GRANITE) {
+                    for (i in 0..2) {
+                        val t = 0.25f + i * 0.25f
+                        val l0 = Offset(p000.x + (p001.x - p000.x) * t, p000.y + (p001.y - p000.y) * t)
+                        val l1 = Offset(p100.x + (p101.x - p100.x) * t, p100.y + (p101.y - p100.y) * t)
+                        faces.add(Face(listOf(l0, l1, Offset(l1.x, l1.y + 1f), Offset(l0.x, l0.y + 1f)),
+                            Color.Black.copy(0.08f * clearAlpha), null, false, depth(mx, y, mz) + 0.01f))
+                    }
+                }
             }
         }
 

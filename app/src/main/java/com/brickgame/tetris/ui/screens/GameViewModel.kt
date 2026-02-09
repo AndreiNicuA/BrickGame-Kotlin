@@ -60,6 +60,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     val multiColorEnabled: StateFlow<Boolean> = _multiColorEnabled.asStateFlow()
     private val _pieceMaterial = MutableStateFlow("CLASSIC")
     val pieceMaterial: StateFlow<String> = _pieceMaterial.asStateFlow()
+    private val _dataLoaded = MutableStateFlow(false)
+    val dataLoaded: StateFlow<Boolean> = _dataLoaded.asStateFlow()
     val playerName = playerRepo.playerName.stateIn(viewModelScope, SharingStarted.Eagerly, "Player")
     val scoreHistory = playerRepo.scoreHistory.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
     private val _highScore = MutableStateFlow(0)
@@ -118,6 +120,13 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch { settingsRepo.dpadStyle.collect { name -> _dpadStyle.value = DPadStyle.entries.find { it.name == name } ?: DPadStyle.STANDARD } }
         viewModelScope.launch { settingsRepo.multiColorEnabled.collect { _multiColorEnabled.value = it } }
         viewModelScope.launch { settingsRepo.pieceMaterial.collect { _pieceMaterial.value = it } }
+        // Signal that data is loaded after critical settings have their first emission
+        viewModelScope.launch {
+            kotlinx.coroutines.flow.combine(
+                settingsRepo.themeName, settingsRepo.highScore, settingsRepo.portraitLayout
+            ) { _, _, _ -> true }.first()
+            _dataLoaded.value = true
+        }
         // Custom themes
         viewModelScope.launch { customThemeRepo.customThemes.collect { list -> val themes = list.map { it.toGameTheme() }; _customThemes.value = themes; GameThemes.updateCustomThemes(themes) } }
         // Custom layouts
