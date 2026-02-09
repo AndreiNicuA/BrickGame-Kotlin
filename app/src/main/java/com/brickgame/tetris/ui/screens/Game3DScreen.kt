@@ -307,20 +307,3 @@ private fun CamPreset(label: String, modifier: Modifier = Modifier, onClick: () 
         Text(label, fontSize = 9.sp, color = Color.White.copy(0.6f), fontFamily = FontFamily.Monospace)
     }
 }
-) {
-        Text(label, color = Color.White.copy(0.6f), fontSize = 9.sp, fontFamily = FontFamily.Monospace, modifier = Modifier.width(34.dp))
-        Slider(value = value, onValueChange = onChange, valueRange = min..max,
-            modifier = Modifier.weight(1f).height(20.dp),
-            colors = SliderDefaults.colors(thumbColor = Color(0xFF22C55E), activeTrackColor = Color(0xFF22C55E)))
-        Text(if (max <= 5f) "%.1f".format(value) else "${value.toInt()}", color = Color.White.copy(0.4f), fontSize = 9.sp,
-            modifier = Modifier.width(30.dp), textAlign = TextAlign.End)
-    }
-}
-
-@Composable
-private fun CamPreset(label: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
-    Box(modifier.clip(RoundedCornerShape(4.dp)).background(Color.White.copy(0.08f))
-        .clickable { onClick() }.padding(vertical = 4.dp), contentAlignment = Alignment.Center) {
-        Text(label, fontSize = 9.sp, color = Color.White.copy(0.6f), fontFamily = FontFamily.Monospace)
-    }
-}
