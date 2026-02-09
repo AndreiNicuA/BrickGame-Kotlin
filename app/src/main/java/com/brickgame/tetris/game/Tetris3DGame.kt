@@ -128,6 +128,7 @@ class Tetris3DGame {
 
     fun pause() { if (status == GameStatus.PLAYING) { status = GameStatus.PAUSED; emitState() } }
     fun resume() { if (status == GameStatus.PAUSED) { status = GameStatus.PLAYING; emitState() } }
+    fun resetToMenu() { status = GameStatus.MENU; emitState() }
 
     // Ghost Y: lowest Y the piece can drop to
     fun ghostY(): Int {

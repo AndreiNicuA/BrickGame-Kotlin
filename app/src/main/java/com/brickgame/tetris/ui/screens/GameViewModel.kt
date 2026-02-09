@@ -294,6 +294,32 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     }
     fun pause3D() { game3D.pause(); game3DJob?.cancel() }
     fun resume3D() { game3D.resume(); start3DLoop() }
+
+    /** Quit 2D game — save score to history, return to menu */
+    fun quitGame() {
+        stopGameLoop()
+        val s = gameState.value
+        if (s.score > 0) {
+            viewModelScope.launch {
+                if (s.score > _highScore.value) settingsRepo.setHighScore(s.score)
+                playerRepo.addScore(playerName.value, s.score, s.level, s.lines)
+            }
+        }
+        game.resetToMenu()
+    }
+
+    /** Quit 3D game — save score to history, return to menu */
+    fun quit3DGame() {
+        game3DJob?.cancel()
+        val s = game3DState.value
+        if (s.score > 0) {
+            viewModelScope.launch {
+                if (s.score > _highScore.value) settingsRepo.setHighScore(s.score)
+                playerRepo.addScore(playerName.value, s.score, s.level, s.layers)
+            }
+        }
+        game3D.resetToMenu()
+    }
     fun move3DX(dx: Int) { game3D.moveX(dx) }
     fun move3DZ(dz: Int) { game3D.moveZ(dz) }
     fun rotate3DXZ() { game3D.rotateXZ() }

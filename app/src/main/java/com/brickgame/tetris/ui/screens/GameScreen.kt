@@ -53,7 +53,8 @@ fun GameScreen(
     onLeftPress: () -> Unit, onLeftRelease: () -> Unit,
     onRightPress: () -> Unit, onRightRelease: () -> Unit,
     onDownPress: () -> Unit, onDownRelease: () -> Unit,
-    onOpenSettings: () -> Unit, onToggleSound: () -> Unit
+    onOpenSettings: () -> Unit, onToggleSound: () -> Unit,
+    onQuit: () -> Unit = {}
 ) {
     val theme = LocalGameTheme.current
 
@@ -74,7 +75,7 @@ fun GameScreen(
                     LayoutPreset.LANDSCAPE_LEFTY -> LandscapeLayout(gameState, dpadStyle, ghostEnabled, animationStyle, animationDuration, onRotate, onHardDrop, onHold, onLeftPress, onLeftRelease, onRightPress, onRightRelease, onDownPress, onDownRelease, onPause, onOpenSettings, true)
                     LayoutPreset.PORTRAIT_3D -> {} // Handled by Game3DScreen in MainActivity
                 }
-                if (gameState.status == GameStatus.PAUSED) PauseOverlay(onResume, onOpenSettings)
+                if (gameState.status == GameStatus.PAUSED) PauseOverlay(onResume, onOpenSettings, onQuit)
                 if (gameState.status == GameStatus.GAME_OVER) GameOverOverlay(gameState.score, gameState.level, gameState.lines, onStartGame, onOpenSettings)
             }
         }
@@ -698,12 +699,13 @@ private fun FallingPiecesBackground(theme: com.brickgame.tetris.ui.theme.GameThe
     }
 }
 
-@Composable private fun PauseOverlay(onResume: () -> Unit, onSet: () -> Unit) {
+@Composable private fun PauseOverlay(onResume: () -> Unit, onSet: () -> Unit, onQuit: () -> Unit) {
     Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.7f)), Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text("PAUSED", fontSize = 28.sp, fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace, color = Color.White, letterSpacing = 4.sp)
             Spacer(Modifier.height(28.dp)); ActionButton("RESUME", onResume, width = 160.dp, height = 48.dp)
             Spacer(Modifier.height(12.dp)); ActionButton("SETTINGS", onSet, width = 160.dp, height = 42.dp, backgroundColor = LocalGameTheme.current.buttonSecondary)
+            Spacer(Modifier.height(12.dp)); ActionButton("QUIT", onQuit, width = 160.dp, height = 42.dp, backgroundColor = Color(0xFFB91C1C))
         }
     }
 }

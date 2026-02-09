@@ -129,7 +129,8 @@ class MainActivity : ComponentActivity() {
                                 onStart = vm::start3DGame,
                                 onOpenSettings = vm::openSettings,
                                 onSoftDrop = vm::softDrop3D,
-                                onToggleGravity = vm::toggle3DGravity
+                                onToggleGravity = vm::toggle3DGravity,
+                                onQuit = vm::quit3DGame
                             )
                         } else {
                             GameScreen(
@@ -144,7 +145,8 @@ class MainActivity : ComponentActivity() {
                                 onLeftPress = vm::startLeftDAS, onLeftRelease = vm::stopDAS,
                                 onRightPress = vm::startRightDAS, onRightRelease = vm::stopDAS,
                                 onDownPress = vm::startDownDAS, onDownRelease = vm::stopDAS,
-                                onOpenSettings = vm::openSettings, onToggleSound = vm::toggleSound
+                                onOpenSettings = vm::openSettings, onToggleSound = vm::toggleSound,
+                                onQuit = vm::quitGame
                             )
                         }
                     }

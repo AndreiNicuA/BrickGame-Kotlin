@@ -151,6 +151,11 @@ class TetrisGame {
         }
     }
 
+    fun resetToMenu() {
+        isRunning = false
+        _state.update { GameState(status = GameStatus.MENU, highScore = it.highScore) }
+    }
+
     fun isGameActive(): Boolean =
         isRunning && _state.value.status == GameStatus.PLAYING && !pendingLineClear
 
