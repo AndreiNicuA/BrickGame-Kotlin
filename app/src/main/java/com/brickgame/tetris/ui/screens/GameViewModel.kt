@@ -283,31 +283,29 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     fun exit3D() { _show3D.value = false; game3DJob?.cancel() }
     fun start3DGame() {
         game3D.start()
+        start3DLoop()
+    }
+    private fun start3DLoop() {
         game3DJob?.cancel()
         game3DJob = viewModelScope.launch {
-            while (isActive && game3DState.value.status == GameStatus.PLAYING) {
+            while (isActive) {
+                val st = game3DState.value.status
+                if (st != GameStatus.PLAYING) break
                 game3D.tick(16L)
                 delay(16L)
             }
         }
     }
     fun pause3D() { game3D.pause(); game3DJob?.cancel() }
-    fun resume3D() {
-        game3D.resume()
-        game3DJob?.cancel()
-        game3DJob = viewModelScope.launch {
-            while (isActive && game3DState.value.status == GameStatus.PLAYING) {
-                game3D.tick(16L)
-                delay(16L)
-            }
-        }
-    }
+    fun resume3D() { game3D.resume(); start3DLoop() }
     fun move3DX(dx: Int) { game3D.moveX(dx) }
     fun move3DZ(dz: Int) { game3D.moveZ(dz) }
     fun rotate3DXZ() { game3D.rotateXZ() }
     fun rotate3DXY() { game3D.rotateXY() }
     fun hardDrop3D() { game3D.hardDrop() }
     fun hold3D() { game3D.hold() }
+    fun softDrop3D() { game3D.softDrop() }
+    fun toggle3DGravity() { game3D.toggleGravity() }
 
     override fun onCleared() { super.onCleared(); stopGameLoop(); game3DJob?.cancel(); soundManager.release() }
 }

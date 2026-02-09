@@ -33,6 +33,12 @@ class Tetris3DGame {
     private var lockTimer = 0L
     private var isLocking = false
     private var bag = mutableListOf<Piece3DType>()
+    var autoGravity = true  // When false, pieces only drop on manual soft-drop
+
+    fun toggleGravity() {
+        autoGravity = !autoGravity
+        emitState()
+    }
 
     private val _state = MutableStateFlow(Game3DState())
     val state: StateFlow<Game3DState> = _state.asStateFlow()
@@ -40,7 +46,7 @@ class Tetris3DGame {
     fun start() {
         board = Array(BOARD_H) { Array(BOARD_D) { IntArray(BOARD_W) } }
         score = 0; level = 1; layers = 0; holdType = null; holdUsed = false
-        status = GameStatus.PLAYING
+        status = GameStatus.PLAYING; dropTimer = 0L; lockTimer = 0L; isLocking = false
         bag.clear(); nextPieces.clear()
         repeat(3) { nextPieces.add(nextFromBag()) }
         spawnPiece()
@@ -49,6 +55,7 @@ class Tetris3DGame {
 
     fun tick(deltaMs: Long) {
         if (status != GameStatus.PLAYING) return
+        if (!autoGravity) return  // No auto-drop in manual mode
         dropTimer += deltaMs
         val speed = dropSpeed()
         if (isLocking) {
@@ -59,6 +66,12 @@ class Tetris3DGame {
             dropTimer = 0L
             moveDown()
         }
+    }
+
+    /** Manual soft-drop — works in both auto and manual mode */
+    fun softDrop() {
+        if (status != GameStatus.PLAYING) return
+        moveDown()
     }
 
     fun moveX(dx: Int) = tryMove(dx, 0, 0)
@@ -248,7 +261,8 @@ class Tetris3DGame {
                 ghostY = ghostY(),
                 nextPieces = nextPieces.toList(),
                 holdPiece = holdType,
-                holdUsed = holdUsed
+                holdUsed = holdUsed,
+                autoGravity = autoGravity
             )
         }
     }
@@ -280,7 +294,8 @@ data class Game3DState(
     val ghostY: Int = 0,
     val nextPieces: List<Piece3DType> = emptyList(),
     val holdPiece: Piece3DType? = null,
-    val holdUsed: Boolean = false
+    val holdUsed: Boolean = false,
+    val autoGravity: Boolean = true
 )
 
 /**

@@ -77,7 +77,9 @@ class MainActivity : ComponentActivity() {
                             onHold = vm::hold3D,
                             onPause = { if (game3DState.status == GameStatus.PLAYING) vm.pause3D() else vm.resume3D() },
                             onStart = vm::start3DGame,
-                            onOpenSettings = { vm.exit3D(); vm.openSettings() }
+                            onOpenSettings = { vm.exit3D(); vm.openSettings() },
+                            onSoftDrop = vm::softDrop3D,
+                            onToggleGravity = vm::toggle3DGravity
                         )
                     }
 
