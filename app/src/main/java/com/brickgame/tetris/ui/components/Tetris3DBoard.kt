@@ -16,9 +16,9 @@ import kotlin.math.*
  * 3D Tetris renderer.
  *
  * Axis convention (Fusion 360 style):
- *   X = right (engine x)
- *   Y = depth/forward (engine z)
- *   Z = up/vertical (engine y — height)
+ *   X = East-West (horizontal)
+ *   Y = North-South (horizontal depth)
+ *   Z = Height-Elevation (vertical distance)
  *
  * The engine stores board[y][z][x] where y=height.
  * The renderer maps: engine(x,y,z) → display(X=x, Y=z, Z=y)
@@ -137,9 +137,9 @@ private fun FreeCameraBoard(
         val axY = project(0f, 1.5f, 0f)
         val axZ = project(0f, 0f, 1.5f)
         if (axO != null) {
-            if (axX != null) drawLine(Color(0xFFFF4444).copy(0.6f), axO, axX, 2f) // X = red
-            if (axY != null) drawLine(Color(0xFF44FF44).copy(0.6f), axO, axY, 2f) // Y = green
-            if (axZ != null) drawLine(Color(0xFF4488FF).copy(0.6f), axO, axZ, 2f) // Z = blue (up)
+            if (axX != null) drawLine(Color(0xFFFF4444).copy(0.6f), axO, axX, 2f) // X = East-West (red)
+            if (axY != null) drawLine(Color(0xFF44FF44).copy(0.6f), axO, axY, 2f) // Y = North-South (green)
+            if (axZ != null) drawLine(Color(0xFF4488FF).copy(0.6f), axO, axZ, 2f) // Z = Height (blue)
         }
 
         // === Cube faces ===
