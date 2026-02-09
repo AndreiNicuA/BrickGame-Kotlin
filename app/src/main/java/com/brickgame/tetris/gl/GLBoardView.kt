@@ -62,7 +62,7 @@ fun GLBoardView(
                 // Touch gesture callbacks
                 view.onCameraChange = onCameraChange
                 view.azimuth = cameraAngleY
-                view.elevation = cameraAngleX
+                view.camElevation = cameraAngleX
                 view.currentZoom = zoom
                 view.panX = panOffsetX
                 view.panY = panOffsetY
@@ -86,7 +86,7 @@ class BoardGLSurfaceView(context: Context) : GLSurfaceView(context) {
     var onCameraChange: ((Float, Float, Float, Float, Float) -> Unit)? = null
 
     var azimuth = 35f
-    var elevation = 25f
+    var camElevation = 25f
     var currentZoom = 1f
     var panX = 0f
     var panY = 0f
@@ -140,11 +140,11 @@ class BoardGLSurfaceView(context: Context) : GLSurfaceView(context) {
                     val dx = event.x - prevX
                     val dy = event.y - prevY
                     azimuth = (azimuth + dx * 0.3f) % 360f
-                    elevation = (elevation - dy * 0.2f).coerceIn(-85f, 85f)
+                    camElevation = (camElevation - dy * 0.2f).coerceIn(-85f, 85f)
                     prevX = event.x
                     prevY = event.y
                 }
-                onCameraChange?.invoke(azimuth, elevation, currentZoom, panX, panY)
+                onCameraChange?.invoke(azimuth, camElevation, currentZoom, panX, panY)
             }
 
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
