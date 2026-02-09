@@ -116,7 +116,8 @@ class MainActivity : ComponentActivity() {
                     }
 
                     else -> {
-                        if (is3D) {
+                        // 3D: show landing page (2D menu) when in MENU, switch to 3D screen when playing
+                        if (is3D && game3DState.status != GameStatus.MENU) {
                             Game3DScreen(
                                 state = game3DState,
                                 onMoveX = vm::move3DX,
@@ -139,7 +140,8 @@ class MainActivity : ComponentActivity() {
                                 multiColor = multiColor,
                                 customLayout = activeCustomLayout, scoreHistory = history,
                                 freeformElements = profile.freeformElements,
-                                onStartGame = vm::startGame, onPause = vm::pauseGame, onResume = vm::resumeGame,
+                                onStartGame = if (is3D) vm::start3DGame else vm::startGame,
+                                onPause = vm::pauseGame, onResume = vm::resumeGame,
                                 onRotate = vm::rotate, onRotateCCW = vm::rotateCounterClockwise,
                                 onHardDrop = vm::hardDrop, onHold = vm::holdPiece,
                                 onLeftPress = vm::startLeftDAS, onLeftRelease = vm::stopDAS,
