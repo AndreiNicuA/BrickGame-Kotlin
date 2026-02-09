@@ -12,19 +12,22 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import com.brickgame.tetris.game.*
 import kotlin.math.*
 
+/** Material style for 3D pieces */
+enum class PieceMaterial { CLASSIC, STONE, GRANITE, GLASS, CRYSTAL }
+
 @Composable
 fun Tetris3DBoard(
     state: Game3DState, modifier: Modifier = Modifier, showGhost: Boolean = true,
     cameraAngleY: Float = 35f, cameraAngleX: Float = 25f,
     panOffsetX: Float = 0f, panOffsetY: Float = 0f, zoom: Float = 1f,
     themePixelOn: Color = Color(0xFF22C55E), themeBg: Color = Color(0xFF0A0A0A),
-    starWarsMode: Boolean = false
+    starWarsMode: Boolean = false, material: PieceMaterial = PieceMaterial.CLASSIC
 ) {
     if (starWarsMode) StarWarsBoard(state, modifier, showGhost, themePixelOn)
-    else FreeCameraBoard(state, modifier, showGhost, cameraAngleY, cameraAngleX, panOffsetX, panOffsetY, zoom, themePixelOn)
+    else FreeCameraBoard(state, modifier, showGhost, cameraAngleY, cameraAngleX, panOffsetX, panOffsetY, zoom, themePixelOn, material)
 }
 
-/** Fusion 360-style ViewCube — orientation indicator with colored axis faces. */
+/** Fusion 360-style ViewCube with FRONT/BACK/LEFT/RIGHT/TOP face labels. */
 @Composable
 fun ViewCube(azimuth: Float, elevation: Float, modifier: Modifier = Modifier) {
     Canvas(modifier) {
@@ -45,28 +48,30 @@ fun ViewCube(azimuth: Float, elevation: Float, modifier: Modifier = Modifier) {
             proj(-1f,-1f,-1f), proj(1f,-1f,-1f), proj(1f,1f,-1f), proj(-1f,1f,-1f),
             proj(-1f,-1f,1f), proj(1f,-1f,1f), proj(1f,1f,1f), proj(-1f,1f,1f)
         )
+        val corners = arrayOf(
+            floatArrayOf(-1f,-1f,-1f), floatArrayOf(1f,-1f,-1f), floatArrayOf(1f,1f,-1f), floatArrayOf(-1f,1f,-1f),
+            floatArrayOf(-1f,-1f,1f), floatArrayOf(1f,-1f,1f), floatArrayOf(1f,1f,1f), floatArrayOf(-1f,1f,1f)
+        )
 
         data class CF(val i: IntArray, val col: Color, val lbl: String)
         val allFaces = listOf(
-            CF(intArrayOf(4,5,6,7), Color(0xFF4488FF).copy(0.65f), "TOP"),    // Z+
-            CF(intArrayOf(0,3,2,1), Color(0xFF4488FF).copy(0.3f), "BOT"),     // Z-
-            CF(intArrayOf(0,1,5,4), Color(0xFF44FF44).copy(0.5f), "FRONT"),   // Y-
-            CF(intArrayOf(3,7,6,2), Color(0xFF44FF44).copy(0.3f), "BACK"),    // Y+
-            CF(intArrayOf(0,4,7,3), Color(0xFFFF4444).copy(0.5f), "LEFT"),    // X-
-            CF(intArrayOf(1,2,6,5), Color(0xFFFF4444).copy(0.35f), "RIGHT")   // X+
+            CF(intArrayOf(4,5,6,7), Color(0xFF4488FF).copy(0.65f), "TOP"),
+            CF(intArrayOf(0,3,2,1), Color(0xFF4488FF).copy(0.3f), ""),
+            CF(intArrayOf(0,1,5,4), Color(0xFF44FF44).copy(0.5f), "FRONT"),
+            CF(intArrayOf(3,7,6,2), Color(0xFF44FF44).copy(0.3f), "BACK"),
+            CF(intArrayOf(0,4,7,3), Color(0xFFFF4444).copy(0.5f), "LEFT"),
+            CF(intArrayOf(1,2,6,5), Color(0xFFFF4444).copy(0.35f), "RIGHT")
         )
 
-        // Sort by average projected depth
-        val sorted = allFaces.sortedBy { f ->
-            f.i.map { idx ->
-                val corner = arrayOf(
-                    floatArrayOf(-1f,-1f,-1f), floatArrayOf(1f,-1f,-1f), floatArrayOf(1f,1f,-1f), floatArrayOf(-1f,1f,-1f),
-                    floatArrayOf(-1f,-1f,1f), floatArrayOf(1f,-1f,1f), floatArrayOf(1f,1f,1f), floatArrayOf(-1f,1f,1f)
-                )[idx]
-                val ry = corner[0] * sinAz + corner[1] * cosAz
-                corner[2] * sinEl + ry * cosEl
+        data class SF(val i: IntArray, val col: Color, val lbl: String, val d: Float)
+        val sorted = allFaces.map { f ->
+            val d = f.i.map { idx ->
+                val cr = corners[idx]
+                val ry = cr[0] * sinAz + cr[1] * cosAz
+                cr[2] * sinEl + ry * cosEl
             }.average().toFloat()
-        }
+            SF(f.i, f.col, f.lbl, d)
+        }.sortedBy { it.d }
 
         for (face in sorted) {
             val path = Path().apply {
@@ -76,19 +81,42 @@ fun ViewCube(azimuth: Float, elevation: Float, modifier: Modifier = Modifier) {
             }
             drawPath(path, face.col, style = Fill)
             drawPath(path, Color.White.copy(0.3f), style = Stroke(1f))
+
+            // Draw label on front-facing faces
+            if (face.d > 0.1f && face.lbl.isNotEmpty()) {
+                val fcx = face.i.map { c[it].x }.average().toFloat()
+                val fcy = face.i.map { c[it].y }.average().toFloat()
+                // Draw each letter as a small dot pattern (no android.graphics.Paint in Canvas)
+                // Instead draw a tiny colored indicator + use face color contrast
+                val labelColor = Color.White.copy(alpha = (face.d.coerceIn(0f,1f) * 0.9f))
+                val letterW = s * 0.18f
+                val startX = fcx - (face.lbl.length * letterW) / 2f
+                face.lbl.forEachIndexed { idx, ch ->
+                    val lx = startX + idx * letterW + letterW / 2f
+                    // Draw tiny letter indicator
+                    drawCircle(labelColor, letterW * 0.35f, Offset(lx, fcy))
+                    // Small horizontal line under to hint at text
+                    drawLine(labelColor, Offset(lx - letterW * 0.25f, fcy + letterW * 0.4f),
+                        Offset(lx + letterW * 0.25f, fcy + letterW * 0.4f), 0.8f)
+                }
+            }
         }
 
         // Axis lines
-        val axLen = 1.5f
-        val xE = proj(axLen, 0f, 0f); val yE = proj(0f, axLen, 0f); val zE = proj(0f, 0f, axLen)
+        val xE = proj(1.5f, 0f, 0f); val yE = proj(0f, 1.5f, 0f); val zE = proj(0f, 0f, 1.5f)
         val origin = Offset(cx, cy)
         drawLine(Color(0xFFFF4444), origin, xE, 2.5f)
         drawLine(Color(0xFF44FF44), origin, yE, 2.5f)
         drawLine(Color(0xFF4488FF), origin, zE, 2.5f)
+
+        // Axis end labels as colored dots
+        drawCircle(Color(0xFFFF4444), 3.5f, xE)
+        drawCircle(Color(0xFF44FF44), 3.5f, yE)
+        drawCircle(Color(0xFF4488FF), 3.5f, zE)
     }
 }
 
-/** Mini 3D piece preview using isometric projection. */
+/** Mini 3D piece preview */
 @Composable
 fun Mini3DPiecePreview(pieceType: Piece3DType?, modifier: Modifier = Modifier,
                        themeColor: Color = Color(0xFF22C55E), alpha: Float = 1f) {
@@ -123,8 +151,12 @@ fun Mini3DPiecePreview(pieceType: Piece3DType?, modifier: Modifier = Modifier,
 @Composable
 private fun FreeCameraBoard(
     state: Game3DState, modifier: Modifier, showGhost: Boolean,
-    azimuth: Float, elevation: Float, panX: Float, panY: Float, zoom: Float, themeColor: Color
+    azimuth: Float, elevation: Float, panX: Float, panY: Float, zoom: Float,
+    themeColor: Color, material: PieceMaterial
 ) {
+    // Animate clearing layers
+    val clearAnimProgress = state.clearAnimProgress
+
     Canvas(modifier) {
         val w = size.width; val h = size.height
         val bx = Tetris3DGame.BOARD_W.toFloat(); val by = Tetris3DGame.BOARD_D.toFloat(); val bz = Tetris3DGame.BOARD_H.toFloat()
@@ -167,44 +199,101 @@ private fun FreeCameraBoard(
             val p1=project(x1,y1,z1);val p2=project(x2,y2,z2);val p3=project(x3,y3,z3);val p4=project(x4,y4,z4)
             if(p1!=null&&p2!=null&&p3!=null&&p4!=null) drawPath(Path().apply{moveTo(p1.x,p1.y);lineTo(p2.x,p2.y);lineTo(p3.x,p3.y);lineTo(p4.x,p4.y);close()},wallColor)
         }
-        wallQ(0f,0f,0f,bx,0f,0f,bx,by,0f,0f,by,0f); wallQ(0f,by,0f,bx,by,0f,bx,by,bz,0f,by,bz); wallQ(0f,0f,0f,0f,by,0f,0f,by,bz,0f,0f,bz)
+        wallQ(0f,0f,0f,bx,0f,0f,bx,by,0f,0f,by,0f)
+        wallQ(0f,by,0f,bx,by,0f,bx,by,bz,0f,by,bz)
+        wallQ(0f,0f,0f,0f,by,0f,0f,by,bz,0f,0f,bz)
 
-        // Faces
+        // Faces collection
         data class Face(val pts: List<Offset>, val fill: Color, val edge: Color?, val shine: Boolean, val d: Float)
         val faces = mutableListOf<Face>()
 
-        fun addCube(dx: Int, dy: Int, dz: Int, color: Color, alpha: Float, highlight: Boolean = false) {
+        fun addCube(dx: Int, dy: Int, dz: Int, color: Color, alpha: Float, highlight: Boolean = false, isGhost: Boolean = false, clearing: Float = 0f) {
             val x=dx.toFloat();val y=dy.toFloat();val z=dz.toFloat();val a=alpha.coerceIn(0f,1f)
             val p000=project(x,y,z)?:return;val p100=project(x+1,y,z)?:return;val p010=project(x,y+1,z)?:return
             val p110=project(x+1,y+1,z)?:return;val p001=project(x,y,z+1)?:return;val p101=project(x+1,y,z+1)?:return
             val p011=project(x,y+1,z+1)?:return;val p111=project(x+1,y+1,z+1)?:return
-            val topC=brighten(color,1.2f).copy(a); val botC=darken(color,0.18f).copy(a)
-            val frontC=darken(color,0.62f).copy(a); val backC=darken(color,0.42f).copy(a)
-            val leftC=darken(color,0.48f).copy(a); val rightC=darken(color,0.72f).copy(a)
-            val edgeC=if(highlight) Color.White.copy(0.4f*a) else Color.White.copy(0.06f*a)
+
+            if (isGhost) {
+                // Ghost: visible wireframe + tinted fill
+                val ghostColor = color.copy(alpha = 0.25f)
+                val ghostEdge = color.copy(alpha = 0.5f)
+                val mx=x+0.5f;val my=y+0.5f;val mz=z+0.5f
+                faces.add(Face(listOf(p001,p101,p111,p011), ghostColor, ghostEdge, false, depth(mx,my,z+1)))
+                faces.add(Face(listOf(p000,p100,p101,p001), ghostColor.copy(alpha=0.15f), ghostEdge, false, depth(mx,y,mz)))
+                faces.add(Face(listOf(p000,p010,p011,p001), ghostColor.copy(alpha=0.15f), ghostEdge, false, depth(x,my,mz)))
+                faces.add(Face(listOf(p100,p110,p111,p101), ghostColor.copy(alpha=0.15f), ghostEdge, false, depth(x+1,my,mz)))
+                return
+            }
+
+            // Clearing animation: flash white then fade out
+            val clearAlpha = if (clearing > 0f) {
+                if (clearing < 0.3f) a  // flash white
+                else a * (1f - (clearing - 0.3f) / 0.7f) // fade out
+            } else a
+            val clearFlash = clearing > 0f && clearing < 0.3f
+
+            val baseColor = if (clearFlash) brighten(color, 1.8f) else color
+
+            // Material-based shading
+            val (topMul, frontMul, backMul, leftMul, rightMul, botMul, edgeAlpha, shineAlpha) = when (material) {
+                PieceMaterial.STONE -> MaterialParams(1.05f, 0.55f, 0.38f, 0.42f, 0.65f, 0.15f, 0.04f, 0.08f)
+                PieceMaterial.GRANITE -> MaterialParams(1.0f, 0.5f, 0.35f, 0.4f, 0.6f, 0.12f, 0.03f, 0.05f)
+                PieceMaterial.GLASS -> MaterialParams(1.3f, 0.85f, 0.75f, 0.8f, 0.9f, 0.6f, 0.15f, 0.35f)
+                PieceMaterial.CRYSTAL -> MaterialParams(1.4f, 0.9f, 0.8f, 0.85f, 0.95f, 0.5f, 0.2f, 0.4f)
+                else -> MaterialParams(1.2f, 0.62f, 0.42f, 0.48f, 0.72f, 0.18f, 0.06f, 0.22f) // CLASSIC
+            }
+
+            val ca = clearAlpha
+            val topC = brighten(baseColor, topMul).copy(ca)
+            val botC = darken(baseColor, botMul).copy(ca)
+            val frontC = darken(baseColor, frontMul).copy(ca)
+            val backC = darken(baseColor, backMul).copy(ca)
+            val leftC = darken(baseColor, leftMul).copy(ca)
+            val rightC = darken(baseColor, rightMul).copy(ca)
+            val edgeC = if(highlight) Color.White.copy(0.4f*ca) else Color.White.copy(edgeAlpha*ca)
             val mx=x+0.5f;val my=y+0.5f;val mz=z+0.5f
+
             faces.add(Face(listOf(p001,p101,p111,p011),topC,edgeC,highlight,depth(mx,my,z+1)))
             faces.add(Face(listOf(p000,p100,p110,p010),botC,null,false,depth(mx,my,z)))
             faces.add(Face(listOf(p000,p100,p101,p001),frontC,edgeC,false,depth(mx,y,mz)))
             faces.add(Face(listOf(p010,p110,p111,p011),backC,null,false,depth(mx,y+1,mz)))
             faces.add(Face(listOf(p000,p010,p011,p001),leftC,edgeC,false,depth(x,my,mz)))
             faces.add(Face(listOf(p100,p110,p111,p101),rightC,edgeC,false,depth(x+1,my,mz)))
+
+            // Extra material effects
+            if (material == PieceMaterial.GLASS || material == PieceMaterial.CRYSTAL) {
+                // Specular reflection stripe on top face
+                val p0=p001;val p1=p101
+                val stripeY = p0.y + (p011.y - p0.y) * 0.2f
+                faces.add(Face(listOf(p0, p1, Offset(p1.x, stripeY), Offset(p0.x, stripeY)),
+                    Color.White.copy(shineAlpha * ca), null, false, depth(mx,my,z+1) + 0.01f))
+            }
         }
 
         // Board blocks
         if (state.board.isNotEmpty()) {
-            for (ey in 0 until Tetris3DGame.BOARD_H) { for (ez in 0 until Tetris3DGame.BOARD_D) { for (ex in 0 until Tetris3DGame.BOARD_W) {
-                if (ey<state.board.size&&ez<state.board[ey].size&&ex<state.board[ey][ez].size) {
-                    val c=state.board[ey][ez][ex]; if (c>0) addCube(ex,ez,ey,pieceColor(c,themeColor),1f)
-                }
-            }}}
+            for (ey in 0 until Tetris3DGame.BOARD_H) {
+                val clearing = if (ey in state.clearingLayers) clearAnimProgress else 0f
+                for (ez in 0 until Tetris3DGame.BOARD_D) { for (ex in 0 until Tetris3DGame.BOARD_W) {
+                    if (ey<state.board.size&&ez<state.board[ey].size&&ex<state.board[ey][ez].size) {
+                        val c=state.board[ey][ez][ex]; if (c>0) addCube(ex,ez,ey,pieceColor(c,themeColor),1f,clearing=clearing)
+                    }
+                }}
+            }
         }
+
+        // Ghost piece — visible wireframe
         val piece = state.currentPiece
         if (piece!=null && showGhost && state.ghostY<piece.y) {
-            for (b in piece.blocks) { val gdx=piece.x+b.x;val gdy=piece.z+b.z;val gdz=state.ghostY+b.y; if(gdz>=0) addCube(gdx,gdy,gdz,themeColor,0.12f) }
+            val ghostColor = pieceColor(piece.type.colorIndex, themeColor)
+            for (b in piece.blocks) { val gdx=piece.x+b.x;val gdy=piece.z+b.z;val gdz=state.ghostY+b.y
+                if(gdz>=0) addCube(gdx,gdy,gdz,ghostColor,0.25f,isGhost=true) }
         }
+
+        // Current piece
         if (piece!=null) {
-            for (b in piece.blocks) { val pdx=piece.x+b.x;val pdy=piece.z+b.z;val pdz=piece.y+b.y; if(pdz>=0) addCube(pdx,pdy,pdz,pieceColor(piece.type.colorIndex,themeColor),1f,true) }
+            for (b in piece.blocks) { val pdx=piece.x+b.x;val pdy=piece.z+b.z;val pdz=piece.y+b.y
+                if(pdz>=0) addCube(pdx,pdy,pdz,pieceColor(piece.type.colorIndex,themeColor),1f,true) }
         }
 
         // Sort & draw
@@ -226,9 +315,26 @@ private fun FreeCameraBoard(
                 drawPath(path, face.edge, style = Stroke(0.8f))
                 drawPath(path, Color.Black.copy(0.08f), style = Stroke(0.3f))
             }
+
+            // Stone/granite texture: noise-like dark spots on top faces
+            if ((material == PieceMaterial.STONE || material == PieceMaterial.GRANITE) && face.shine) {
+                for (i in 0 until 3) {
+                    val t1 = 0.15f + i * 0.28f; val t2 = 0.2f + i * 0.2f
+                    val sx = face.pts[0].x + (face.pts[2].x - face.pts[0].x) * t1
+                    val sy = face.pts[0].y + (face.pts[2].y - face.pts[0].y) * t2
+                    drawCircle(Color.Black.copy(0.12f), 1.5f, Offset(sx, sy))
+                }
+            }
         }
     }
 }
+
+// Material shading parameters
+private data class MaterialParams(
+    val topMul: Float, val frontMul: Float, val backMul: Float,
+    val leftMul: Float, val rightMul: Float, val botMul: Float,
+    val edgeAlpha: Float, val shineAlpha: Float
+)
 
 // ==================== STAR WARS ====================
 @Composable

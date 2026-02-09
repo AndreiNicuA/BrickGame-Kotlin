@@ -28,6 +28,9 @@ class Tetris3DGame {
     private var score = 0
     private var level = 1
     private var layers = 0 // total layers cleared
+    private var clearingLayersList = listOf<Int>() // layers currently animating
+    private var clearAnimProgress = 0f // 0..1
+    private var clearAnimTimer = 0L
     private var status = GameStatus.MENU
     private var dropTimer = 0L
     private var lockTimer = 0L
@@ -55,6 +58,8 @@ class Tetris3DGame {
 
     fun tick(deltaMs: Long) {
         if (status != GameStatus.PLAYING) return
+        // If clearing animation is running, advance it and skip normal tick
+        if (tickClearAnimation(deltaMs)) return
         if (!autoGravity) return  // No auto-drop in manual mode
         dropTimer += deltaMs
         val speed = dropSpeed()
@@ -179,18 +184,39 @@ class Tetris3DGame {
     }
 
     private fun clearLayers() {
-        var cleared = 0
+        // Find all full layers
+        val fullLayers = mutableListOf<Int>()
         for (y in BOARD_H - 1 downTo 0) {
-            if (isLayerFull(y)) {
-                cleared++
-                // Shift everything above down
+            if (isLayerFull(y)) fullLayers.add(y)
+        }
+        if (fullLayers.isEmpty()) return
+
+        // Start clearing animation
+        clearingLayersList = fullLayers
+        clearAnimProgress = 0f
+        clearAnimTimer = 0L
+        // Score and level update happen when animation completes
+    }
+
+    /** Called from tick to advance clearing animation. Returns true if still animating. */
+    private fun tickClearAnimation(dt: Long): Boolean {
+        if (clearingLayersList.isEmpty()) return false
+        clearAnimTimer += dt
+        val duration = 500L // 500ms animation
+        clearAnimProgress = (clearAnimTimer.toFloat() / duration).coerceIn(0f, 1f)
+        emitState()
+
+        if (clearAnimProgress >= 1f) {
+            // Animation complete — actually remove layers
+            val cleared = clearingLayersList.size
+            // Sort descending so we remove from top first
+            val sortedLayers = clearingLayersList.sortedDescending()
+            for (y in sortedLayers) {
                 for (yy in y until BOARD_H - 1) {
                     board[yy] = board[yy + 1].map { it.clone() }.toTypedArray()
                 }
                 board[BOARD_H - 1] = Array(BOARD_D) { IntArray(BOARD_W) }
             }
-        }
-        if (cleared > 0) {
             layers += cleared
             score += when (cleared) {
                 1 -> 100 * level
@@ -199,7 +225,12 @@ class Tetris3DGame {
                 else -> 800 * level
             }
             level = (layers / 10) + 1
+            clearingLayersList = emptyList()
+            clearAnimProgress = 0f
+            clearAnimTimer = 0L
+            emitState()
         }
+        return clearingLayersList.isNotEmpty()
     }
 
     private fun isLayerFull(y: Int): Boolean {
@@ -263,7 +294,9 @@ class Tetris3DGame {
                 nextPieces = nextPieces.toList(),
                 holdPiece = holdType,
                 holdUsed = holdUsed,
-                autoGravity = autoGravity
+                autoGravity = autoGravity,
+                clearingLayers = clearingLayersList,
+                clearAnimProgress = clearAnimProgress
             )
         }
     }
@@ -296,7 +329,9 @@ data class Game3DState(
     val nextPieces: List<Piece3DType> = emptyList(),
     val holdPiece: Piece3DType? = null,
     val holdUsed: Boolean = false,
-    val autoGravity: Boolean = true
+    val autoGravity: Boolean = true,
+    val clearingLayers: List<Int> = emptyList(),
+    val clearAnimProgress: Float = 0f  // 0..1 animation progress
 )
 
 /**

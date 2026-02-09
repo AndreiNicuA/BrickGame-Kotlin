@@ -54,7 +54,8 @@ fun Game3DScreen(
     onOpenSettings: () -> Unit,
     onSoftDrop: () -> Unit = {},
     onToggleGravity: () -> Unit = {},
-    onQuit: () -> Unit = {}
+    onQuit: () -> Unit = {},
+    material: PieceMaterial = PieceMaterial.CLASSIC
 ) {
     val theme = LocalGameTheme.current
 
@@ -157,7 +158,8 @@ fun Game3DScreen(
                     state = state, modifier = Modifier.fillMaxSize().padding(2.dp),
                     showGhost = true, cameraAngleY = effectiveAz, cameraAngleX = effectiveEl,
                     panOffsetX = panX, panOffsetY = panY, zoom = zoom,
-                    themePixelOn = theme.pixelOn, themeBg = theme.backgroundColor, starWarsMode = starWars
+                    themePixelOn = theme.pixelOn, themeBg = theme.backgroundColor, starWarsMode = starWars,
+                    material = material
                 )
 
                 // ViewCube — top right
