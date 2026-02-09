@@ -57,7 +57,7 @@ class BoardRenderer(private val context: Context) : GLSurfaceView.Renderer {
 
         cube = CubeGeometry()
         grid = GridGeometry()
-        textures = TextureManager()
+        textures = TextureManager(context)
         textures.loadAll()
     }
 

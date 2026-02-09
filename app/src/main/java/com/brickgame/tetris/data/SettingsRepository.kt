@@ -31,6 +31,8 @@ class SettingsRepository(private val context: Context) {
         private val DPAD_STYLE = stringPreferencesKey("dpad_style")
         private val MULTI_COLOR = booleanPreferencesKey("multi_color_pieces")
         private val PIECE_MATERIAL = stringPreferencesKey("piece_material")
+        private val CONTROLLER_ENABLED = booleanPreferencesKey("controller_enabled")
+        private val CONTROLLER_DEADZONE = floatPreferencesKey("controller_deadzone")
     }
     
     private fun <T> pref(key: Preferences.Key<T>, default: T): Flow<T> =
@@ -88,4 +90,11 @@ class SettingsRepository(private val context: Context) {
 
     val pieceMaterial get() = pref(PIECE_MATERIAL, "CLASSIC")
     suspend fun setPieceMaterial(v: String) = set(PIECE_MATERIAL, v)
+
+    // Controller settings
+    val controllerEnabled get() = pref(CONTROLLER_ENABLED, true)
+    suspend fun setControllerEnabled(v: Boolean) = set(CONTROLLER_ENABLED, v)
+
+    val controllerDeadzone get() = pref(CONTROLLER_DEADZONE, 0.25f)
+    suspend fun setControllerDeadzone(v: Float) = set(CONTROLLER_DEADZONE, v.coerceIn(0.05f, 0.8f))
 }
