@@ -12,7 +12,6 @@ uniform sampler2D uTexture;
 uniform float uTextureStrength;
 uniform float uSpecularPower;
 uniform float uSpecularStrength;
-uniform float uTransparency;
 uniform float uClearFlash;
 
 void main() {
@@ -21,42 +20,54 @@ void main() {
     vec3 V = normalize(uCameraPos - vWorldPos);
     vec3 H = normalize(L + V);
 
-    // Lambertian diffuse
+    // Brighter ambient for vivid colors
     float diff = max(dot(N, L), 0.0);
-    float ambient = 0.35;
-    float lighting = ambient + diff * 0.65;
+    float ambient = 0.50;
+    float lighting = ambient + diff * 0.55;
 
     // Blinn-Phong specular
     float spec = pow(max(dot(N, H), 0.0), uSpecularPower) * uSpecularStrength;
 
-    // Base color with lighting
     vec3 litColor = uBaseColor * lighting;
 
-    // Texture blend
+    // Texture
     vec3 texColor = texture2D(uTexture, vTexCoord).rgb;
     vec3 finalColor = mix(litColor, litColor * texColor, uTextureStrength);
 
-    // Specular on top
+    // Specular highlight
     finalColor += vec3(spec);
 
-    // Edge darkening: darken pixels near the edges of each face (UV 0 or 1)
-    // This makes individual cubes distinguishable from each other
+    // === BEVEL EFFECT ===
+    // Dark edge border (like the old Canvas renderer had)
     float edgeX = min(vTexCoord.x, 1.0 - vTexCoord.x);
     float edgeY = min(vTexCoord.y, 1.0 - vTexCoord.y);
     float edgeDist = min(edgeX, edgeY);
-    float edgeFactor = smoothstep(0.0, 0.08, edgeDist); // 0 at edge, 1 inside
-    finalColor *= mix(0.55, 1.0, edgeFactor);
+
+    // Dark border: narrow dark line at the very edge
+    float borderFactor = smoothstep(0.0, 0.04, edgeDist);
+    finalColor *= mix(0.25, 1.0, borderFactor);
+
+    // Bright inner bevel highlight near (but not at) the edge
+    float bevelHighlight = smoothstep(0.04, 0.12, edgeDist) * (1.0 - smoothstep(0.12, 0.25, edgeDist));
+    finalColor += vec3(bevelHighlight * 0.15);
+
+    // Center highlight: subtle bright spot at face center
+    float cx = vTexCoord.x - 0.5;
+    float cy = vTexCoord.y - 0.5;
+    float centerDist = cx * cx + cy * cy;
+    float centerHighlight = 1.0 - smoothstep(0.0, 0.15, centerDist);
+    finalColor += vec3(centerHighlight * 0.08);
 
     // Layer clearing flash
     if (uClearFlash > 0.0) {
         if (uClearFlash < 0.3) {
-            finalColor = mix(finalColor, vec3(1.0), 0.6);
+            finalColor = mix(finalColor, vec3(1.0), 0.7);
         } else {
             float fadeAlpha = 1.0 - (uClearFlash - 0.3) / 0.7;
             finalColor *= fadeAlpha;
         }
     }
 
-    float alpha = uAlpha * uTransparency;
-    gl_FragColor = vec4(finalColor, alpha);
+    // FULLY OPAQUE output — alpha=1.0 for solid cubes
+    gl_FragColor = vec4(finalColor, uAlpha);
 }

@@ -13,11 +13,11 @@ import javax.microedition.khronos.opengles.GL10
 /**
  * OpenGL ES 2.0 renderer for the 3D Tetris board.
  *
- * Rendering order:
- *   1. Grid wireframe (floor + walls)
- *   2. Board blocks (opaque, with depth test)
- *   3. Current piece (opaque, highlighted)
- *   4. Ghost piece (transparent, depth write off)
+ * Key rendering principles:
+ *   - Blending is OFF for opaque geometry (solid cubes are fully opaque)
+ *   - Blending is only turned ON for ghost pieces
+ *   - Depth test always on
+ *   - Back-face culling with CCW winding
  */
 class BoardRenderer(private val context: Context) : GLSurfaceView.Renderer {
 
@@ -29,27 +29,20 @@ class BoardRenderer(private val context: Context) : GLSurfaceView.Renderer {
     private lateinit var textures: TextureManager
     private val camera = Camera3D()
 
-    // State — updated from UI thread
     @Volatile private var currentState: Game3DState = Game3DState()
     @Volatile private var currentMaterial: PieceMaterial = PieceMaterial.CLASSIC
     @Volatile private var showGhost: Boolean = true
     @Volatile private var themeColorArgb: Long = 0xFF22C55EL
     @Volatile private var bgColorArgb: Long = 0xFF0A0A0AL
 
-    // Viewport dimensions for projection updates
     private var viewportWidth = 1
     private var viewportHeight = 1
-    private var lastZoom = 1f
 
-    // Reusable matrices
     private val modelMatrix = FloatArray(16)
     private val mvpMatrix = FloatArray(16)
 
-    // Slightly inset model matrix for edge outlines (avoids z-fighting)
-    private val edgeModelMatrix = FloatArray(16)
-
-    // Light direction: top-right-front
-    private val lightDir = floatArrayOf(0.4f, 0.8f, -0.5f)
+    // Light: from top-right-front, slightly warm
+    private val lightDir = floatArrayOf(0.35f, 0.75f, -0.55f)
 
     fun updateState(state: Game3DState, material: PieceMaterial, ghost: Boolean, themeColor: Long, bgColor: Long = 0xFF0A0A0AL) {
         currentState = state
@@ -70,15 +63,12 @@ class BoardRenderer(private val context: Context) : GLSurfaceView.Renderer {
     override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
         GLES20.glClearColor(0.04f, 0.04f, 0.04f, 1f)
 
-        // Depth test ON — blocks occlude correctly
         GLES20.glEnable(GLES20.GL_DEPTH_TEST)
         GLES20.glDepthFunc(GLES20.GL_LEQUAL)
 
-        // Alpha blending for ghost piece and transparent materials
-        GLES20.glEnable(GLES20.GL_BLEND)
-        GLES20.glBlendFunc(GLES20.GL_SRC_ALPHA, GLES20.GL_ONE_MINUS_SRC_ALPHA)
+        // Blending starts DISABLED — only enabled for transparent objects
+        GLES20.glDisable(GLES20.GL_BLEND)
 
-        // Back-face culling — requires correct CCW winding in CubeGeometry
         GLES20.glEnable(GLES20.GL_CULL_FACE)
         GLES20.glCullFace(GLES20.GL_BACK)
         GLES20.glFrontFace(GLES20.GL_CCW)
@@ -98,17 +88,9 @@ class BoardRenderer(private val context: Context) : GLSurfaceView.Renderer {
         viewportHeight = height
         GLES20.glViewport(0, 0, width, height)
         camera.setProjection(width, height)
-        lastZoom = camera.zoom
     }
 
     override fun onDrawFrame(gl: GL10?) {
-        // Update projection if zoom changed
-        if (camera.zoom != lastZoom) {
-            camera.setProjection(viewportWidth, viewportHeight)
-            lastZoom = camera.zoom
-        }
-
-        // Background color from theme
         val bgR = ((bgColorArgb shr 16) and 0xFF) / 255f
         val bgG = ((bgColorArgb shr 8) and 0xFF) / 255f
         val bgB = (bgColorArgb and 0xFF) / 255f
@@ -121,12 +103,15 @@ class BoardRenderer(private val context: Context) : GLSurfaceView.Renderer {
         val material = currentMaterial
         val matParams = textures.getParams(material)
 
-        // 1. Grid (always first)
+        // ---- PASS 1: Grid (needs blending for alpha lines) ----
+        GLES20.glEnable(GLES20.GL_BLEND)
+        GLES20.glBlendFunc(GLES20.GL_SRC_ALPHA, GLES20.GL_ONE_MINUS_SRC_ALPHA)
         grid.draw(gridShader, camera.getViewProjection())
+        GLES20.glDisable(GLES20.GL_BLEND)
 
-        // 2. Opaque blocks
+        // ---- PASS 2: Opaque solid cubes (NO blending) ----
         cubeShader.use()
-        setupCubeShaderUniforms(material, matParams)
+        setupCubeUniforms(material, matParams)
 
         // Board blocks
         if (state.board.isNotEmpty()) {
@@ -145,33 +130,35 @@ class BoardRenderer(private val context: Context) : GLSurfaceView.Renderer {
             }
         }
 
-        // 3. Current piece (slightly brighter to distinguish from board)
+        // Current piece — brighter to distinguish
         val piece = state.currentPiece
         if (piece != null) {
             val rgb = pieceColorRGB(piece.type.colorIndex)
-            // Brighten the active piece slightly
-            val brightRgb = floatArrayOf(
-                (rgb[0] * 1.15f).coerceAtMost(1f),
-                (rgb[1] * 1.15f).coerceAtMost(1f),
-                (rgb[2] * 1.15f).coerceAtMost(1f)
+            val bright = floatArrayOf(
+                (rgb[0] * 1.2f).coerceAtMost(1f),
+                (rgb[1] * 1.2f).coerceAtMost(1f),
+                (rgb[2] * 1.2f).coerceAtMost(1f)
             )
             for (b in piece.blocks) {
                 val px = piece.x + b.x
                 val py = piece.y + b.y
                 val pz = piece.z + b.z
-                if (py >= 0) {
-                    drawCube(px.toFloat(), py.toFloat(), pz.toFloat(), brightRgb, 1f, 0f)
-                }
+                if (py >= 0) drawCube(px.toFloat(), py.toFloat(), pz.toFloat(), bright, 1f, 0f)
             }
         }
 
-        // 4. Ghost piece (transparent, after all opaque geometry)
+        // ---- PASS 3: Ghost piece (transparent, with blending) ----
         if (showGhost && piece != null && state.ghostY < piece.y) {
-            drawGhostPiece(state, piece)
+            GLES20.glEnable(GLES20.GL_BLEND)
+            GLES20.glBlendFunc(GLES20.GL_SRC_ALPHA, GLES20.GL_ONE_MINUS_SRC_ALPHA)
+            GLES20.glDepthMask(false)
+            drawGhost(state, piece)
+            GLES20.glDepthMask(true)
+            GLES20.glDisable(GLES20.GL_BLEND)
         }
     }
 
-    private fun setupCubeShaderUniforms(material: PieceMaterial, params: MaterialShaderParams) {
+    private fun setupCubeUniforms(material: PieceMaterial, params: MaterialShaderParams) {
         textures.bind(material)
         cubeShader.setUniform1i("uTexture", 0)
         cubeShader.setUniform3f("uLightDir", lightDir[0], lightDir[1], lightDir[2])
@@ -179,7 +166,6 @@ class BoardRenderer(private val context: Context) : GLSurfaceView.Renderer {
         cubeShader.setUniform1f("uTextureStrength", params.textureStrength)
         cubeShader.setUniform1f("uSpecularPower", params.specularPower)
         cubeShader.setUniform1f("uSpecularStrength", params.specularStrength)
-        cubeShader.setUniform1f("uTransparency", params.transparency)
     }
 
     private fun drawCube(x: Float, y: Float, z: Float, rgb: FloatArray, alpha: Float, clearing: Float) {
@@ -196,11 +182,9 @@ class BoardRenderer(private val context: Context) : GLSurfaceView.Renderer {
         cube.draw(cubeShader)
     }
 
-    private fun drawGhostPiece(state: Game3DState, piece: Piece3DState) {
+    private fun drawGhost(state: Game3DState, piece: Piece3DState) {
         ghostShader.use()
         val rgb = pieceColorRGB(piece.type.colorIndex)
-
-        GLES20.glDepthMask(false) // Don't write depth for transparent ghost
 
         for (b in piece.blocks) {
             val px = piece.x + b.x
@@ -214,25 +198,23 @@ class BoardRenderer(private val context: Context) : GLSurfaceView.Renderer {
                 ghostShader.setUniformMatrix4fv("uMVPMatrix", mvpMatrix)
                 ghostShader.setUniformMatrix4fv("uModelMatrix", modelMatrix)
                 ghostShader.setUniform3f("uBaseColor", rgb[0], rgb[1], rgb[2])
-                ghostShader.setUniform1f("uAlpha", 0.22f)
+                ghostShader.setUniform1f("uAlpha", 0.25f)
                 ghostShader.setUniform3f("uCameraPos", camera.position[0], camera.position[1], camera.position[2])
 
                 cube.draw(ghostShader)
             }
         }
-
-        GLES20.glDepthMask(true)
     }
 
     private fun pieceColorRGB(idx: Int): FloatArray = when (idx) {
-        1 -> floatArrayOf(0.000f, 0.898f, 1.000f) // Cyan
-        2 -> floatArrayOf(1.000f, 0.839f, 0.000f) // Yellow
-        3 -> floatArrayOf(0.667f, 0.000f, 1.000f) // Purple
-        4 -> floatArrayOf(0.000f, 0.902f, 0.463f) // Green
-        5 -> floatArrayOf(1.000f, 0.427f, 0.000f) // Orange
-        6 -> floatArrayOf(1.000f, 0.090f, 0.267f) // Red
-        7 -> floatArrayOf(0.161f, 0.475f, 1.000f) // Blue
-        8 -> floatArrayOf(1.000f, 0.251f, 0.506f) // Pink
+        1 -> floatArrayOf(0.000f, 0.898f, 1.000f)
+        2 -> floatArrayOf(1.000f, 0.839f, 0.000f)
+        3 -> floatArrayOf(0.667f, 0.000f, 1.000f)
+        4 -> floatArrayOf(0.000f, 0.902f, 0.463f)
+        5 -> floatArrayOf(1.000f, 0.427f, 0.000f)
+        6 -> floatArrayOf(1.000f, 0.090f, 0.267f)
+        7 -> floatArrayOf(0.161f, 0.475f, 1.000f)
+        8 -> floatArrayOf(1.000f, 0.251f, 0.506f)
         else -> {
             val r = ((themeColorArgb shr 16) and 0xFF) / 255f
             val g = ((themeColorArgb shr 8) and 0xFF) / 255f
