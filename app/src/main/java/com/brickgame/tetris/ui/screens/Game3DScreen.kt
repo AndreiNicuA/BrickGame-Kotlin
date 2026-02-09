@@ -202,7 +202,7 @@ fun Game3DScreen(
                             Spacer(Modifier.height(8.dp))
                             ActionButton("SETTINGS", onOpenSettings, width = 160.dp, height = 34.dp, backgroundColor = theme.buttonSecondary)
                             Spacer(Modifier.height(8.dp))
-                            ActionButton("QUIT", onQuit, width = 160.dp, height = 34.dp, backgroundColor = Color(0xFFB91C1C))
+                            ActionButton("LEAVE", onQuit, width = 160.dp, height = 34.dp, backgroundColor = Color(0xFFB91C1C))
                         }
                     }
                     GameStatus.GAME_OVER -> {

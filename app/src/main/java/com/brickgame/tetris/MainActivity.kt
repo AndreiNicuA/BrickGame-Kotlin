@@ -9,6 +9,7 @@ import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -21,7 +22,10 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.brickgame.tetris.game.GameStatus
 import com.brickgame.tetris.ui.layout.FreeformEditorScreen
@@ -32,6 +36,7 @@ import com.brickgame.tetris.ui.screens.GameScreen
 import com.brickgame.tetris.ui.screens.GameViewModel
 import com.brickgame.tetris.ui.screens.SettingsScreen
 import com.brickgame.tetris.ui.theme.BrickGameTheme
+import kotlinx.coroutines.delay
 import kotlin.math.*
 
 class MainActivity : ComponentActivity() {
@@ -68,16 +73,31 @@ class MainActivity : ComponentActivity() {
             val freeformEditMode by vm.freeformEditMode.collectAsState()
             val game3DState by vm.game3DState.collectAsState()
 
-            // Fade in content once data loaded, fade out splash
-            val contentAlpha by animateFloatAsState(
-                targetValue = if (dataLoaded) 1f else 0f,
-                animationSpec = tween(durationMillis = 600, easing = EaseOut),
-                label = "contentFade"
-            )
+            // 3-phase launch: LOADING → WELCOME → READY
+            var phase by remember { mutableStateOf(0) } // 0=loading, 1=welcome, 2=ready
+
+            // Phase transitions
+            LaunchedEffect(dataLoaded) {
+                if (dataLoaded && phase == 0) {
+                    phase = 1 // show welcome
+                    delay(2000) // welcome visible for 2s
+                    phase = 2 // show content
+                }
+            }
+
+            // Animated alphas for each phase
             val splashAlpha by animateFloatAsState(
-                targetValue = if (dataLoaded) 0f else 1f,
-                animationSpec = tween(durationMillis = 400, delayMillis = 200, easing = EaseIn),
-                label = "splashFade"
+                targetValue = if (phase == 0) 1f else 0f,
+                animationSpec = tween(500, easing = EaseOut), label = "splash"
+            )
+            val welcomeAlpha by animateFloatAsState(
+                targetValue = if (phase == 1) 1f else 0f,
+                animationSpec = tween(if (phase == 1) 600 else 500, easing = if (phase == 1) EaseOut else EaseIn),
+                label = "welcome"
+            )
+            val contentAlpha by animateFloatAsState(
+                targetValue = if (phase == 2) 1f else 0f,
+                animationSpec = tween(700, easing = EaseOut), label = "content"
             )
 
             val config = LocalConfiguration.current
@@ -87,12 +107,20 @@ class MainActivity : ComponentActivity() {
 
             BrickGameTheme(gameTheme = theme) {
                 Box(Modifier.fillMaxSize()) {
-                    // Splash — animated falling pieces + rotating 3D cube
+                    // Layer 1: Splash — rotating cube + falling pieces (visible during loading)
                     if (splashAlpha > 0.01f) {
                         SplashScreen(Modifier.fillMaxSize().alpha(splashAlpha))
                     }
 
-                    // Main content — fades in
+                    // Layer 2: Welcome — "Welcome, Player" over the falling pieces background
+                    if (welcomeAlpha > 0.01f) {
+                        WelcomeScreen(
+                            playerName = name,
+                            modifier = Modifier.fillMaxSize().alpha(welcomeAlpha)
+                        )
+                    }
+
+                    // Layer 3: Main content — landing page, game, settings
                     if (contentAlpha > 0.01f) {
                         Box(Modifier.fillMaxSize().alpha(contentAlpha)) {
                 BackHandler(enabled = freeformEditMode) { vm.exitFreeformEditMode() }
@@ -199,6 +227,73 @@ class MainActivity : ComponentActivity() {
                     }
                 }
             }
+        }
+    }
+}
+
+// ==================== WELCOME SCREEN ====================
+
+@Composable
+private fun WelcomeScreen(playerName: String, modifier: Modifier = Modifier) {
+    val bgColor = Color(0xFF0A0A0A)
+    val accentColor = Color(0xFFF4D03F)
+
+    // Falling pieces in background (same as splash but dimmer)
+    val inf = rememberInfiniteTransition(label = "welcomeBg")
+    val fallAnim by inf.animateFloat(0f, 500000f, infiniteRepeatable(tween(750000, easing = LinearEasing)), label = "wFall")
+
+    data class FP(val col: Float, val speed: Float, val sz: Float, val shape: Int, val colorIdx: Int, val startY: Float)
+    val pieces = remember {
+        val rng = java.util.Random(77)
+        (0..120).map { FP(rng.nextFloat(), 0.3f + rng.nextFloat() * 0.8f, 4f + rng.nextFloat() * 6f, it % 7, it % 7, rng.nextFloat() * 8000f) }
+    }
+    val pieceColors = remember { listOf(Color(0xFFFF4444), Color(0xFF44AAFF), Color(0xFFFFAA00), Color(0xFF44FF44), Color(0xFFFF44FF), Color(0xFF44FFFF), Color(0xFFF4D03F)) }
+    val shapes = remember { listOf(
+        listOf(0 to 0, 1 to 0, 0 to 1, 1 to 1), listOf(0 to 0, 1 to 0, 2 to 0, 3 to 0),
+        listOf(0 to 0, 1 to 0, 2 to 0, 2 to 1), listOf(0 to 0, 1 to 0, 2 to 0, 0 to 1),
+        listOf(0 to 0, 1 to 0, 1 to 1, 2 to 1), listOf(1 to 0, 2 to 0, 0 to 1, 1 to 1),
+        listOf(0 to 0, 1 to 0, 2 to 0, 1 to 1),
+    ) }
+
+    Box(modifier.background(bgColor), contentAlignment = Alignment.Center) {
+        // Falling pieces background (dimmer than splash)
+        Canvas(Modifier.fillMaxSize()) {
+            val w = size.width; val h = size.height; val wrapH = h + 400f
+            pieces.forEach { p ->
+                val rawY = p.startY + fallAnim * p.speed
+                val baseY = (rawY % wrapH) - 200f; val x = p.col * w; val s = p.sz
+                val pColor = pieceColors[p.colorIdx]; val shape = shapes[p.shape % shapes.size]
+                shape.forEach { (dx, dy) ->
+                    drawRoundRect(pColor.copy(0.08f), Offset(x + dx * (s + 2), baseY + dy * (s + 2)), Size(s, s), CornerRadius(2f))
+                }
+                for (ti in 1..2) {
+                    val ty = baseY - ti * (s + 2) * 1.1f; val ta = 0.04f * (1f - ti / 3f)
+                    shape.forEach { (dx, dy) ->
+                        drawRoundRect(Color(0xFF22C55E).copy(ta), Offset(x + dx * (s + 2), ty + dy * (s + 2)), Size(s * 0.9f, s * 0.9f), CornerRadius(2f))
+                    }
+                }
+            }
+        }
+
+        // Welcome text
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                "Welcome,",
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Light,
+                fontFamily = FontFamily.Monospace,
+                color = Color.White.copy(0.7f),
+                letterSpacing = 2.sp
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                playerName.ifEmpty { "Player" },
+                fontSize = 32.sp,
+                fontWeight = FontWeight.Bold,
+                fontFamily = FontFamily.Monospace,
+                color = accentColor,
+                letterSpacing = 4.sp
+            )
         }
     }
 }

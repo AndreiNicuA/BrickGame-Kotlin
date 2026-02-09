@@ -705,7 +705,7 @@ private fun FallingPiecesBackground(theme: com.brickgame.tetris.ui.theme.GameThe
             Text("PAUSED", fontSize = 28.sp, fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace, color = Color.White, letterSpacing = 4.sp)
             Spacer(Modifier.height(28.dp)); ActionButton("RESUME", onResume, width = 160.dp, height = 48.dp)
             Spacer(Modifier.height(12.dp)); ActionButton("SETTINGS", onSet, width = 160.dp, height = 42.dp, backgroundColor = LocalGameTheme.current.buttonSecondary)
-            Spacer(Modifier.height(12.dp)); ActionButton("QUIT", onQuit, width = 160.dp, height = 42.dp, backgroundColor = Color(0xFFB91C1C))
+            Spacer(Modifier.height(12.dp)); ActionButton("LEAVE", onQuit, width = 160.dp, height = 42.dp, backgroundColor = Color(0xFFB91C1C))
         }
     }
 }
