@@ -3,11 +3,11 @@ package com.brickgame.tetris.ui.screens
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -41,17 +41,14 @@ fun Game3DScreen(
 ) {
     val theme = LocalGameTheme.current
 
-    // Camera state
+    // Camera state — full 360° on both axes
     var cameraY by remember { mutableFloatStateOf(35f) }
     var cameraX by remember { mutableFloatStateOf(25f) }
+    var zoom by remember { mutableFloatStateOf(1f) }
     var starWars by remember { mutableStateOf(false) }
-    var showCamSettings by remember { mutableStateOf(false) }
-    var fov by remember { mutableFloatStateOf(700f) }
-    var camDist by remember { mutableFloatStateOf(16f) }
 
-    // Star Wars fixed view: looking up into the board
-    val effectiveCamY = if (starWars) 0f else cameraY
-    val effectiveCamX = if (starWars) 75f else cameraX
+    // Snap camera to a predefined view
+    fun snapTo(y: Float, x: Float) { cameraY = y; cameraX = x }
 
     Box(Modifier.fillMaxSize().background(theme.backgroundColor).systemBarsPadding()) {
         Column(Modifier.fillMaxSize()) {
@@ -94,35 +91,78 @@ fun Game3DScreen(
                 }
             }
 
-            // 3D Board — swipe to rotate camera
+            // 3D Board + ViewCube overlay
             Box(
                 Modifier.weight(1f).fillMaxWidth()
                     .pointerInput(starWars) {
                         if (!starWars) {
-                            detectDragGestures { change, dragAmount ->
-                                change.consume()
-                                cameraY = (cameraY + dragAmount.x * 0.3f) % 360f
-                                cameraX = (cameraX - dragAmount.y * 0.2f).coerceIn(-10f, 80f)
+                            detectTransformGestures { _, pan, gestureZoom, _ ->
+                                // Drag to rotate
+                                cameraY = (cameraY + pan.x * 0.3f) % 360f
+                                cameraX = (cameraX - pan.y * 0.2f).coerceIn(-89f, 89f)
+                                // Pinch to zoom
+                                zoom = (zoom * gestureZoom).coerceIn(0.4f, 3f)
                             }
                         }
-                    },
-                contentAlignment = Alignment.Center
+                    }
             ) {
                 Tetris3DBoard(
                     state = state,
                     modifier = Modifier.fillMaxSize().padding(2.dp),
                     showGhost = true,
-                    cameraAngleY = effectiveCamY,
-                    cameraAngleX = effectiveCamX,
+                    cameraAngleY = cameraY,
+                    cameraAngleX = cameraX,
+                    zoom = zoom,
                     themePixelOn = theme.pixelOn,
                     themeBg = theme.backgroundColor,
                     starWarsMode = starWars
                 )
 
+                // ViewCube — top right corner (only in free camera mode)
+                if (!starWars) {
+                    Box(
+                        Modifier.align(Alignment.TopEnd).padding(8.dp).size(70.dp)
+                            .pointerInput(Unit) {
+                                detectTapGestures { offset ->
+                                    // Determine which face was tapped based on tap position
+                                    val cx = offset.x / size.width
+                                    val cy = offset.y / size.height
+                                    when {
+                                        cy < 0.3f -> snapTo(cameraY, 89f)    // Top area → top view
+                                        cy > 0.7f -> snapTo(cameraY, -89f)   // Bottom area → bottom view
+                                        cx < 0.3f -> snapTo(-90f, 20f)       // Left → left view
+                                        cx > 0.7f -> snapTo(90f, 20f)        // Right → right view
+                                        else -> snapTo(0f, 20f)              // Center → front view
+                                    }
+                                }
+                            }
+                    ) {
+                        ViewCube(
+                            cameraAngleY = cameraY,
+                            cameraAngleX = cameraX,
+                            modifier = Modifier.fillMaxSize(),
+                            themeColor = theme.accentColor
+                        )
+                    }
+                }
+
+                // Zoom buttons — top left (only in free camera mode)
+                if (!starWars) {
+                    Column(
+                        Modifier.align(Alignment.TopStart).padding(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        ZoomBtn("+") { zoom = (zoom * 1.2f).coerceAtMost(3f) }
+                        ZoomBtn("−") { zoom = (zoom / 1.2f).coerceAtLeast(0.4f) }
+                        // Reset zoom
+                        ZoomBtn("⌂") { zoom = 1f; snapTo(35f, 25f) }
+                    }
+                }
+
                 // Overlays
                 when (state.status) {
                     GameStatus.MENU -> {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
                             Text("3D", fontSize = 48.sp, fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace,
                                 color = theme.accentColor, letterSpacing = 8.sp)
                             Text("TETRIS", fontSize = 28.sp, fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace,
@@ -132,7 +172,8 @@ fun Game3DScreen(
                         }
                     }
                     GameStatus.GAME_OVER -> {
-                        Column(Modifier.background(Color.Black.copy(0.85f), RoundedCornerShape(16.dp)).padding(24.dp),
+                        Column(Modifier.align(Alignment.Center)
+                            .background(Color.Black.copy(0.85f), RoundedCornerShape(16.dp)).padding(24.dp),
                             horizontalAlignment = Alignment.CenterHorizontally) {
                             Text("GAME OVER", fontSize = 22.sp, fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace, color = Color(0xFFFF4444))
                             Spacer(Modifier.height(6.dp))
@@ -143,7 +184,8 @@ fun Game3DScreen(
                         }
                     }
                     GameStatus.PAUSED -> {
-                        Column(Modifier.background(Color.Black.copy(0.85f), RoundedCornerShape(16.dp)).padding(24.dp),
+                        Column(Modifier.align(Alignment.Center)
+                            .background(Color.Black.copy(0.85f), RoundedCornerShape(16.dp)).padding(24.dp),
                             horizontalAlignment = Alignment.CenterHorizontally) {
                             Text("PAUSED", fontSize = 22.sp, fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace, color = theme.textPrimary)
                             Spacer(Modifier.height(16.dp))
@@ -151,32 +193,6 @@ fun Game3DScreen(
                         }
                     }
                     else -> {}
-                }
-
-                // Camera settings popup
-                if (showCamSettings) {
-                    Column(
-                        Modifier.align(Alignment.TopEnd).padding(top = 8.dp, end = 8.dp)
-                            .width(180.dp)
-                            .background(Color.Black.copy(0.9f), RoundedCornerShape(12.dp))
-                            .padding(12.dp)
-                    ) {
-                        Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
-                            Text("Camera", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                            Text("✕", color = Color.White.copy(0.5f), fontSize = 16.sp,
-                                modifier = Modifier.clickable { showCamSettings = false }.padding(4.dp))
-                        }
-                        Spacer(Modifier.height(8.dp))
-                        CamSlider("Angle", cameraY, -180f, 180f) { cameraY = it }
-                        CamSlider("Tilt", cameraX, -10f, 80f) { cameraX = it }
-                        Spacer(Modifier.height(4.dp))
-                        // Preset buttons
-                        Row(Modifier.fillMaxWidth(), Arrangement.spacedBy(4.dp)) {
-                            CamPreset("Front", Modifier.weight(1f)) { cameraY = 0f; cameraX = 15f }
-                            CamPreset("Side", Modifier.weight(1f)) { cameraY = 90f; cameraX = 20f }
-                            CamPreset("Top", Modifier.weight(1f)) { cameraY = 35f; cameraX = 70f }
-                        }
-                    }
                 }
             }
 
@@ -204,41 +220,51 @@ fun Game3DScreen(
                         { if (state.status == GameStatus.MENU) onStart() else onPause() },
                         width = 54.dp, height = 24.dp
                     )
-                    // Toggle row: SW, Gravity, Cam
+                    // Toggles
                     Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
                         MiniToggle("SW", starWars, theme.accentColor) { starWars = !starWars }
                         MiniToggle(if (state.autoGravity) "▼" else "▪", state.autoGravity, Color(0xFF3B82F6)) { onToggleGravity() }
-                        MiniToggle("⚙", showCamSettings, Color(0xFFF59E0B)) { showCamSettings = !showCamSettings }
                     }
                     ActionButton("···", onOpenSettings, width = 36.dp, height = 18.dp)
                 }
 
-                // Right: rotations + drop
-                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                    RotateButton(onRotateXZ, 48.dp)
-                    // Soft drop (single step down)
-                    TapButton(ButtonIcon.DOWN, 42.dp) { onSoftDrop() }
+                // Right: rotations + drop — LABELED buttons
+                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    // Rotate XZ — horizontal spin (like looking from above)
+                    LabeledRotateBtn("XZ", theme.accentColor) { onRotateXZ() }
+                    // Rotate XY — tilt forward/back
+                    LabeledRotateBtn("XY", Color(0xFF3B82F6)) { onRotateXY() }
+                    // Soft drop
+                    TapButton(ButtonIcon.DOWN, 40.dp) { onSoftDrop() }
                     // Hard drop
                     Box(
-                        Modifier.size(48.dp).clip(CircleShape)
+                        Modifier.size(44.dp).clip(CircleShape)
                             .background(theme.buttonPrimary)
                             .clickable { onHardDrop() },
                         contentAlignment = Alignment.Center
                     ) {
-                        Text("⏬", fontSize = 20.sp, color = theme.textPrimary)
-                    }
-                    // Tilt rotate
-                    Box(
-                        Modifier.size(38.dp).clip(CircleShape)
-                            .background(theme.buttonPrimary.copy(0.6f))
-                            .clickable { onRotateXY() },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text("⤵", fontSize = 16.sp, color = theme.textPrimary.copy(0.8f))
+                        Text("⏬", fontSize = 18.sp, color = theme.textPrimary)
                     }
                 }
             }
             Spacer(Modifier.height(2.dp))
+        }
+    }
+}
+
+@Composable
+private fun LabeledRotateBtn(label: String, color: Color, onClick: () -> Unit) {
+    Box(
+        Modifier.size(width = 52.dp, height = 44.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .background(color.copy(0.15f))
+            .clickable { onClick() },
+        contentAlignment = Alignment.Center
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text("↻", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = color)
+            Text(label, fontSize = 9.sp, fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace,
+                color = color.copy(0.8f), letterSpacing = 1.sp)
         }
     }
 }
@@ -257,24 +283,15 @@ private fun MiniToggle(label: String, active: Boolean, color: Color, onClick: ()
 }
 
 @Composable
-private fun CamSlider(label: String, value: Float, min: Float, max: Float, onChange: (Float) -> Unit) {
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Text(label, color = Color.White.copy(0.6f), fontSize = 10.sp, fontFamily = FontFamily.Monospace,
-            modifier = Modifier.width(36.dp))
-        Slider(value = value, onValueChange = onChange, valueRange = min..max,
-            modifier = Modifier.weight(1f).height(20.dp),
-            colors = SliderDefaults.colors(thumbColor = Color(0xFF22C55E), activeTrackColor = Color(0xFF22C55E)))
-        Text("${value.toInt()}°", color = Color.White.copy(0.4f), fontSize = 9.sp,
-            modifier = Modifier.width(28.dp), textAlign = TextAlign.End)
-    }
-}
-
-@Composable
-private fun CamPreset(label: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
-    Box(modifier.clip(RoundedCornerShape(4.dp)).background(Color.White.copy(0.08f))
-        .clickable { onClick() }.padding(vertical = 4.dp),
-        contentAlignment = Alignment.Center) {
-        Text(label, fontSize = 9.sp, color = Color.White.copy(0.6f), fontFamily = FontFamily.Monospace)
+private fun ZoomBtn(label: String, onClick: () -> Unit) {
+    Box(
+        Modifier.size(32.dp).clip(CircleShape)
+            .background(Color.White.copy(0.08f))
+            .clickable { onClick() },
+        contentAlignment = Alignment.Center
+    ) {
+        Text(label, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White.copy(0.7f),
+            textAlign = TextAlign.Center)
     }
 }
 
