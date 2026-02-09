@@ -1,9 +1,8 @@
 package com.brickgame.tetris.ui.screens
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -15,9 +14,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.pointer.PointerEventPass
-import androidx.compose.ui.input.pointer.changedToUp
-import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -26,20 +26,9 @@ import androidx.compose.ui.unit.sp
 import com.brickgame.tetris.game.*
 import com.brickgame.tetris.ui.components.*
 import com.brickgame.tetris.ui.theme.LocalGameTheme
+import com.brickgame.tetris.gl.GLBoardView
 import kotlin.math.*
 
-/**
- * 3D Tetris game screen.
- *
- * Controls:
- *   D-pad (left):  move piece on XZ plane (camera-relative)
- *   Right column:  ROT XZ / ROT XY side by side, hard drop (UP arrow) / soft drop (DOWN arrow)
- *
- * Gestures on board:
- *   1 finger drag = rotate camera
- *   2 fingers same direction = pan
- *   2 fingers spread/pinch = zoom
- */
 @Composable
 fun Game3DScreen(
     state: Game3DState,
@@ -67,10 +56,6 @@ fun Game3DScreen(
     var starWars by remember { mutableStateOf(false) }
     var showCamSettings by remember { mutableStateOf(false) }
 
-    val effectiveAz = if (starWars) 0f else azimuth
-    val effectiveEl = if (starWars) 75f else elevation
-
-    // Camera-relative movement for D-pad
     fun moveCameraRelative(screenDx: Int, screenDz: Int) {
         if (starWars) { onMoveX(screenDx); onMoveZ(screenDz); return }
         val rad = Math.toRadians(azimuth.toDouble())
@@ -83,7 +68,7 @@ fun Game3DScreen(
 
     Box(Modifier.fillMaxSize().background(theme.backgroundColor).systemBarsPadding()) {
         Column(Modifier.fillMaxSize()) {
-            // Info bar
+            // === Info bar ===
             Row(
                 Modifier.fillMaxWidth().background(Color.Black.copy(0.4f))
                     .padding(horizontal = 10.dp, vertical = 5.dp),
@@ -114,61 +99,31 @@ fun Game3DScreen(
                 }
             }
 
-            // 3D Board with gesture handling
-            Box(
-                Modifier.weight(1f).fillMaxWidth()
-                    .pointerInput(starWars) {
-                        if (starWars) return@pointerInput
-                        awaitEachGesture {
-                            val first = awaitFirstDown(pass = PointerEventPass.Main)
-                            first.consume()
-                            var prevCX = first.position.x; var prevCY = first.position.y
-                            var prevSpread = 0f; var fingerCount = 1
-                            while (true) {
-                                val event = awaitPointerEvent(PointerEventPass.Main)
-                                val pressed = event.changes.filter { !it.changedToUp() && it.pressed }
-                                if (pressed.isEmpty()) break
-                                val centX = pressed.map { it.position.x }.average().toFloat()
-                                val centY = pressed.map { it.position.y }.average().toFloat()
-                                val dx = centX - prevCX; val dy = centY - prevCY
-                                if (pressed.size >= 2) {
-                                    fingerCount = 2
-                                    val spread = if (pressed.size == 2) {
-                                        val d = pressed[0].position - pressed[1].position
-                                        sqrt(d.x * d.x + d.y * d.y)
-                                    } else 0f
-                                    if (prevSpread > 0f && spread > 0f) {
-                                        val sd = spread - prevSpread
-                                        if (abs(sd) > 3f) zoom = (zoom + sd * 0.003f).coerceIn(0.3f, 3f)
-                                        else { panX += dx; panY += dy }
-                                    }
-                                    prevSpread = spread
-                                } else if (fingerCount == 1) {
-                                    azimuth = (azimuth + dx * 0.3f) % 360f
-                                    elevation = (elevation - dy * 0.2f) % 360f
-                                }
-                                prevCX = centX; prevCY = centY
-                                pressed.forEach { it.consume() }
-                            }
+            // === 3D Board ===
+            Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                if (starWars) {
+                    StarWarsBoardCanvas(state, Modifier.fillMaxSize().padding(2.dp), true, theme.pixelOn)
+                } else {
+                    GLBoardView(
+                        state = state,
+                        modifier = Modifier.fillMaxSize().padding(2.dp),
+                        showGhost = true,
+                        cameraAngleY = azimuth,
+                        cameraAngleX = elevation,
+                        panOffsetX = panX,
+                        panOffsetY = panY,
+                        zoom = zoom,
+                        themePixelOn = theme.pixelOn.value.toLong(),
+                        themeBg = theme.backgroundColor.value.toLong(),
+                        material = material,
+                        onCameraChange = { az, el, z, px, py ->
+                            azimuth = az; elevation = el; zoom = z; panX = px; panY = py
                         }
-                    },
-                contentAlignment = Alignment.Center
-            ) {
-                Tetris3DBoard(
-                    state = state, modifier = Modifier.fillMaxSize().padding(2.dp),
-                    showGhost = true, cameraAngleY = effectiveAz, cameraAngleX = effectiveEl,
-                    panOffsetX = panX, panOffsetY = panY, zoom = zoom,
-                    themePixelOn = theme.pixelOn, themeBg = theme.backgroundColor, starWarsMode = starWars,
-                    material = material
-                )
-
-                // ViewCube — top right
-                if (!starWars) {
-                    ViewCube(azimuth, elevation, Modifier.align(Alignment.TopEnd).padding(8.dp).size(60.dp))
+                    )
                 }
 
-                // Zoom +/- buttons
                 if (!starWars) {
+                    ViewCube(azimuth, elevation, Modifier.align(Alignment.TopEnd).padding(8.dp).size(60.dp))
                     Column(Modifier.align(Alignment.CenterEnd).padding(end = 6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Box(Modifier.size(32.dp).clip(CircleShape).background(Color.White.copy(0.1f))
                             .clickable { zoom = (zoom + 0.15f).coerceAtMost(3f) }, contentAlignment = Alignment.Center) {
@@ -221,7 +176,6 @@ fun Game3DScreen(
                     else -> {}
                 }
 
-                // Camera settings panel
                 if (showCamSettings) {
                     Column(Modifier.align(Alignment.TopEnd).padding(top = 70.dp, end = 8.dp)
                         .width(190.dp).background(Color.Black.copy(0.92f), RoundedCornerShape(12.dp)).padding(12.dp)) {
@@ -232,7 +186,7 @@ fun Game3DScreen(
                         }
                         Spacer(Modifier.height(6.dp))
                         CamSlider("Orbit", azimuth, -180f, 180f) { azimuth = it }
-                        CamSlider("Tilt", elevation, -180f, 180f) { elevation = it }
+                        CamSlider("Tilt", elevation, -85f, 85f) { elevation = it }
                         CamSlider("Zoom", zoom, 0.3f, 3f) { zoom = it }
                         CamSlider("Pan X", panX, -200f, 200f) { panX = it }
                         CamSlider("Pan Y", panY, -200f, 200f) { panY = it }
@@ -248,15 +202,13 @@ fun Game3DScreen(
                 }
             }
 
-            // Controls row
+            // === Controls row ===
             Row(
                 Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 4.dp),
                 Arrangement.SpaceBetween, Alignment.CenterVertically
             ) {
-                // Left: D-pad moves piece on XZ plane (camera-relative)
                 DPad(
-                    buttonSize = 44.dp,
-                    rotateInCenter = false,
+                    buttonSize = 44.dp, rotateInCenter = false,
                     onUpPress = { moveCameraRelative(0, 1) },
                     onDownPress = { moveCameraRelative(0, -1) },
                     onDownRelease = {},
@@ -265,8 +217,6 @@ fun Game3DScreen(
                     onRightPress = { moveCameraRelative(1, 0) },
                     onRightRelease = {}
                 )
-
-                // Center: action buttons
                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(3.dp)) {
                     ActionButton("HOLD", onHold, width = 54.dp, height = 24.dp)
                     ActionButton(
@@ -281,15 +231,11 @@ fun Game3DScreen(
                     }
                     ActionButton("···", onOpenSettings, width = 36.dp, height = 18.dp)
                 }
-
-                // Right: Rotate buttons + hard drop / soft drop
                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    // Rotate buttons with intuitive labels
                     Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                         ActionButton("↻ SPIN", onRotateXZ, width = 56.dp, height = 36.dp)
                         ActionButton("↻ TILT", onRotateXY, width = 56.dp, height = 36.dp)
                     }
-                    // Hard drop (UP arrow) / Soft drop (DOWN arrow)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         TapButton(ButtonIcon.UP, 42.dp) { onHardDrop() }
                         HoldButton(ButtonIcon.DOWN, 42.dp, onPress = { onSoftDrop() }, onRelease = {})
@@ -301,19 +247,67 @@ fun Game3DScreen(
     }
 }
 
+// ===== Star Wars Canvas Renderer =====
+
+@Composable
+private fun StarWarsBoardCanvas(state: Game3DState, modifier: Modifier, showGhost: Boolean, themeColor: Color) {
+    Canvas(modifier) {
+        val w = size.width; val h = size.height; val bw = Tetris3DGame.BOARD_W; val bh = Tetris3DGame.BOARD_H
+        val vpX = w / 2f; val bottomY = h * 0.97f; val topY = h * 0.05f; val bottomHalfW = w * 0.45f; val topHalfW = w * 0.12f
+        fun rp(row: Int): SWRowParams { val t = row.toFloat() / bh; val sy = bottomY + (topY - bottomY) * t; val hw = bottomHalfW + (topHalfW - bottomHalfW) * t; return SWRowParams(sy, vpX - hw, hw * 2f / bw, (bottomY - topY) / bh * (1f - t * 0.35f), 1f - t * 0.5f) }
+        for (row in 0..bh) { val t = row.toFloat() / bh; val sy = bottomY + (topY - bottomY) * t; val hw = bottomHalfW + (topHalfW - bottomHalfW) * t; drawLine(themeColor.copy(0.06f * (1f - t * 0.6f)), Offset(vpX - hw, sy), Offset(vpX + hw, sy), 0.5f) }
+        for (col in 0..bw) { val bxp = vpX - bottomHalfW + col * (bottomHalfW * 2 / bw); val txp = vpX - topHalfW + col * (topHalfW * 2 / bw); drawLine(themeColor.copy(0.04f), Offset(bxp, bottomY), Offset(txp, topY), 0.5f) }
+        for (row in bh - 1 downTo 0) { val r = rp(row); for (col in 0 until bw) { var ci = 0; if (state.board.isNotEmpty() && row < state.board.size) { for (z in 0 until Tetris3DGame.BOARD_D) { if (z < state.board[row].size && col < state.board[row][z].size) { val c = state.board[row][z][col]; if (c > 0) { ci = c; break } } } }; if (ci > 0) drawSWBlock(r, col, swColor(ci, themeColor), r.alpha) } }
+        val piece = state.currentPiece
+        if (piece != null && showGhost && state.ghostY < piece.y) { for (b in piece.blocks) { val row = state.ghostY + b.y; val col = piece.x + b.x; if (row in 0 until bh && col in 0 until bw) drawSWBlock(rp(row), col, themeColor, 0.15f * rp(row).alpha) } }
+        if (piece != null) { for (b in piece.blocks) { val row = piece.y + b.y; val col = piece.x + b.x; if (row in 0 until bh && col in 0 until bw) drawSWBlock(rp(row), col, swColor(piece.type.colorIndex, themeColor), rp(row).alpha) } }
+    }
+}
+
+private data class SWRowParams(val y: Float, val leftX: Float, val cellW: Float, val cellH: Float, val alpha: Float)
+
+private fun DrawScope.drawSWBlock(rp: SWRowParams, col: Int, color: Color, alpha: Float) {
+    val x = rp.leftX + col * rp.cellW; val y = rp.y - rp.cellH; val cw = rp.cellW; val ch = rp.cellH; val a = alpha.coerceIn(0f, 1f); val d = ch * 0.18f
+    drawRect(color.copy(a), Offset(x + 1, y), Size(cw - 2, ch - 1))
+    drawPath(Path().apply { moveTo(x + 1, y); lineTo(x + cw - 1, y); lineTo(x + cw - 1 - d, y - d); lineTo(x + 1 + d, y - d); close() }, swBr(color, 1.1f).copy(a * 0.7f))
+    drawPath(Path().apply { moveTo(x + cw - 1, y); lineTo(x + cw - 1, y + ch - 1); lineTo(x + cw - 1 - d, y + ch - 1 - d); lineTo(x + cw - 1 - d, y - d); close() }, swDk(color, 0.5f).copy(a * 0.6f))
+    drawRect(Color.White.copy(0.18f * a), Offset(x + 2, y + 1), Size(cw * 0.25f, 2f))
+}
+
+private fun swColor(idx: Int, tc: Color): Color = when (idx) { 1 -> Color(0xFF00E5FF); 2 -> Color(0xFFFFD600); 3 -> Color(0xFFAA00FF); 4 -> Color(0xFF00E676); 5 -> Color(0xFFFF6D00); 6 -> Color(0xFFFF1744); 7 -> Color(0xFF2979FF); 8 -> Color(0xFFFF4081); else -> tc }
+private fun swDk(c: Color, f: Float) = Color(c.red * f, c.green * f, c.blue * f, c.alpha)
+private fun swBr(c: Color, f: Float) = Color(minOf(c.red * f, 1f), minOf(c.green * f, 1f), minOf(c.blue * f, 1f), c.alpha)
+
+// ===== Shared Components =====
+
 @Composable
 private fun MiniToggle(label: String, active: Boolean, color: Color, onClick: () -> Unit) {
-    Box(Modifier.clip(RoundedCornerShape(5.dp))
-        .background(if (active) color.copy(0.3f) else Color.White.copy(0.05f))
+    Box(Modifier.clip(RoundedCornerShape(5.dp)).background(if (active) color.copy(0.3f) else Color.White.copy(0.05f))
         .clickable { onClick() }.padding(horizontal = 7.dp, vertical = 3.dp)) {
-        Text(label, fontSize = 9.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace,
-            color = if (active) color else Color.White.copy(0.4f))
+        Text(label, fontSize = 9.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, color = if (active) color else Color.White.copy(0.4f))
     }
 }
 
 @Composable
 private fun CamSlider(label: String, value: Float, min: Float, max: Float, onChange: (Float) -> Unit) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Text(label, color = Color.White.copy(0.6f), fontSize = 9.sp, fontFamily = FontFamily.Monospace, modifier = Modifier.width(34.dp))
+        Slider(value = value, onValueChange = onChange, valueRange = min..max,
+            modifier = Modifier.weight(1f).height(20.dp),
+            colors = SliderDefaults.colors(thumbColor = Color(0xFF22C55E), activeTrackColor = Color(0xFF22C55E)))
+        Text(if (max <= 5f) "%.1f".format(value) else "${value.toInt()}", color = Color.White.copy(0.4f), fontSize = 9.sp,
+            modifier = Modifier.width(30.dp), textAlign = TextAlign.End)
+    }
+}
+
+@Composable
+private fun CamPreset(label: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    Box(modifier.clip(RoundedCornerShape(4.dp)).background(Color.White.copy(0.08f))
+        .clickable { onClick() }.padding(vertical = 4.dp), contentAlignment = Alignment.Center) {
+        Text(label, fontSize = 9.sp, color = Color.White.copy(0.6f), fontFamily = FontFamily.Monospace)
+    }
+}
+) {
         Text(label, color = Color.White.copy(0.6f), fontSize = 9.sp, fontFamily = FontFamily.Monospace, modifier = Modifier.width(34.dp))
         Slider(value = value, onValueChange = onChange, valueRange = min..max,
             modifier = Modifier.weight(1f).height(20.dp),
