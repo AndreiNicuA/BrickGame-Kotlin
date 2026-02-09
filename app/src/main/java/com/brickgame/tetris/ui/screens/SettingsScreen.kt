@@ -258,10 +258,13 @@ fun SettingsScreen(
     LazyColumn(Modifier.fillMaxSize().padding(20.dp)) {
         item { Header("About", onBack); Spacer(Modifier.height(24.dp)) }
         item { Card { Text("BRICK GAME", color = ACC, fontSize = 24.sp, fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace); Text("Kotlin Edition", color = TX, fontSize = 14.sp) } }
-        item { Card { Info("Version", "3.4.1"); Info("Build", "21"); Info("Platform", "Android 8.0+"); Info("Engine", "Compose + Canvas") } }
+        item { Card { Info("Version", "3.5.0"); Info("Build", "315"); Info("Platform", "Android 8.0+"); Info("Engine", "Compose + Canvas") } }
         item { Card { Text("Developer", color = DIM, fontSize = 12.sp); Text("Andrei Anton", color = TX, fontSize = 16.sp, fontWeight = FontWeight.Bold) } }
         item { Lbl("Features") }
         item { Card {
+            Text("3D Tetris mode — isometric + Star Wars perspective", color = TX, fontSize = 12.sp)
+            Text("Free camera rotation with swipe controls", color = TX, fontSize = 12.sp)
+            Text("Manual / auto gravity toggle for 3D mode", color = TX, fontSize = 12.sp)
             Text("5 built-in themes + custom theme editor", color = TX, fontSize = 12.sp)
             Text("5 layouts (Classic, Modern, Fullscreen, One-Hand, Freeform)", color = TX, fontSize = 12.sp)
             Text("Freeform editor: drag, resize, transparency for every element", color = TX, fontSize = 12.sp)
@@ -271,6 +274,8 @@ fun SettingsScreen(
             Text("SRS rotation + wall kicks", color = TX, fontSize = 12.sp)
         } }
         item { Lbl("Changelog") }
+        item { Card { Text("v3.5.0", color = ACC, fontSize = 13.sp, fontWeight = FontWeight.Bold); Text("3D Tetris mode with perspective camera, Star Wars crawl view, camera settings, auto/manual gravity, 8 piece types (5 flat + 3 true-3D), layer clearing", color = TX, fontSize = 12.sp) } }
+        item { Card { Text("v3.4.1", color = ACC, fontSize = 13.sp, fontWeight = FontWeight.Bold); Text("Freeform editor v2: floating toolbar, per-element size/opacity, board outline mode, classic info panel redesign", color = TX, fontSize = 12.sp) } }
         item { Card { Text("v3.2.0", color = ACC, fontSize = 13.sp, fontWeight = FontWeight.Bold); Text("Custom theme & layout editors, drag-and-drop positioning, RGB color picker, grid snap, undo/redo", color = TX, fontSize = 12.sp) } }
         item { Card { Text("v3.0.0", color = ACC, fontSize = 13.sp, fontWeight = FontWeight.Bold); Text("Complete rewrite — new game engine, Canvas rendering, 5 themes, 3 layouts, custom controls, score tracking", color = TX, fontSize = 12.sp) } }
         item { Spacer(Modifier.height(20.dp)) }
