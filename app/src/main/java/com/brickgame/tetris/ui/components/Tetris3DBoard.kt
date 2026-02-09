@@ -21,7 +21,8 @@ fun Tetris3DBoard(
     showGhost: Boolean = true,
     cameraAngleY: Float = 35f,
     cameraAngleX: Float = 25f,
-    zoom: Float = 1f,
+    panOffsetX: Float = 0f,
+    panOffsetY: Float = 0f,
     themePixelOn: Color = Color(0xFF22C55E),
     themeBg: Color = Color(0xFF0A0A0A),
     starWarsMode: Boolean = false
@@ -29,7 +30,7 @@ fun Tetris3DBoard(
     if (starWarsMode) {
         StarWarsBoard(state, modifier, showGhost, themePixelOn)
     } else {
-        FreeCameraBoard(state, modifier, showGhost, cameraAngleY, cameraAngleX, zoom, themePixelOn)
+        FreeCameraBoard(state, modifier, showGhost, cameraAngleY, cameraAngleX, panOffsetX, panOffsetY, themePixelOn)
     }
 }
 
@@ -42,7 +43,8 @@ private fun FreeCameraBoard(
     showGhost: Boolean,
     cameraAngleY: Float,
     cameraAngleX: Float,
-    zoom: Float,
+    panOffsetX: Float,
+    panOffsetY: Float,
     themeColor: Color
 ) {
     Canvas(modifier) {
@@ -52,14 +54,13 @@ private fun FreeCameraBoard(
         val bd = Tetris3DGame.BOARD_D.toFloat()
         val bh = Tetris3DGame.BOARD_H.toFloat()
 
-        // Full 360 rotation on both axes
         val radY = Math.toRadians(cameraAngleY.toDouble())
         val radX = Math.toRadians(cameraAngleX.toDouble())
         val cosY = cos(radY).toFloat(); val sinY = sin(radY).toFloat()
         val cosX = cos(radX).toFloat(); val sinX = sin(radX).toFloat()
 
         val screenScale = minOf(w, h) / 400f
-        val fov = 700f * screenScale * zoom
+        val fov = 700f * screenScale
         val camDist = 16f
         val cx = bw / 2f; val cz = bd / 2f; val cy = bh / 2f
 
@@ -72,7 +73,7 @@ private fun FreeCameraBoard(
             val z = rz2 + camDist
             if (z < 0.5f) return null
             val scale = fov / z
-            return Offset(w / 2f + rx * scale, h / 2f - ry * scale)
+            return Offset(w / 2f + rx * scale + panOffsetX, h / 2f - ry * scale + panOffsetY)
         }
 
         fun depth(px: Float, py: Float, pz: Float): Float {

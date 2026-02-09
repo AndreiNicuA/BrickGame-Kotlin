@@ -13,6 +13,7 @@ enum class LayoutPreset(val displayName: String, val isLandscape: Boolean) {
     PORTRAIT_FULLSCREEN("Fullscreen", false),
     PORTRAIT_ONEHAND("One Hand", false),
     PORTRAIT_FREEFORM("Freeform", false),
+    PORTRAIT_3D("3D Mode", false),
     // Landscape
     LANDSCAPE_DEFAULT("Default", true),
     LANDSCAPE_LEFTY("Lefty", true);

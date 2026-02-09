@@ -85,24 +85,9 @@ fun SettingsScreen(
         Header("Settings", onBack); Spacer(Modifier.height(16.dp))
         MenuItem("Profile", "Name, scores") { onNav(GameViewModel.SettingsPage.PROFILE) }
         MenuItem("Theme", "Colours and style") { onNav(GameViewModel.SettingsPage.THEME) }
-        MenuItem("Layout", "Screen arrangement") { onNav(GameViewModel.SettingsPage.LAYOUT) }
+        MenuItem("Layout", "Screen arrangement + 3D mode") { onNav(GameViewModel.SettingsPage.LAYOUT) }
         MenuItem("Gameplay", "Difficulty, mode") { onNav(GameViewModel.SettingsPage.GAMEPLAY) }
         MenuItem("Experience", "Animation, sound") { onNav(GameViewModel.SettingsPage.EXPERIENCE) }
-        Spacer(Modifier.height(12.dp))
-        Row(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
-                .background(Color(0xFF22C55E).copy(0.1f))
-                .clickable { on3D() }
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(Modifier.weight(1f)) {
-                Text("3D MODE", color = Color(0xFF22C55E), fontSize = 16.sp, fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace, letterSpacing = 2.sp)
-                Text("Isometric 3D Tetris experience", color = DIM, fontSize = 12.sp)
-            }
-            Text("→", color = Color(0xFF22C55E), fontSize = 20.sp, fontWeight = FontWeight.Bold)
-        }
-        Spacer(Modifier.height(12.dp))
         MenuItem("About", "Version, credits") { onNav(GameViewModel.SettingsPage.ABOUT) }
     }
 }

@@ -10,6 +10,7 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.brickgame.tetris.game.GameStatus
 import com.brickgame.tetris.ui.layout.FreeformEditorScreen
+import com.brickgame.tetris.ui.layout.LayoutPreset
 import com.brickgame.tetris.ui.screens.Game3DScreen
 import com.brickgame.tetris.ui.screens.GameScreen
 import com.brickgame.tetris.ui.screens.GameViewModel
@@ -46,17 +47,16 @@ class MainActivity : ComponentActivity() {
             val activeCustomLayout by vm.activeCustomLayout.collectAsState()
             val profile by vm.playerProfile.collectAsState()
             val freeformEditMode by vm.freeformEditMode.collectAsState()
-            val show3D by vm.show3D.collectAsState()
             val game3DState by vm.game3DState.collectAsState()
 
             val config = LocalConfiguration.current
             val isLandscape = config.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
             val activeLayout = if (isLandscape) landscapeLayout else portraitLayout
+            val is3D = activeLayout == LayoutPreset.PORTRAIT_3D
 
             BrickGameTheme(gameTheme = theme) {
-                BackHandler(enabled = show3D) { vm.exit3D() }
-                BackHandler(enabled = freeformEditMode && !show3D) { vm.exitFreeformEditMode() }
-                BackHandler(enabled = ui.showSettings && !freeformEditMode && !show3D) {
+                BackHandler(enabled = freeformEditMode) { vm.exitFreeformEditMode() }
+                BackHandler(enabled = ui.showSettings && !freeformEditMode) {
                     when (ui.settingsPage) {
                         GameViewModel.SettingsPage.MAIN -> vm.closeSettings()
                         GameViewModel.SettingsPage.THEME_EDITOR -> vm.navigateSettings(GameViewModel.SettingsPage.THEME)
@@ -65,25 +65,7 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                when {
-                    show3D -> {
-                        Game3DScreen(
-                            state = game3DState,
-                            onMoveX = vm::move3DX,
-                            onMoveZ = vm::move3DZ,
-                            onRotateXZ = vm::rotate3DXZ,
-                            onRotateXY = vm::rotate3DXY,
-                            onHardDrop = vm::hardDrop3D,
-                            onHold = vm::hold3D,
-                            onPause = { if (game3DState.status == GameStatus.PLAYING) vm.pause3D() else vm.resume3D() },
-                            onStart = vm::start3DGame,
-                            onOpenSettings = { vm.exit3D(); vm.openSettings() },
-                            onSoftDrop = vm::softDrop3D,
-                            onToggleGravity = vm::toggle3DGravity
-                        )
-                    }
-
-                    freeformEditMode -> {
+                when {freeformEditMode -> {
                         FreeformEditorScreen(
                             elements = profile.freeformElements,
                             onElementUpdated = vm::updateFreeformElement,
@@ -129,25 +111,42 @@ class MainActivity : ComponentActivity() {
                             onSelectCustomLayout = vm::selectCustomLayout, onClearCustomLayout = vm::clearCustomLayout,
                             onDeleteLayout = vm::deleteCustomLayout,
                             onEditFreeform = { vm.closeSettings(); vm.enterFreeformEditMode() },
-                            on3DMode = { vm.closeSettings(); vm.enter3D() }
+                            on3DMode = { vm.setPortraitLayout(LayoutPreset.PORTRAIT_3D); vm.closeSettings() }
                         )
                     }
 
                     else -> {
-                        GameScreen(
-                            gameState = gs.copy(highScore = hs), layoutPreset = activeLayout, dpadStyle = dpadStyle,
-                            ghostEnabled = ghost, animationStyle = anim, animationDuration = animDur,
-                            multiColor = multiColor,
-                            customLayout = activeCustomLayout, scoreHistory = history,
-                            freeformElements = profile.freeformElements,
-                            onStartGame = vm::startGame, onPause = vm::pauseGame, onResume = vm::resumeGame,
-                            onRotate = vm::rotate, onRotateCCW = vm::rotateCounterClockwise,
-                            onHardDrop = vm::hardDrop, onHold = vm::holdPiece,
-                            onLeftPress = vm::startLeftDAS, onLeftRelease = vm::stopDAS,
-                            onRightPress = vm::startRightDAS, onRightRelease = vm::stopDAS,
-                            onDownPress = vm::startDownDAS, onDownRelease = vm::stopDAS,
-                            onOpenSettings = vm::openSettings, onToggleSound = vm::toggleSound
-                        )
+                        if (is3D) {
+                            Game3DScreen(
+                                state = game3DState,
+                                onMoveX = vm::move3DX,
+                                onMoveZ = vm::move3DZ,
+                                onRotateXZ = vm::rotate3DXZ,
+                                onRotateXY = vm::rotate3DXY,
+                                onHardDrop = vm::hardDrop3D,
+                                onHold = vm::hold3D,
+                                onPause = { if (game3DState.status == GameStatus.PLAYING) vm.pause3D() else vm.resume3D() },
+                                onStart = vm::start3DGame,
+                                onOpenSettings = vm::openSettings,
+                                onSoftDrop = vm::softDrop3D,
+                                onToggleGravity = vm::toggle3DGravity
+                            )
+                        } else {
+                            GameScreen(
+                                gameState = gs.copy(highScore = hs), layoutPreset = activeLayout, dpadStyle = dpadStyle,
+                                ghostEnabled = ghost, animationStyle = anim, animationDuration = animDur,
+                                multiColor = multiColor,
+                                customLayout = activeCustomLayout, scoreHistory = history,
+                                freeformElements = profile.freeformElements,
+                                onStartGame = vm::startGame, onPause = vm::pauseGame, onResume = vm::resumeGame,
+                                onRotate = vm::rotate, onRotateCCW = vm::rotateCounterClockwise,
+                                onHardDrop = vm::hardDrop, onHold = vm::holdPiece,
+                                onLeftPress = vm::startLeftDAS, onLeftRelease = vm::stopDAS,
+                                onRightPress = vm::startRightDAS, onRightRelease = vm::stopDAS,
+                                onDownPress = vm::startDownDAS, onDownRelease = vm::stopDAS,
+                                onOpenSettings = vm::openSettings, onToggleSound = vm::toggleSound
+                            )
+                        }
                     }
                 }
             }

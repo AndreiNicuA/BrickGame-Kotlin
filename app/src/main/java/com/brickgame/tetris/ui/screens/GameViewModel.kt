@@ -275,12 +275,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     // ===== 3D Tetris =====
     private val game3D = Tetris3DGame()
     val game3DState: StateFlow<Game3DState> = game3D.state
-    private val _show3D = MutableStateFlow(false)
-    val show3D: StateFlow<Boolean> = _show3D.asStateFlow()
     private var game3DJob: Job? = null
 
-    fun enter3D() { _show3D.value = true }
-    fun exit3D() { _show3D.value = false; game3DJob?.cancel() }
     fun start3DGame() {
         game3D.start()
         start3DLoop()
