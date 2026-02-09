@@ -10,15 +10,6 @@ import com.brickgame.tetris.ui.components.PieceMaterial
 import javax.microedition.khronos.egl.EGLConfig
 import javax.microedition.khronos.opengles.GL10
 
-/**
- * OpenGL ES 2.0 renderer for the 3D Tetris board.
- *
- * Key rendering principles:
- *   - Blending is OFF for opaque geometry (solid cubes are fully opaque)
- *   - Blending is only turned ON for ghost pieces
- *   - Depth test always on
- *   - Back-face culling with CCW winding
- */
 class BoardRenderer(private val context: Context) : GLSurfaceView.Renderer {
 
     private lateinit var cubeShader: ShaderProgram
@@ -40,35 +31,22 @@ class BoardRenderer(private val context: Context) : GLSurfaceView.Renderer {
 
     private val modelMatrix = FloatArray(16)
     private val mvpMatrix = FloatArray(16)
-
-    // Light: from top-right-front, slightly warm
     private val lightDir = floatArrayOf(0.35f, 0.75f, -0.55f)
 
     fun updateState(state: Game3DState, material: PieceMaterial, ghost: Boolean, themeColor: Long, bgColor: Long = 0xFF0A0A0AL) {
-        currentState = state
-        currentMaterial = material
-        showGhost = ghost
-        themeColorArgb = themeColor
-        bgColorArgb = bgColor
+        currentState = state; currentMaterial = material; showGhost = ghost; themeColorArgb = themeColor; bgColorArgb = bgColor
     }
 
     fun updateCamera(azimuth: Float, elevation: Float, panX: Float, panY: Float, zoom: Float) {
-        camera.azimuth = azimuth
-        camera.elevation = elevation
-        camera.panX = panX
-        camera.panY = panY
-        camera.zoom = zoom
+        camera.azimuth = azimuth; camera.elevation = elevation
+        camera.panX = panX; camera.panY = panY; camera.zoom = zoom
     }
 
     override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
         GLES20.glClearColor(0.04f, 0.04f, 0.04f, 1f)
-
         GLES20.glEnable(GLES20.GL_DEPTH_TEST)
         GLES20.glDepthFunc(GLES20.GL_LEQUAL)
-
-        // Blending starts DISABLED — only enabled for transparent objects
         GLES20.glDisable(GLES20.GL_BLEND)
-
         GLES20.glEnable(GLES20.GL_CULL_FACE)
         GLES20.glCullFace(GLES20.GL_BACK)
         GLES20.glFrontFace(GLES20.GL_CCW)
@@ -84,8 +62,7 @@ class BoardRenderer(private val context: Context) : GLSurfaceView.Renderer {
     }
 
     override fun onSurfaceChanged(gl: GL10?, width: Int, height: Int) {
-        viewportWidth = width
-        viewportHeight = height
+        viewportWidth = width; viewportHeight = height
         GLES20.glViewport(0, 0, width, height)
         camera.setProjection(width, height)
     }
@@ -98,20 +75,25 @@ class BoardRenderer(private val context: Context) : GLSurfaceView.Renderer {
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT or GLES20.GL_DEPTH_BUFFER_BIT)
 
         camera.update()
-
         val state = currentState
         val material = currentMaterial
         val matParams = textures.getParams(material)
 
-        // ---- PASS 1: Grid (needs blending for alpha lines) ----
+        // Grid (needs blending for alpha lines)
         GLES20.glEnable(GLES20.GL_BLEND)
         GLES20.glBlendFunc(GLES20.GL_SRC_ALPHA, GLES20.GL_ONE_MINUS_SRC_ALPHA)
         grid.draw(gridShader, camera.getViewProjection())
         GLES20.glDisable(GLES20.GL_BLEND)
 
-        // ---- PASS 2: Opaque solid cubes (NO blending) ----
+        // Solid cubes (NO blending)
         cubeShader.use()
-        setupCubeUniforms(material, matParams)
+        textures.bind(material)
+        cubeShader.setUniform1i("uTexture", 0)
+        cubeShader.setUniform3f("uLightDir", lightDir[0], lightDir[1], lightDir[2])
+        cubeShader.setUniform3f("uCameraPos", camera.position[0], camera.position[1], camera.position[2])
+        cubeShader.setUniform1f("uTextureStrength", matParams.textureStrength)
+        cubeShader.setUniform1f("uSpecularPower", matParams.specularPower)
+        cubeShader.setUniform1f("uSpecularStrength", matParams.specularStrength)
 
         // Board blocks
         if (state.board.isNotEmpty()) {
@@ -120,34 +102,26 @@ class BoardRenderer(private val context: Context) : GLSurfaceView.Renderer {
                 for (z in 0 until Tetris3DGame.BOARD_D) {
                     for (x in 0 until Tetris3DGame.BOARD_W) {
                         if (y < state.board.size && z < state.board[y].size && x < state.board[y][z].size) {
-                            val colorIdx = state.board[y][z][x]
-                            if (colorIdx > 0) {
-                                drawCube(x.toFloat(), y.toFloat(), z.toFloat(), pieceColorRGB(colorIdx), 1f, clearing)
-                            }
+                            val ci = state.board[y][z][x]
+                            if (ci > 0) drawCube(x.toFloat(), y.toFloat(), z.toFloat(), pieceColorRGB(ci), 1f, clearing)
                         }
                     }
                 }
             }
         }
 
-        // Current piece — brighter to distinguish
+        // Current piece (brighter)
         val piece = state.currentPiece
         if (piece != null) {
             val rgb = pieceColorRGB(piece.type.colorIndex)
-            val bright = floatArrayOf(
-                (rgb[0] * 1.2f).coerceAtMost(1f),
-                (rgb[1] * 1.2f).coerceAtMost(1f),
-                (rgb[2] * 1.2f).coerceAtMost(1f)
-            )
+            val bright = floatArrayOf((rgb[0] * 1.2f).coerceAtMost(1f), (rgb[1] * 1.2f).coerceAtMost(1f), (rgb[2] * 1.2f).coerceAtMost(1f))
             for (b in piece.blocks) {
-                val px = piece.x + b.x
-                val py = piece.y + b.y
-                val pz = piece.z + b.z
+                val px = piece.x + b.x; val py = piece.y + b.y; val pz = piece.z + b.z
                 if (py >= 0) drawCube(px.toFloat(), py.toFloat(), pz.toFloat(), bright, 1f, 0f)
             }
         }
 
-        // ---- PASS 3: Ghost piece (transparent, with blending) ----
+        // Ghost piece (transparent)
         if (showGhost && piece != null && state.ghostY < piece.y) {
             GLES20.glEnable(GLES20.GL_BLEND)
             GLES20.glBlendFunc(GLES20.GL_SRC_ALPHA, GLES20.GL_ONE_MINUS_SRC_ALPHA)
@@ -158,49 +132,32 @@ class BoardRenderer(private val context: Context) : GLSurfaceView.Renderer {
         }
     }
 
-    private fun setupCubeUniforms(material: PieceMaterial, params: MaterialShaderParams) {
-        textures.bind(material)
-        cubeShader.setUniform1i("uTexture", 0)
-        cubeShader.setUniform3f("uLightDir", lightDir[0], lightDir[1], lightDir[2])
-        cubeShader.setUniform3f("uCameraPos", camera.position[0], camera.position[1], camera.position[2])
-        cubeShader.setUniform1f("uTextureStrength", params.textureStrength)
-        cubeShader.setUniform1f("uSpecularPower", params.specularPower)
-        cubeShader.setUniform1f("uSpecularStrength", params.specularStrength)
-    }
-
     private fun drawCube(x: Float, y: Float, z: Float, rgb: FloatArray, alpha: Float, clearing: Float) {
         Matrix.setIdentityM(modelMatrix, 0)
         Matrix.translateM(modelMatrix, 0, x, y, z)
         camera.getMVP(modelMatrix, mvpMatrix)
-
         cubeShader.setUniformMatrix4fv("uMVPMatrix", mvpMatrix)
         cubeShader.setUniformMatrix4fv("uModelMatrix", modelMatrix)
         cubeShader.setUniform3f("uBaseColor", rgb[0], rgb[1], rgb[2])
         cubeShader.setUniform1f("uAlpha", alpha)
         cubeShader.setUniform1f("uClearFlash", clearing)
-
         cube.draw(cubeShader)
     }
 
     private fun drawGhost(state: Game3DState, piece: Piece3DState) {
         ghostShader.use()
         val rgb = pieceColorRGB(piece.type.colorIndex)
-
         for (b in piece.blocks) {
-            val px = piece.x + b.x
-            val py = state.ghostY + b.y
-            val pz = piece.z + b.z
+            val px = piece.x + b.x; val py = state.ghostY + b.y; val pz = piece.z + b.z
             if (py >= 0) {
                 Matrix.setIdentityM(modelMatrix, 0)
                 Matrix.translateM(modelMatrix, 0, px.toFloat(), py.toFloat(), pz.toFloat())
                 camera.getMVP(modelMatrix, mvpMatrix)
-
                 ghostShader.setUniformMatrix4fv("uMVPMatrix", mvpMatrix)
                 ghostShader.setUniformMatrix4fv("uModelMatrix", modelMatrix)
                 ghostShader.setUniform3f("uBaseColor", rgb[0], rgb[1], rgb[2])
                 ghostShader.setUniform1f("uAlpha", 0.25f)
                 ghostShader.setUniform3f("uCameraPos", camera.position[0], camera.position[1], camera.position[2])
-
                 cube.draw(ghostShader)
             }
         }

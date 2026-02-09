@@ -27,6 +27,7 @@ import com.brickgame.tetris.game.*
 import com.brickgame.tetris.ui.components.*
 import com.brickgame.tetris.ui.theme.LocalGameTheme
 import com.brickgame.tetris.gl.GLBoardView
+import com.brickgame.tetris.gl.BoardGLSurfaceView
 import kotlin.math.*
 
 @Composable
@@ -48,6 +49,9 @@ fun Game3DScreen(
 ) {
     val theme = LocalGameTheme.current
 
+    // Camera state — updated by touch callbacks from GLBoardView
+    // These are READ by ViewCube, zoom buttons, sliders
+    // WRITTEN by touch callbacks from the GL view
     var azimuth by remember { mutableFloatStateOf(35f) }
     var elevation by remember { mutableFloatStateOf(25f) }
     var panX by remember { mutableFloatStateOf(0f) }
@@ -55,6 +59,15 @@ fun Game3DScreen(
     var zoom by remember { mutableFloatStateOf(1f) }
     var starWars by remember { mutableStateOf(false) }
     var showCamSettings by remember { mutableStateOf(false) }
+
+    // Reference to the GL view for pushing camera changes from UI (sliders, zoom buttons)
+    val glViewRef = remember { mutableStateOf<BoardGLSurfaceView?>(null) }
+
+    /** Push camera to both Compose state and GL view. Used by sliders/presets/zoom buttons. */
+    fun setCamera(az: Float = azimuth, el: Float = elevation, z: Float = zoom, px: Float = panX, py: Float = panY) {
+        azimuth = az; elevation = el; zoom = z; panX = px; panY = py
+        glViewRef.value?.setCameraExternal(az, el, z, px, py)
+    }
 
     fun moveCameraRelative(screenDx: Int, screenDz: Int) {
         if (starWars) { onMoveX(screenDx); onMoveZ(screenDz); return }
@@ -68,7 +81,7 @@ fun Game3DScreen(
 
     Box(Modifier.fillMaxSize().background(theme.backgroundColor).systemBarsPadding()) {
         Column(Modifier.fillMaxSize()) {
-            // === Info bar ===
+            // Info bar
             Row(
                 Modifier.fillMaxWidth().background(Color.Black.copy(0.4f))
                     .padding(horizontal = 10.dp, vertical = 5.dp),
@@ -99,7 +112,7 @@ fun Game3DScreen(
                 }
             }
 
-            // === 3D Board ===
+            // 3D Board
             Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                 if (starWars) {
                     StarWarsBoardCanvas(state, Modifier.fillMaxSize().padding(2.dp), true, theme.pixelOn)
@@ -118,7 +131,8 @@ fun Game3DScreen(
                         material = material,
                         onCameraChange = { az, el, z, px, py ->
                             azimuth = az; elevation = el; zoom = z; panX = px; panY = py
-                        }
+                        },
+                        onViewCreated = { view -> glViewRef.value = view }
                     )
                 }
 
@@ -126,17 +140,16 @@ fun Game3DScreen(
                     ViewCube(azimuth, elevation, Modifier.align(Alignment.TopEnd).padding(8.dp).size(60.dp))
                     Column(Modifier.align(Alignment.CenterEnd).padding(end = 6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Box(Modifier.size(32.dp).clip(CircleShape).background(Color.White.copy(0.1f))
-                            .clickable { zoom = (zoom + 0.15f).coerceAtMost(3f) }, contentAlignment = Alignment.Center) {
+                            .clickable { setCamera(z = (zoom + 0.15f).coerceAtMost(3f)) }, contentAlignment = Alignment.Center) {
                             Text("+", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color.White.copy(0.7f))
                         }
                         Box(Modifier.size(32.dp).clip(CircleShape).background(Color.White.copy(0.1f))
-                            .clickable { zoom = (zoom - 0.15f).coerceAtLeast(0.3f) }, contentAlignment = Alignment.Center) {
+                            .clickable { setCamera(z = (zoom - 0.15f).coerceAtLeast(0.3f)) }, contentAlignment = Alignment.Center) {
                             Text("−", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color.White.copy(0.7f))
                         }
                     }
                 }
 
-                // State overlays
                 when (state.status) {
                     GameStatus.MENU -> {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -185,24 +198,24 @@ fun Game3DScreen(
                                 modifier = Modifier.clickable { showCamSettings = false }.padding(4.dp))
                         }
                         Spacer(Modifier.height(6.dp))
-                        CamSlider("Orbit", azimuth, -180f, 180f) { azimuth = it }
-                        CamSlider("Tilt", elevation, -85f, 85f) { elevation = it }
-                        CamSlider("Zoom", zoom, 0.3f, 3f) { zoom = it }
-                        CamSlider("Pan X", panX, -200f, 200f) { panX = it }
-                        CamSlider("Pan Y", panY, -200f, 200f) { panY = it }
+                        CamSlider("Orbit", azimuth, -180f, 180f) { setCamera(az = it) }
+                        CamSlider("Tilt", elevation, -85f, 85f) { setCamera(el = it) }
+                        CamSlider("Zoom", zoom, 0.3f, 3f) { setCamera(z = it) }
+                        CamSlider("Pan X", panX, -200f, 200f) { setCamera(px = it) }
+                        CamSlider("Pan Y", panY, -200f, 200f) { setCamera(py = it) }
                         Spacer(Modifier.height(6.dp))
                         Row(Modifier.fillMaxWidth(), Arrangement.spacedBy(4.dp)) {
-                            CamPreset("Front", Modifier.weight(1f)) { azimuth = 0f; elevation = 15f; panX = 0f; panY = 0f; zoom = 1f }
-                            CamPreset("Side", Modifier.weight(1f)) { azimuth = 90f; elevation = 20f; panX = 0f; panY = 0f; zoom = 1f }
-                            CamPreset("Top", Modifier.weight(1f)) { azimuth = 35f; elevation = 70f; panX = 0f; panY = 0f; zoom = 1f }
+                            CamPreset("Front", Modifier.weight(1f)) { setCamera(0f, 15f, 1f, 0f, 0f) }
+                            CamPreset("Side", Modifier.weight(1f)) { setCamera(90f, 20f, 1f, 0f, 0f) }
+                            CamPreset("Top", Modifier.weight(1f)) { setCamera(35f, 70f, 1f, 0f, 0f) }
                         }
                         Spacer(Modifier.height(4.dp))
-                        CamPreset("Reset All", Modifier.fillMaxWidth()) { azimuth = 35f; elevation = 25f; panX = 0f; panY = 0f; zoom = 1f }
+                        CamPreset("Reset All", Modifier.fillMaxWidth()) { setCamera(35f, 25f, 1f, 0f, 0f) }
                     }
                 }
             }
 
-            // === Controls row ===
+            // Controls
             Row(
                 Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 4.dp),
                 Arrangement.SpaceBetween, Alignment.CenterVertically
@@ -247,8 +260,7 @@ fun Game3DScreen(
     }
 }
 
-// ===== Star Wars Canvas Renderer =====
-
+// ===== Star Wars Canvas =====
 @Composable
 private fun StarWarsBoardCanvas(state: Game3DState, modifier: Modifier, showGhost: Boolean, themeColor: Color) {
     Canvas(modifier) {
@@ -263,9 +275,7 @@ private fun StarWarsBoardCanvas(state: Game3DState, modifier: Modifier, showGhos
         if (piece != null) { for (b in piece.blocks) { val row = piece.y + b.y; val col = piece.x + b.x; if (row in 0 until bh && col in 0 until bw) drawSWBlock(rp(row), col, swColor(piece.type.colorIndex, themeColor), rp(row).alpha) } }
     }
 }
-
 private data class SWRowParams(val y: Float, val leftX: Float, val cellW: Float, val cellH: Float, val alpha: Float)
-
 private fun DrawScope.drawSWBlock(rp: SWRowParams, col: Int, color: Color, alpha: Float) {
     val x = rp.leftX + col * rp.cellW; val y = rp.y - rp.cellH; val cw = rp.cellW; val ch = rp.cellH; val a = alpha.coerceIn(0f, 1f); val d = ch * 0.18f
     drawRect(color.copy(a), Offset(x + 1, y), Size(cw - 2, ch - 1))
@@ -273,12 +283,9 @@ private fun DrawScope.drawSWBlock(rp: SWRowParams, col: Int, color: Color, alpha
     drawPath(Path().apply { moveTo(x + cw - 1, y); lineTo(x + cw - 1, y + ch - 1); lineTo(x + cw - 1 - d, y + ch - 1 - d); lineTo(x + cw - 1 - d, y - d); close() }, swDk(color, 0.5f).copy(a * 0.6f))
     drawRect(Color.White.copy(0.18f * a), Offset(x + 2, y + 1), Size(cw * 0.25f, 2f))
 }
-
 private fun swColor(idx: Int, tc: Color): Color = when (idx) { 1 -> Color(0xFF00E5FF); 2 -> Color(0xFFFFD600); 3 -> Color(0xFFAA00FF); 4 -> Color(0xFF00E676); 5 -> Color(0xFFFF6D00); 6 -> Color(0xFFFF1744); 7 -> Color(0xFF2979FF); 8 -> Color(0xFFFF4081); else -> tc }
 private fun swDk(c: Color, f: Float) = Color(c.red * f, c.green * f, c.blue * f, c.alpha)
 private fun swBr(c: Color, f: Float) = Color(minOf(c.red * f, 1f), minOf(c.green * f, 1f), minOf(c.blue * f, 1f), c.alpha)
-
-// ===== Shared Components =====
 
 @Composable
 private fun MiniToggle(label: String, active: Boolean, color: Color, onClick: () -> Unit) {
