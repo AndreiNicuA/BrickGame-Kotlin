@@ -11,6 +11,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.brickgame.tetris.game.GameStatus
 import com.brickgame.tetris.ui.layout.FreeformEditorScreen
 import com.brickgame.tetris.ui.layout.LayoutPreset
+import com.brickgame.tetris.ui.components.PieceMaterial
 import com.brickgame.tetris.ui.screens.Game3DScreen
 import com.brickgame.tetris.ui.screens.GameScreen
 import com.brickgame.tetris.ui.screens.GameViewModel
@@ -37,6 +38,7 @@ class MainActivity : ComponentActivity() {
             val sound by vm.soundEnabled.collectAsState()
             val vib by vm.vibrationEnabled.collectAsState()
             val multiColor by vm.multiColorEnabled.collectAsState()
+            val pieceMaterial by vm.pieceMaterial.collectAsState()
             val name by vm.playerName.collectAsState()
             val hs by vm.highScore.collectAsState()
             val history by vm.scoreHistory.collectAsState()
@@ -83,6 +85,7 @@ class MainActivity : ComponentActivity() {
                             difficulty = diff, gameMode = mode, ghostEnabled = ghost,
                             animationStyle = anim, animationDuration = animDur,
                             soundEnabled = sound, vibrationEnabled = vib, multiColorEnabled = multiColor,
+                            pieceMaterial = pieceMaterial,
                             playerName = name, highScore = hs, scoreHistory = history,
                             customThemes = customThemes, editingTheme = editingTheme,
                             customLayouts = customLayouts, editingLayout = editingLayout,
@@ -103,6 +106,7 @@ class MainActivity : ComponentActivity() {
                             onSetAnimationDuration = vm::setAnimationDuration, onSetSoundEnabled = vm::setSoundEnabled,
                             onSetVibrationEnabled = vm::setVibrationEnabled, onSetPlayerName = vm::setPlayerName,
                             onSetMultiColorEnabled = vm::setMultiColorEnabled,
+                            onSetPieceMaterial = vm::setPieceMaterial,
                             onNewTheme = vm::startNewTheme, onEditTheme = vm::editTheme,
                             onUpdateEditingTheme = vm::updateEditingTheme, onSaveTheme = vm::saveEditingTheme,
                             onDeleteTheme = vm::deleteCustomTheme,
@@ -131,7 +135,8 @@ class MainActivity : ComponentActivity() {
                                 onOpenSettings = vm::openSettings,
                                 onSoftDrop = vm::softDrop3D,
                                 onToggleGravity = vm::toggle3DGravity,
-                                onQuit = vm::quit3DGame
+                                onQuit = vm::quit3DGame,
+                                material = PieceMaterial.entries.find { it.name == pieceMaterial } ?: PieceMaterial.CLASSIC
                             )
                         } else {
                             GameScreen(

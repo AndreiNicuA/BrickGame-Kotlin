@@ -43,6 +43,7 @@ fun SettingsScreen(
     difficulty: Difficulty, gameMode: GameMode, ghostEnabled: Boolean,
     animationStyle: AnimationStyle, animationDuration: Float,
     soundEnabled: Boolean, vibrationEnabled: Boolean, multiColorEnabled: Boolean,
+    pieceMaterial: String = "CLASSIC",
     playerName: String, highScore: Int, scoreHistory: List<ScoreEntry>,
     customThemes: List<GameTheme>, editingTheme: GameTheme?,
     customLayouts: List<CustomLayoutData>, editingLayout: CustomLayoutData?,
@@ -55,6 +56,7 @@ fun SettingsScreen(
     onSetAnimationDuration: (Float) -> Unit, onSetSoundEnabled: (Boolean) -> Unit,
     onSetVibrationEnabled: (Boolean) -> Unit, onSetPlayerName: (String) -> Unit,
     onSetMultiColorEnabled: (Boolean) -> Unit,
+    onSetPieceMaterial: (String) -> Unit = {},
     onNewTheme: () -> Unit, onEditTheme: (GameTheme) -> Unit,
     onUpdateEditingTheme: (GameTheme) -> Unit, onSaveTheme: () -> Unit, onDeleteTheme: (String) -> Unit,
     onNewLayout: () -> Unit, onEditLayout: (CustomLayoutData) -> Unit,
@@ -68,7 +70,7 @@ fun SettingsScreen(
         when (page) {
             GameViewModel.SettingsPage.MAIN -> MainPage(onNavigate, onBack, on3DMode)
             GameViewModel.SettingsPage.PROFILE -> ProfilePage(playerName, highScore, scoreHistory, onSetPlayerName) { onNavigate(GameViewModel.SettingsPage.MAIN) }
-            GameViewModel.SettingsPage.THEME -> ThemePage(currentTheme, customThemes, multiColorEnabled, onSetTheme, onSetMultiColorEnabled, onNewTheme, onEditTheme, onDeleteTheme) { onNavigate(GameViewModel.SettingsPage.MAIN) }
+            GameViewModel.SettingsPage.THEME -> ThemePage(currentTheme, customThemes, multiColorEnabled, pieceMaterial, onSetTheme, onSetMultiColorEnabled, onSetPieceMaterial, onNewTheme, onEditTheme, onDeleteTheme) { onNavigate(GameViewModel.SettingsPage.MAIN) }
             GameViewModel.SettingsPage.THEME_EDITOR -> if (editingTheme != null) ThemeEditorScreen(editingTheme, onUpdateEditingTheme, onSaveTheme) { onNavigate(GameViewModel.SettingsPage.THEME) }
             GameViewModel.SettingsPage.LAYOUT -> LayoutPage(portraitLayout, landscapeLayout, dpadStyle, customLayouts, activeCustomLayout, onSetPortraitLayout, onSetLandscapeLayout, onSetDPadStyle, onNewLayout, onEditLayout, onSelectCustomLayout, onClearCustomLayout, onDeleteLayout, onEditFreeform = { onEditFreeform() }) { onNavigate(GameViewModel.SettingsPage.MAIN) }
             GameViewModel.SettingsPage.LAYOUT_EDITOR -> if (editingLayout != null) LayoutEditorScreen(editingLayout, currentTheme, portraitLayout, dpadStyle, onUpdateEditingLayout, onSaveLayout) { onNavigate(GameViewModel.SettingsPage.LAYOUT) }
@@ -140,7 +142,7 @@ fun SettingsScreen(
 }
 
 // ===== THEME =====
-@Composable private fun ThemePage(current: GameTheme, custom: List<GameTheme>, multiColor: Boolean, onSet: (GameTheme) -> Unit, onMultiColor: (Boolean) -> Unit, onNew: () -> Unit, onEdit: (GameTheme) -> Unit, onDelete: (String) -> Unit, onBack: () -> Unit) {
+@Composable private fun ThemePage(current: GameTheme, custom: List<GameTheme>, multiColor: Boolean, pieceMaterial: String, onSet: (GameTheme) -> Unit, onMultiColor: (Boolean) -> Unit, onMaterial: (String) -> Unit, onNew: () -> Unit, onEdit: (GameTheme) -> Unit, onDelete: (String) -> Unit, onBack: () -> Unit) {
     LazyColumn(Modifier.fillMaxSize().padding(20.dp)) {
         item { Header("Theme", onBack); Spacer(Modifier.height(16.dp)) }
         // Multicolor toggle
@@ -152,6 +154,25 @@ fun SettingsScreen(
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     listOf(Color(0xFF00D4FF), Color(0xFFF4D03F), Color(0xFFAA44FF), Color(0xFF44DD44), Color(0xFFFF4444), Color(0xFF4488FF), Color(0xFFFF8800)).forEach {
                         Box(Modifier.size(20.dp).clip(RoundedCornerShape(4.dp)).background(it))
+                    }
+                }
+            }
+        } }
+        // Piece Material selector
+        item { Card {
+            Text("Piece Material", color = TX, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+            Spacer(Modifier.height(4.dp))
+            Text("Visual texture for 3D and 2D pieces", color = DIM, fontSize = 11.sp)
+            Spacer(Modifier.height(8.dp))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                listOf("CLASSIC" to "Classic", "STONE" to "Stone", "GRANITE" to "Granite", "GLASS" to "Glass", "CRYSTAL" to "Crystal").forEach { (id, label) ->
+                    val sel = pieceMaterial == id
+                    Box(Modifier.weight(1f).clip(RoundedCornerShape(8.dp))
+                        .background(if (sel) ACC.copy(0.2f) else CARD)
+                        .then(if (sel) Modifier.border(1.dp, ACC, RoundedCornerShape(8.dp)) else Modifier)
+                        .clickable { onMaterial(id) }.padding(vertical = 8.dp),
+                        contentAlignment = Alignment.Center) {
+                        Text(label, color = if (sel) ACC else DIM, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }

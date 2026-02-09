@@ -282,12 +282,12 @@ fun Game3DScreen(
                     ActionButton("···", onOpenSettings, width = 36.dp, height = 18.dp)
                 }
 
-                // Right: ROT buttons side by side + hard drop / soft drop arrows
+                // Right: Rotate buttons + hard drop / soft drop
                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    // Rotate buttons with text labels, side by side
+                    // Rotate buttons with intuitive labels
                     Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                        ActionButton("ROT XZ", onRotateXZ, width = 56.dp, height = 36.dp)
-                        ActionButton("ROT XY", onRotateXY, width = 56.dp, height = 36.dp)
+                        ActionButton("↻ SPIN", onRotateXZ, width = 56.dp, height = 36.dp)
+                        ActionButton("↻ TILT", onRotateXY, width = 56.dp, height = 36.dp)
                     }
                     // Hard drop (UP arrow) / Soft drop (DOWN arrow)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

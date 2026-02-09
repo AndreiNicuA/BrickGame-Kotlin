@@ -73,6 +73,13 @@ fun ViewCube(azimuth: Float, elevation: Float, modifier: Modifier = Modifier) {
             SF(f.i, f.col, f.lbl, d)
         }.sortedBy { it.d }
 
+        val textPaint = android.graphics.Paint().apply {
+            color = android.graphics.Color.WHITE
+            textAlign = android.graphics.Paint.Align.CENTER
+            typeface = android.graphics.Typeface.create(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD)
+            isAntiAlias = true
+        }
+
         for (face in sorted) {
             val path = Path().apply {
                 moveTo(c[face.i[0]].x, c[face.i[0]].y)
@@ -82,37 +89,34 @@ fun ViewCube(azimuth: Float, elevation: Float, modifier: Modifier = Modifier) {
             drawPath(path, face.col, style = Fill)
             drawPath(path, Color.White.copy(0.3f), style = Stroke(1f))
 
-            // Draw label on front-facing faces
             if (face.d > 0.1f && face.lbl.isNotEmpty()) {
                 val fcx = face.i.map { c[it].x }.average().toFloat()
                 val fcy = face.i.map { c[it].y }.average().toFloat()
-                // Draw each letter as a small dot pattern (no android.graphics.Paint in Canvas)
-                // Instead draw a tiny colored indicator + use face color contrast
-                val labelColor = Color.White.copy(alpha = (face.d.coerceIn(0f,1f) * 0.9f))
-                val letterW = s * 0.18f
-                val startX = fcx - (face.lbl.length * letterW) / 2f
-                face.lbl.forEachIndexed { idx, ch ->
-                    val lx = startX + idx * letterW + letterW / 2f
-                    // Draw tiny letter indicator
-                    drawCircle(labelColor, letterW * 0.35f, Offset(lx, fcy))
-                    // Small horizontal line under to hint at text
-                    drawLine(labelColor, Offset(lx - letterW * 0.25f, fcy + letterW * 0.4f),
-                        Offset(lx + letterW * 0.25f, fcy + letterW * 0.4f), 0.8f)
-                }
+                val alpha = (face.d.coerceIn(0f, 1f) * 230).toInt()
+                val faceSize = s * face.d.coerceIn(0.3f, 1f)
+                textPaint.textSize = faceSize * 0.42f
+                textPaint.alpha = alpha
+                drawContext.canvas.nativeCanvas.drawText(face.lbl, fcx, fcy + textPaint.textSize * 0.35f, textPaint)
             }
         }
 
-        // Axis lines
         val xE = proj(1.5f, 0f, 0f); val yE = proj(0f, 1.5f, 0f); val zE = proj(0f, 0f, 1.5f)
         val origin = Offset(cx, cy)
         drawLine(Color(0xFFFF4444), origin, xE, 2.5f)
         drawLine(Color(0xFF44FF44), origin, yE, 2.5f)
         drawLine(Color(0xFF4488FF), origin, zE, 2.5f)
 
-        // Axis end labels as colored dots
-        drawCircle(Color(0xFFFF4444), 3.5f, xE)
-        drawCircle(Color(0xFF44FF44), 3.5f, yE)
-        drawCircle(Color(0xFF4488FF), 3.5f, zE)
+        val axisPaint = android.graphics.Paint().apply {
+            textAlign = android.graphics.Paint.Align.CENTER
+            typeface = android.graphics.Typeface.create(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD)
+            isAntiAlias = true; textSize = s * 0.4f
+        }
+        axisPaint.color = android.graphics.Color.rgb(255, 68, 68)
+        drawContext.canvas.nativeCanvas.drawText("X", xE.x, xE.y + axisPaint.textSize * 0.35f, axisPaint)
+        axisPaint.color = android.graphics.Color.rgb(68, 255, 68)
+        drawContext.canvas.nativeCanvas.drawText("Y", yE.x, yE.y + axisPaint.textSize * 0.35f, axisPaint)
+        axisPaint.color = android.graphics.Color.rgb(68, 136, 255)
+        drawContext.canvas.nativeCanvas.drawText("Z", zE.x, zE.y + axisPaint.textSize * 0.35f, axisPaint)
     }
 }
 

@@ -30,6 +30,7 @@ class SettingsRepository(private val context: Context) {
         private val LANDSCAPE_LAYOUT = stringPreferencesKey("landscape_layout")
         private val DPAD_STYLE = stringPreferencesKey("dpad_style")
         private val MULTI_COLOR = booleanPreferencesKey("multi_color_pieces")
+        private val PIECE_MATERIAL = stringPreferencesKey("piece_material")
     }
     
     private fun <T> pref(key: Preferences.Key<T>, default: T): Flow<T> =
@@ -84,4 +85,7 @@ class SettingsRepository(private val context: Context) {
 
     val multiColorEnabled get() = pref(MULTI_COLOR, false)
     suspend fun setMultiColorEnabled(v: Boolean) = set(MULTI_COLOR, v)
+
+    val pieceMaterial get() = pref(PIECE_MATERIAL, "CLASSIC")
+    suspend fun setPieceMaterial(v: String) = set(PIECE_MATERIAL, v)
 }
