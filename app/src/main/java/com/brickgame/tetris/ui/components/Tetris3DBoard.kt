@@ -9,228 +9,274 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Fill
 import com.brickgame.tetris.game.*
+import kotlin.math.*
 
 /**
- * Isometric 3D Tetris board renderer.
- * Draws a 3D well with falling pieces using isometric projection.
- * Auto-sizes to fill available space. Renders back-to-front.
+ * Perspective 3D Tetris board renderer with rotatable camera.
+ * Uses a simple 3D→2D perspective projection with configurable camera angle.
+ * "Star Wars" mode: dramatic vanishing point, pieces come toward the viewer.
  */
 @Composable
 fun Tetris3DBoard(
     state: Game3DState,
     modifier: Modifier = Modifier,
-    showGhost: Boolean = true
+    showGhost: Boolean = true,
+    cameraAngleY: Float = 35f,   // Horizontal rotation in degrees (swipe to rotate)
+    cameraAngleX: Float = 25f,   // Vertical tilt in degrees
+    themePixelOn: Color = Color(0xFF22C55E),
+    themeBg: Color = Color(0xFF0A0A0A),
+    starWarsMode: Boolean = false // Dramatic perspective from below
 ) {
     Canvas(modifier) {
         val w = size.width
         val h = size.height
-        val bw = Tetris3DGame.BOARD_W
-        val bd = Tetris3DGame.BOARD_D
-        val bh = Tetris3DGame.BOARD_H
+        val bw = Tetris3DGame.BOARD_W.toFloat()
+        val bd = Tetris3DGame.BOARD_D.toFloat()
+        val bh = Tetris3DGame.BOARD_H.toFloat()
 
-        // Compute cell size to maximize board in available space.
-        // Isometric width needed: (bw + bd) * cellW/2 (diamond width)
-        // Isometric height needed: (bw + bd) * cellH/2 + bh * cellYH (diamond depth + height)
-        // cellH = cellW * 0.5, cellYH = cellW * 0.65
+        // Camera setup
+        val radY = Math.toRadians(cameraAngleY.toDouble())
+        val radX = Math.toRadians(cameraAngleX.toDouble())
+        val cosY = cos(radY).toFloat(); val sinY = sin(radY).toFloat()
+        val cosX = cos(radX).toFloat(); val sinX = sin(radX).toFloat()
 
-        val isoRatioH = 0.5f   // cellH / cellW
-        val isoRatioY = 0.65f  // cellYH / cellW
+        // Camera distance & projection
+        val fov = if (starWarsMode) 350f else 500f
+        val camDist = if (starWarsMode) 18f else 22f
 
-        // Horizontal constraint: (bw + bd) * cellW * 0.5 <= w * 0.92
-        val cellFromW = (w * 0.92f) / ((bw + bd) * 0.5f)
-        // Vertical constraint: (bw + bd) * cellH * 0.5 + bh * cellYH <= h * 0.95
-        val cellFromH = (h * 0.95f) / ((bw + bd) * isoRatioH * 0.5f + bh * isoRatioY)
+        // Center the board at origin
+        val cx = bw / 2f; val cz = bd / 2f; val cy = bh / 2f
 
-        val cellW = minOf(cellFromW, cellFromH)
-        val cellH = cellW * isoRatioH
-        val cellYH = cellW * isoRatioY
+        fun project(px: Float, py: Float, pz: Float): Offset? {
+            // Translate to center
+            val dx = px - cx; val dy = py - cy; val dz = pz - cz
+            // Rotate around Y axis (horizontal)
+            val rx = dx * cosY + dz * sinY
+            val rz = -dx * sinY + dz * cosY
+            // Rotate around X axis (vertical tilt)
+            val ry = dy * cosX - rz * sinX
+            val rz2 = dy * sinX + rz * cosX
+            // Perspective projection
+            val z = rz2 + camDist
+            if (z < 0.5f) return null
+            val scale = fov / z
+            val sx = w / 2f + rx * scale
+            val sy = h / 2f - ry * scale
+            return Offset(sx, sy)
+        }
 
-        // Total board dimensions in screen space
-        val totalW = (bw + bd) * cellW * 0.5f
-        val totalH = (bw + bd) * cellH * 0.5f + bh * cellYH
+        // Depth sort helper: distance from camera for a 3D point
+        fun depth(px: Float, py: Float, pz: Float): Float {
+            val dx = px - cx; val dy = py - cy; val dz = pz - cz
+            val rx = dx * cosY + dz * sinY
+            val rz = -dx * sinY + dz * cosY
+            val ry = dy * cosX - rz * sinX
+            val rz2 = dy * sinX + rz * cosX
+            return rz2 + camDist
+        }
 
-        // Center the board: origin is the top-center of the isometric diamond
-        val ox = w / 2f
-        // Position so the board is vertically centered
-        val topOfBoard = (h - totalH) / 2f
-        val oy = topOfBoard + bh * cellYH  // origin is at the floor level, board grows upward
+        // ========== Draw walls (back faces only) ==========
+        val wallColor = themePixelOn.copy(alpha = 0.04f)
+        val wallLineColor = themePixelOn.copy(alpha = 0.08f)
 
-        // Draw back walls first (behind everything)
-        drawWalls(ox, oy, cellW, cellH, cellYH, bw, bd, bh)
+        // Collect all wall quads with depth for sorting
+        data class Quad(val p: List<Offset>, val color: Color, val depth: Float)
+        val quads = mutableListOf<Quad>()
 
-        // Draw floor grid
-        drawFloorGrid(ox, oy, cellW, cellH, cellYH, bw, bd)
+        // Floor (y=0)
+        val f0 = project(0f, 0f, 0f); val f1 = project(bw, 0f, 0f)
+        val f2 = project(bw, 0f, bd); val f3 = project(0f, 0f, bd)
+        if (f0 != null && f1 != null && f2 != null && f3 != null) {
+            quads.add(Quad(listOf(f0, f1, f2, f3), themePixelOn.copy(alpha = 0.03f),
+                depth(bw / 2, 0f, bd / 2)))
+        }
 
-        // Draw placed blocks (back to front: high z first, high x first for correct occlusion)
+        // Floor grid lines
+        for (x in 0..bw.toInt()) {
+            val a = project(x.toFloat(), 0f, 0f); val b = project(x.toFloat(), 0f, bd)
+            if (a != null && b != null) drawLine(wallLineColor.copy(alpha = 0.06f), a, b, 0.5f)
+        }
+        for (z in 0..bd.toInt()) {
+            val a = project(0f, 0f, z.toFloat()); val b = project(bw, 0f, z.toFloat())
+            if (a != null && b != null) drawLine(wallLineColor.copy(alpha = 0.06f), a, b, 0.5f)
+        }
+
+        // Back walls — only draw walls facing the camera
+        // Left wall (x=0)
+        val lw0 = project(0f, 0f, 0f); val lw1 = project(0f, 0f, bd)
+        val lw2 = project(0f, bh, bd); val lw3 = project(0f, bh, 0f)
+        if (lw0 != null && lw1 != null && lw2 != null && lw3 != null) {
+            quads.add(Quad(listOf(lw0, lw1, lw2, lw3), wallColor,
+                depth(0f, bh / 2, bd / 2)))
+        }
+        // Right wall (x=bw)
+        val rw0 = project(bw, 0f, 0f); val rw1 = project(bw, 0f, bd)
+        val rw2 = project(bw, bh, bd); val rw3 = project(bw, bh, 0f)
+        if (rw0 != null && rw1 != null && rw2 != null && rw3 != null) {
+            quads.add(Quad(listOf(rw0, rw1, rw2, rw3), wallColor,
+                depth(bw, bh / 2, bd / 2)))
+        }
+        // Back wall (z=bd)
+        val bk0 = project(0f, 0f, bd); val bk1 = project(bw, 0f, bd)
+        val bk2 = project(bw, bh, bd); val bk3 = project(0f, bh, bd)
+        if (bk0 != null && bk1 != null && bk2 != null && bk3 != null) {
+            quads.add(Quad(listOf(bk0, bk1, bk2, bk3), wallColor,
+                depth(bw / 2, bh / 2, bd)))
+        }
+        // Front wall (z=0) — subtle
+        val fw0 = project(0f, 0f, 0f); val fw1 = project(bw, 0f, 0f)
+        val fw2 = project(bw, bh, 0f); val fw3 = project(0f, bh, 0f)
+        if (fw0 != null && fw1 != null && fw2 != null && fw3 != null) {
+            quads.add(Quad(listOf(fw0, fw1, fw2, fw3), wallColor.copy(alpha = 0.02f),
+                depth(bw / 2, bh / 2, 0f)))
+        }
+
+        // Draw walls sorted back-to-front
+        quads.sortByDescending { it.depth }
+        quads.forEach { q ->
+            val path = Path().apply {
+                moveTo(q.p[0].x, q.p[0].y)
+                for (i in 1 until q.p.size) lineTo(q.p[i].x, q.p[i].y)
+                close()
+            }
+            drawPath(path, q.color)
+        }
+
+        // Wall edge lines (wireframe)
+        fun drawEdge(x1: Float, y1: Float, z1: Float, x2: Float, y2: Float, z2: Float, alpha: Float = 0.1f) {
+            val a = project(x1, y1, z1); val b = project(x2, y2, z2)
+            if (a != null && b != null) drawLine(themePixelOn.copy(alpha = alpha), a, b, 0.8f)
+        }
+        // Vertical edges
+        drawEdge(0f, 0f, 0f, 0f, bh, 0f); drawEdge(bw, 0f, 0f, bw, bh, 0f)
+        drawEdge(0f, 0f, bd, 0f, bh, bd); drawEdge(bw, 0f, bd, bw, bh, bd)
+        // Top edges
+        drawEdge(0f, bh, 0f, bw, bh, 0f); drawEdge(0f, bh, bd, bw, bh, bd)
+        drawEdge(0f, bh, 0f, 0f, bh, bd); drawEdge(bw, bh, 0f, bw, bh, bd)
+        // Bottom edges
+        drawEdge(0f, 0f, 0f, bw, 0f, 0f, 0.06f); drawEdge(0f, 0f, bd, bw, 0f, bd, 0.06f)
+        drawEdge(0f, 0f, 0f, 0f, 0f, bd, 0.06f); drawEdge(bw, 0f, 0f, bw, 0f, bd, 0.06f)
+
+        // ========== Draw blocks ==========
+        // Collect all cube faces, sort by depth, then draw
+        data class Face(val points: List<Offset>, val color: Color, val depth: Float)
+        val faces = mutableListOf<Face>()
+
+        fun addCube(gx: Int, gy: Int, gz: Int, color: Color, alpha: Float) {
+            val x = gx.toFloat(); val y = gy.toFloat(); val z = gz.toFloat()
+            val a = alpha.coerceIn(0f, 1f)
+
+            // 8 corners
+            val p000 = project(x, y, z) ?: return
+            val p100 = project(x+1, y, z) ?: return
+            val p010 = project(x, y+1, z) ?: return
+            val p110 = project(x+1, y+1, z) ?: return
+            val p001 = project(x, y, z+1) ?: return
+            val p101 = project(x+1, y, z+1) ?: return
+            val p011 = project(x, y+1, z+1) ?: return
+            val p111 = project(x+1, y+1, z+1) ?: return
+
+            val topC = color.copy(alpha = a)
+            val sideC1 = darken(color, 0.6f).copy(alpha = a)
+            val sideC2 = darken(color, 0.4f).copy(alpha = a)
+            val bottomC = darken(color, 0.3f).copy(alpha = a)
+
+            val mid = (x + 0.5f) to (z + 0.5f)
+
+            // Top face (y+1)
+            faces.add(Face(listOf(p010, p110, p111, p011), topC,
+                depth(mid.first, y + 1f, mid.second)))
+            // Bottom face (y)
+            faces.add(Face(listOf(p000, p100, p101, p001), bottomC,
+                depth(mid.first, y, mid.second)))
+            // Front face (z=gz)
+            faces.add(Face(listOf(p000, p100, p110, p010), sideC1,
+                depth(mid.first, y + 0.5f, z)))
+            // Back face (z=gz+1)
+            faces.add(Face(listOf(p001, p101, p111, p011), sideC2,
+                depth(mid.first, y + 0.5f, z + 1)))
+            // Left face (x=gx)
+            faces.add(Face(listOf(p000, p001, p011, p010), sideC2,
+                depth(x, y + 0.5f, mid.second)))
+            // Right face (x=gx+1)
+            faces.add(Face(listOf(p100, p101, p111, p110), sideC1,
+                depth(x + 1, y + 0.5f, mid.second)))
+        }
+
+        // Board blocks
         if (state.board.isNotEmpty()) {
-            for (y in 0 until bh) {
-                for (z in bd - 1 downTo 0) {
-                    for (x in bw - 1 downTo 0) {
+            for (y in 0 until Tetris3DGame.BOARD_H) {
+                for (z in 0 until Tetris3DGame.BOARD_D) {
+                    for (x in 0 until Tetris3DGame.BOARD_W) {
                         if (y < state.board.size && z < state.board[y].size && x < state.board[y][z].size) {
                             val colorIdx = state.board[y][z][x]
-                            if (colorIdx > 0) {
-                                drawIsoCube(ox, oy, cellW, cellH, cellYH, x, y, z, pieceColor(colorIdx), 1f)
-                            }
+                            if (colorIdx > 0) addCube(x, y, z, pieceColor(colorIdx, themePixelOn), 1f)
                         }
                     }
                 }
             }
         }
 
-        // Draw ghost piece
+        // Ghost piece
         val piece = state.currentPiece
         if (piece != null && showGhost && state.ghostY < piece.y) {
             for (b in piece.blocks) {
-                drawIsoCube(ox, oy, cellW, cellH, cellYH,
-                    piece.x + b.x, state.ghostY + b.y, piece.z + b.z,
-                    pieceColor(piece.type.colorIndex), 0.2f)
+                val gx = piece.x + b.x; val gy = state.ghostY + b.y; val gz = piece.z + b.z
+                if (gy >= 0) addCube(gx, gy, gz, themePixelOn, 0.15f)
             }
         }
 
-        // Draw current piece
+        // Current piece
         if (piece != null) {
             for (b in piece.blocks) {
-                drawIsoCube(ox, oy, cellW, cellH, cellYH,
-                    piece.x + b.x, piece.y + b.y, piece.z + b.z,
-                    pieceColor(piece.type.colorIndex), 1f)
+                val bx = piece.x + b.x; val by = piece.y + b.y; val bz = piece.z + b.z
+                if (by >= 0) addCube(bx, by, bz, pieceColor(piece.type.colorIndex, themePixelOn), 1f)
+            }
+        }
+
+        // Sort faces back-to-front and draw
+        faces.sortByDescending { it.depth }
+        faces.forEach { face ->
+            val path = Path().apply {
+                moveTo(face.points[0].x, face.points[0].y)
+                for (i in 1 until face.points.size) lineTo(face.points[i].x, face.points[i].y)
+                close()
+            }
+            drawPath(path, face.color, style = Fill)
+        }
+
+        // Draw edge highlights on current piece (so it stands out)
+        if (piece != null) {
+            for (b in piece.blocks) {
+                val bx = piece.x + b.x; val by = piece.y + b.y; val bz = piece.z + b.z
+                if (by < 0) continue
+                val top0 = project(bx.toFloat(), by + 1f, bz.toFloat())
+                val top1 = project(bx + 1f, by + 1f, bz.toFloat())
+                val top2 = project(bx + 1f, by + 1f, bz + 1f)
+                val top3 = project(bx.toFloat(), by + 1f, bz + 1f)
+                if (top0 != null && top1 != null && top2 != null && top3 != null) {
+                    val edgeColor = Color.White.copy(alpha = 0.3f)
+                    drawLine(edgeColor, top0, top1, 1.5f)
+                    drawLine(edgeColor, top1, top2, 1f)
+                    drawLine(edgeColor, top2, top3, 1f)
+                    drawLine(edgeColor, top3, top0, 1f)
+                }
             }
         }
     }
 }
 
-/** Convert 3D grid coords to 2D isometric screen coords */
-private fun isoProject(ox: Float, oy: Float, cellW: Float, cellH: Float, cellYH: Float,
-                       x: Float, y: Float, z: Float): Offset {
-    val sx = ox + (x - z) * cellW * 0.5f
-    val sy = oy + (x + z) * cellH * 0.5f - y * cellYH
-    return Offset(sx, sy)
-}
-
-/** Draw a single isometric cube (3 visible faces: top, left, right) */
-private fun DrawScope.drawIsoCube(
-    ox: Float, oy: Float, cellW: Float, cellH: Float, cellYH: Float,
-    gx: Int, gy: Int, gz: Int, color: Color, alpha: Float
-) {
-    val x = gx.toFloat(); val y = gy.toFloat(); val z = gz.toFloat()
-    val a = alpha.coerceIn(0f, 1f)
-
-    val tfl = isoProject(ox, oy, cellW, cellH, cellYH, x, y + 1, z)
-    val tfr = isoProject(ox, oy, cellW, cellH, cellYH, x + 1, y + 1, z)
-    val tbl = isoProject(ox, oy, cellW, cellH, cellYH, x, y + 1, z + 1)
-    val tbr = isoProject(ox, oy, cellW, cellH, cellYH, x + 1, y + 1, z + 1)
-    val bfl = isoProject(ox, oy, cellW, cellH, cellYH, x, y, z)
-    val bfr = isoProject(ox, oy, cellW, cellH, cellYH, x + 1, y, z)
-    val bbl = isoProject(ox, oy, cellW, cellH, cellYH, x, y, z + 1)
-
-    // Top face (brightest)
-    val topPath = Path().apply {
-        moveTo(tfl.x, tfl.y); lineTo(tfr.x, tfr.y)
-        lineTo(tbr.x, tbr.y); lineTo(tbl.x, tbl.y); close()
-    }
-    drawPath(topPath, color.copy(alpha = a), style = Fill)
-
-    // Left face (medium shade)
-    val leftPath = Path().apply {
-        moveTo(tfl.x, tfl.y); lineTo(tbl.x, tbl.y)
-        lineTo(bbl.x, bbl.y); lineTo(bfl.x, bfl.y); close()
-    }
-    drawPath(leftPath, darken(color, 0.65f).copy(alpha = a), style = Fill)
-
-    // Right face (darkest shade)
-    val rightPath = Path().apply {
-        moveTo(tfl.x, tfl.y); lineTo(tfr.x, tfr.y)
-        lineTo(bfr.x, bfr.y); lineTo(bfl.x, bfl.y); close()
-    }
-    drawPath(rightPath, darken(color, 0.4f).copy(alpha = a), style = Fill)
-
-    // Top edge highlights
-    if (a > 0.5f) {
-        drawLine(Color.White.copy(alpha = 0.2f * a), tfl, tfr, strokeWidth = 1.2f)
-        drawLine(Color.White.copy(alpha = 0.1f * a), tfl, tbl, strokeWidth = 0.8f)
-    }
-}
-
-/** Draw the floor grid at y=0 */
-private fun DrawScope.drawFloorGrid(
-    ox: Float, oy: Float, cellW: Float, cellH: Float, cellYH: Float,
-    boardW: Int, boardD: Int
-) {
-    val gridColor = Color.White.copy(alpha = 0.08f)
-    for (z in 0..boardD) {
-        val start = isoProject(ox, oy, cellW, cellH, cellYH, 0f, 0f, z.toFloat())
-        val end = isoProject(ox, oy, cellW, cellH, cellYH, boardW.toFloat(), 0f, z.toFloat())
-        drawLine(gridColor, start, end, strokeWidth = 1f)
-    }
-    for (x in 0..boardW) {
-        val start = isoProject(ox, oy, cellW, cellH, cellYH, x.toFloat(), 0f, 0f)
-        val end = isoProject(ox, oy, cellW, cellH, cellYH, x.toFloat(), 0f, boardD.toFloat())
-        drawLine(gridColor, start, end, strokeWidth = 1f)
-    }
-}
-
-/** Draw back walls for depth reference */
-private fun DrawScope.drawWalls(
-    ox: Float, oy: Float, cellW: Float, cellH: Float, cellYH: Float,
-    boardW: Int, boardD: Int, boardH: Int
-) {
-    val wallColor = Color.White.copy(alpha = 0.025f)
-    val wallLine = Color.White.copy(alpha = 0.04f)
-
-    // Back-left wall (x=0 plane)
-    val bl0 = isoProject(ox, oy, cellW, cellH, cellYH, 0f, 0f, 0f)
-    val bl1 = isoProject(ox, oy, cellW, cellH, cellYH, 0f, 0f, boardD.toFloat())
-    val bl2 = isoProject(ox, oy, cellW, cellH, cellYH, 0f, boardH.toFloat(), boardD.toFloat())
-    val bl3 = isoProject(ox, oy, cellW, cellH, cellYH, 0f, boardH.toFloat(), 0f)
-    val wallLeftPath = Path().apply {
-        moveTo(bl0.x, bl0.y); lineTo(bl1.x, bl1.y); lineTo(bl2.x, bl2.y); lineTo(bl3.x, bl3.y); close()
-    }
-    drawPath(wallLeftPath, wallColor)
-
-    // Grid lines on left wall
-    for (y in 0..boardH step 2) {
-        val s = isoProject(ox, oy, cellW, cellH, cellYH, 0f, y.toFloat(), 0f)
-        val e = isoProject(ox, oy, cellW, cellH, cellYH, 0f, y.toFloat(), boardD.toFloat())
-        drawLine(wallLine, s, e, strokeWidth = 0.5f)
-    }
-    for (z in 0..boardD step 2) {
-        val s = isoProject(ox, oy, cellW, cellH, cellYH, 0f, 0f, z.toFloat())
-        val e = isoProject(ox, oy, cellW, cellH, cellYH, 0f, boardH.toFloat(), z.toFloat())
-        drawLine(wallLine, s, e, strokeWidth = 0.5f)
-    }
-
-    // Back-right wall (z=boardD plane)
-    val br0 = isoProject(ox, oy, cellW, cellH, cellYH, 0f, 0f, boardD.toFloat())
-    val br1 = isoProject(ox, oy, cellW, cellH, cellYH, boardW.toFloat(), 0f, boardD.toFloat())
-    val br2 = isoProject(ox, oy, cellW, cellH, cellYH, boardW.toFloat(), boardH.toFloat(), boardD.toFloat())
-    val br3 = isoProject(ox, oy, cellW, cellH, cellYH, 0f, boardH.toFloat(), boardD.toFloat())
-    val wallRightPath = Path().apply {
-        moveTo(br0.x, br0.y); lineTo(br1.x, br1.y); lineTo(br2.x, br2.y); lineTo(br3.x, br3.y); close()
-    }
-    drawPath(wallRightPath, wallColor)
-
-    // Grid lines on right wall
-    for (y in 0..boardH step 2) {
-        val s = isoProject(ox, oy, cellW, cellH, cellYH, 0f, y.toFloat(), boardD.toFloat())
-        val e = isoProject(ox, oy, cellW, cellH, cellYH, boardW.toFloat(), y.toFloat(), boardD.toFloat())
-        drawLine(wallLine, s, e, strokeWidth = 0.5f)
-    }
-    for (x in 0..boardW step 2) {
-        val s = isoProject(ox, oy, cellW, cellH, cellYH, x.toFloat(), 0f, boardD.toFloat())
-        val e = isoProject(ox, oy, cellW, cellH, cellYH, x.toFloat(), boardH.toFloat(), boardD.toFloat())
-        drawLine(wallLine, s, e, strokeWidth = 0.5f)
-    }
-}
-
-private fun pieceColor(idx: Int): Color = when (idx) {
-    1 -> Color(0xFF00E5FF)
-    2 -> Color(0xFFFFD600)
-    3 -> Color(0xFFAA00FF)
-    4 -> Color(0xFF00E676)
-    5 -> Color(0xFFFF6D00)
-    6 -> Color(0xFFFF1744)
-    7 -> Color(0xFF2979FF)
-    8 -> Color(0xFFFF4081)
-    else -> Color(0xFF888888)
+/** Get color for a piece index, tinted by theme */
+private fun pieceColor(idx: Int, themeColor: Color): Color = when (idx) {
+    1 -> Color(0xFF00E5FF)  // cyan
+    2 -> Color(0xFFFFD600)  // yellow
+    3 -> Color(0xFFAA00FF)  // purple
+    4 -> Color(0xFF00E676)  // green
+    5 -> Color(0xFFFF6D00)  // orange
+    6 -> Color(0xFFFF1744)  // red
+    7 -> Color(0xFF2979FF)  // blue
+    8 -> Color(0xFFFF4081)  // pink
+    else -> themeColor
 }
 
 private fun darken(color: Color, factor: Float): Color = Color(
