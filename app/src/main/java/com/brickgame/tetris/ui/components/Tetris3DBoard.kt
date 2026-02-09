@@ -40,9 +40,10 @@ fun Tetris3DBoard(
         val cosY = cos(radY).toFloat(); val sinY = sin(radY).toFloat()
         val cosX = cos(radX).toFloat(); val sinX = sin(radX).toFloat()
 
-        // Camera distance & projection
-        val fov = if (starWarsMode) 350f else 500f
-        val camDist = if (starWarsMode) 18f else 22f
+        // Camera distance & projection — scale FOV to screen size for max fill
+        val screenScale = minOf(w, h) / 400f  // normalize to ~400px reference
+        val fov = if (starWarsMode) 500f * screenScale else 700f * screenScale
+        val camDist = if (starWarsMode) 14f else 16f
 
         // Center the board at origin
         val cx = bw / 2f; val cz = bd / 2f; val cy = bh / 2f
