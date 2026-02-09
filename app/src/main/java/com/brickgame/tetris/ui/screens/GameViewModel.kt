@@ -30,7 +30,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     val gameState: StateFlow<GameState> = game.state
 
     data class UiState(val showSettings: Boolean = false, val settingsPage: SettingsPage = SettingsPage.MAIN)
-    enum class SettingsPage { MAIN, PROFILE, THEME, THEME_EDITOR, LAYOUT, LAYOUT_EDITOR, GAMEPLAY, EXPERIENCE, ABOUT }
+    enum class SettingsPage { MAIN, PROFILE, THEME, THEME_EDITOR, LAYOUT, LAYOUT_EDITOR, GAMEPLAY, EXPERIENCE, CONTROLLER, ABOUT }
     private val _uiState = MutableStateFlow(UiState())
     val uiState: StateFlow<UiState> = _uiState.asStateFlow()
 
@@ -60,6 +60,10 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     val multiColorEnabled: StateFlow<Boolean> = _multiColorEnabled.asStateFlow()
     private val _pieceMaterial = MutableStateFlow("CLASSIC")
     val pieceMaterial: StateFlow<String> = _pieceMaterial.asStateFlow()
+    private val _controllerEnabled = MutableStateFlow(true)
+    val controllerEnabled: StateFlow<Boolean> = _controllerEnabled.asStateFlow()
+    private val _controllerDeadzone = MutableStateFlow(0.25f)
+    val controllerDeadzone: StateFlow<Float> = _controllerDeadzone.asStateFlow()
     private val _dataLoaded = MutableStateFlow(false)
     val dataLoaded: StateFlow<Boolean> = _dataLoaded.asStateFlow()
     val playerName = playerRepo.playerName.stateIn(viewModelScope, SharingStarted.Eagerly, "Player")
@@ -120,6 +124,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch { settingsRepo.dpadStyle.collect { name -> _dpadStyle.value = DPadStyle.entries.find { it.name == name } ?: DPadStyle.STANDARD } }
         viewModelScope.launch { settingsRepo.multiColorEnabled.collect { _multiColorEnabled.value = it } }
         viewModelScope.launch { settingsRepo.pieceMaterial.collect { _pieceMaterial.value = it } }
+        viewModelScope.launch { settingsRepo.controllerEnabled.collect { _controllerEnabled.value = it } }
+        viewModelScope.launch { settingsRepo.controllerDeadzone.collect { _controllerDeadzone.value = it } }
         // Signal that data is loaded after critical settings have their first emission
         viewModelScope.launch {
             kotlinx.coroutines.flow.combine(
@@ -209,6 +215,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     fun setDPadStyle(s: DPadStyle) { _dpadStyle.value = s; viewModelScope.launch { settingsRepo.setDpadStyle(s.name) } }
     fun setMultiColorEnabled(v: Boolean) { _multiColorEnabled.value = v; viewModelScope.launch { settingsRepo.setMultiColorEnabled(v) } }
     fun setPieceMaterial(v: String) { _pieceMaterial.value = v; viewModelScope.launch { settingsRepo.setPieceMaterial(v) } }
+    fun setControllerEnabled(v: Boolean) { _controllerEnabled.value = v; viewModelScope.launch { settingsRepo.setControllerEnabled(v) } }
+    fun setControllerDeadzone(v: Float) { _controllerDeadzone.value = v; viewModelScope.launch { settingsRepo.setControllerDeadzone(v) } }
 
     // ===== Custom Theme =====
     fun startNewTheme() {

@@ -44,6 +44,7 @@ fun SettingsScreen(
     animationStyle: AnimationStyle, animationDuration: Float,
     soundEnabled: Boolean, vibrationEnabled: Boolean, multiColorEnabled: Boolean,
     pieceMaterial: String = "CLASSIC",
+    controllerEnabled: Boolean = true, controllerDeadzone: Float = 0.25f,
     playerName: String, highScore: Int, scoreHistory: List<ScoreEntry>,
     customThemes: List<GameTheme>, editingTheme: GameTheme?,
     customLayouts: List<CustomLayoutData>, editingLayout: CustomLayoutData?,
@@ -57,6 +58,8 @@ fun SettingsScreen(
     onSetVibrationEnabled: (Boolean) -> Unit, onSetPlayerName: (String) -> Unit,
     onSetMultiColorEnabled: (Boolean) -> Unit,
     onSetPieceMaterial: (String) -> Unit = {},
+    onSetControllerEnabled: (Boolean) -> Unit = {},
+    onSetControllerDeadzone: (Float) -> Unit = {},
     onNewTheme: () -> Unit, onEditTheme: (GameTheme) -> Unit,
     onUpdateEditingTheme: (GameTheme) -> Unit, onSaveTheme: () -> Unit, onDeleteTheme: (String) -> Unit,
     onNewLayout: () -> Unit, onEditLayout: (CustomLayoutData) -> Unit,
@@ -76,6 +79,7 @@ fun SettingsScreen(
             GameViewModel.SettingsPage.LAYOUT_EDITOR -> if (editingLayout != null) LayoutEditorScreen(editingLayout, currentTheme, portraitLayout, dpadStyle, onUpdateEditingLayout, onSaveLayout) { onNavigate(GameViewModel.SettingsPage.LAYOUT) }
             GameViewModel.SettingsPage.GAMEPLAY -> GameplayPage(difficulty, gameMode, ghostEnabled, onSetDifficulty, onSetGameMode, onSetGhostEnabled) { onNavigate(GameViewModel.SettingsPage.MAIN) }
             GameViewModel.SettingsPage.EXPERIENCE -> ExperiencePage(animationStyle, animationDuration, soundEnabled, vibrationEnabled, onSetAnimationStyle, onSetAnimationDuration, onSetSoundEnabled, onSetVibrationEnabled) { onNavigate(GameViewModel.SettingsPage.MAIN) }
+            GameViewModel.SettingsPage.CONTROLLER -> ControllerPage(controllerEnabled, controllerDeadzone, onSetControllerEnabled, onSetControllerDeadzone) { onNavigate(GameViewModel.SettingsPage.MAIN) }
             GameViewModel.SettingsPage.ABOUT -> AboutPage { onNavigate(GameViewModel.SettingsPage.MAIN) }
         }
     }
@@ -90,6 +94,7 @@ fun SettingsScreen(
         MenuItem("Layout", "Screen arrangement + 3D mode") { onNav(GameViewModel.SettingsPage.LAYOUT) }
         MenuItem("Gameplay", "Difficulty, mode") { onNav(GameViewModel.SettingsPage.GAMEPLAY) }
         MenuItem("Experience", "Animation, sound") { onNav(GameViewModel.SettingsPage.EXPERIENCE) }
+        MenuItem("Controller", "Gamepad settings") { onNav(GameViewModel.SettingsPage.CONTROLLER) }
         MenuItem("About", "Version, credits") { onNav(GameViewModel.SettingsPage.ABOUT) }
     }
 }
@@ -165,7 +170,7 @@ fun SettingsScreen(
             Text("Visual texture for 3D and 2D pieces", color = DIM, fontSize = 11.sp)
             Spacer(Modifier.height(8.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                listOf("CLASSIC" to "Classic", "STONE" to "Stone", "GRANITE" to "Granite", "GLASS" to "Glass", "CRYSTAL" to "Crystal").forEach { (id, label) ->
+                listOf("CLASSIC" to "Classic", "STONE" to "Stone", "GRANITE" to "Granite", "GLASS" to "Marble", "CRYSTAL" to "Diamond").forEach { (id, label) ->
                     val sel = pieceMaterial == id
                     Box(Modifier.weight(1f).clip(RoundedCornerShape(8.dp))
                         .background(if (sel) ACC.copy(0.2f) else CARD)
@@ -256,6 +261,62 @@ fun SettingsScreen(
         item { Lbl("Animation") }; items(AnimationStyle.entries.size) { i -> val x = AnimationStyle.entries[i]; Sel("${x.displayName} — ${x.description}", x == aS) { onAS(x) } }
         item { Card { Text("Speed", color = TX, fontSize = 14.sp); Slider(aD, onAD, valueRange = 0.1f..2f, colors = sliderColors()); Text("${(aD*1000).toInt()}ms", color = DIM, fontSize = 12.sp) } }
         item { Lbl("Sound & Vibration") }; item { Card { Toggle("Sound", s, onS); Spacer(Modifier.height(8.dp)); Toggle("Vibration", v, onV) } }
+    }
+}
+
+// ===== CONTROLLER =====
+@Composable private fun ControllerPage(enabled: Boolean, deadzone: Float, onEnable: (Boolean) -> Unit, onDeadzone: (Float) -> Unit, onBack: () -> Unit) {
+    val controllers = remember { com.brickgame.tetris.input.GamepadController.getConnectedControllers() }
+    LazyColumn(Modifier.fillMaxSize().padding(20.dp)) {
+        item { Header("Controller", onBack) }
+        item { Lbl("Gamepad / Controller") }
+        item { Card {
+            Toggle("Controller Enabled", enabled, onEnable)
+            Spacer(Modifier.height(4.dp))
+            Text("Use a connected gamepad or Bluetooth controller", color = DIM, fontSize = 11.sp)
+        } }
+        item { Card {
+            Text("Stick Deadzone", color = TX, fontSize = 14.sp)
+            Slider(deadzone, onDeadzone, valueRange = 0.05f..0.8f, colors = sliderColors())
+            Text("${(deadzone * 100).toInt()}%", color = DIM, fontSize = 12.sp)
+            Text("Higher = less sensitive to small stick movements", color = DIM, fontSize = 11.sp)
+        } }
+        item { Lbl("Connected Controllers") }
+        if (controllers.isEmpty()) {
+            item { Card { Text("No controllers detected", color = DIM, fontSize = 14.sp); Spacer(Modifier.height(4.dp)); Text("Connect a Bluetooth or USB gamepad to get started", color = DIM, fontSize = 11.sp) } }
+        } else {
+            items(controllers.size) { i ->
+                val c = controllers[i]
+                Card {
+                    Text(c.name, color = TX, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    Text("Vendor: ${c.vendorId}  Product: ${c.productId}", color = DIM, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+                    Text("✓ Connected", color = Color(0xFF22C55E), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+        item { Lbl("Button Mapping") }
+        item { Card {
+            Text("Default Layout", color = TX, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(8.dp))
+            MapRow("D-Pad / L-Stick", "Move piece")
+            MapRow("A / Cross", "Rotate (Spin)")
+            MapRow("B / Circle", "Rotate (Tilt)")
+            MapRow("X / Square", "Hold piece")
+            MapRow("Y / Triangle", "Hard drop")
+            MapRow("LB / L1", "Move Z- (3D)")
+            MapRow("RB / R1", "Move Z+ (3D)")
+            MapRow("Start", "Pause / Resume")
+            MapRow("Select", "Settings")
+            MapRow("L-Stick click", "Toggle gravity (3D)")
+        } }
+        item { Spacer(Modifier.height(16.dp)) }
+    }
+}
+
+@Composable private fun MapRow(button: String, action: String) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), Arrangement.SpaceBetween) {
+        Text(button, color = ACC, fontSize = 12.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, modifier = Modifier.width(120.dp))
+        Text(action, color = TX, fontSize = 12.sp)
     }
 }
 

@@ -1,6 +1,8 @@
 package com.brickgame.tetris
 
 import android.os.Bundle
+import android.view.KeyEvent
+import android.view.MotionEvent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
@@ -28,6 +30,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.brickgame.tetris.game.GameStatus
+import com.brickgame.tetris.input.GamepadController
 import com.brickgame.tetris.ui.layout.FreeformEditorScreen
 import com.brickgame.tetris.ui.layout.LayoutPreset
 import com.brickgame.tetris.ui.components.PieceMaterial
@@ -40,11 +43,75 @@ import kotlinx.coroutines.delay
 import kotlin.math.*
 
 class MainActivity : ComponentActivity() {
+
+    private val gamepad = GamepadController()
+    private var vmRef: GameViewModel? = null
+
+    override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
+        if (gamepad.handleKeyDown(keyCode, event)) return true
+        return super.onKeyDown(keyCode, event)
+    }
+
+    override fun onKeyUp(keyCode: Int, event: KeyEvent): Boolean {
+        if (gamepad.handleKeyUp(keyCode, event)) return true
+        return super.onKeyUp(keyCode, event)
+    }
+
+    override fun onGenericMotionEvent(event: MotionEvent): Boolean {
+        if (gamepad.handleMotionEvent(event)) return true
+        return super.onGenericMotionEvent(event)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         setContent {
             val vm: GameViewModel = viewModel()
+            vmRef = vm
+
+            // Wire gamepad controller to game actions
+            LaunchedEffect(Unit) {
+                gamepad.onAction = { action ->
+                    val activeLayout = if (vm.portraitLayout.value == LayoutPreset.PORTRAIT_3D) "3D" else "2D"
+                    val status2D = vm.gameState.value.status
+                    val status3D = vm.game3DState.value.status
+                    val is3D = activeLayout == "3D"
+                    val isPlaying = if (is3D) status3D == GameStatus.PLAYING else status2D == GameStatus.PLAYING
+
+                    when (action) {
+                        GamepadController.Action.MOVE_LEFT -> if (isPlaying) { if (is3D) vm.move3DX(-1) else vm.moveLeft() }
+                        GamepadController.Action.MOVE_RIGHT -> if (isPlaying) { if (is3D) vm.move3DX(1) else vm.moveRight() }
+                        GamepadController.Action.SOFT_DROP -> if (isPlaying) { if (is3D) vm.softDrop3D() else vm.softDrop() }
+                        GamepadController.Action.MOVE_UP -> if (isPlaying && is3D) vm.move3DX(0) // Up in 2D not used
+                        GamepadController.Action.MOVE_Z_FORWARD -> if (isPlaying && is3D) vm.move3DZ(1)
+                        GamepadController.Action.MOVE_Z_BACKWARD -> if (isPlaying && is3D) vm.move3DZ(-1)
+                        GamepadController.Action.ROTATE_XZ -> if (isPlaying) { if (is3D) vm.rotate3DXZ() else vm.rotate() }
+                        GamepadController.Action.ROTATE_XY -> if (isPlaying) { if (is3D) vm.rotate3DXY() else vm.rotateCounterClockwise() }
+                        GamepadController.Action.HARD_DROP -> if (isPlaying) { if (is3D) vm.hardDrop3D() else vm.hardDrop() }
+                        GamepadController.Action.HOLD -> if (isPlaying) { if (is3D) vm.hold3D() else vm.holdPiece() }
+                        GamepadController.Action.PAUSE -> {
+                            if (is3D) {
+                                when (status3D) {
+                                    GameStatus.PLAYING -> vm.pause3D()
+                                    GameStatus.PAUSED -> vm.resume3D()
+                                    GameStatus.MENU -> vm.start3DGame()
+                                    else -> {}
+                                }
+                            } else {
+                                when (status2D) {
+                                    GameStatus.PLAYING -> vm.pauseGame()
+                                    GameStatus.PAUSED -> vm.resumeGame()
+                                    GameStatus.MENU -> vm.startGame()
+                                    else -> {}
+                                }
+                            }
+                        }
+                        GamepadController.Action.SETTINGS -> vm.openSettings()
+                        GamepadController.Action.TOGGLE_GRAVITY -> if (is3D) vm.toggle3DGravity()
+                    }
+                }
+            }
+
             val dataLoaded by vm.dataLoaded.collectAsState()
             val gs by vm.gameState.collectAsState()
             val ui by vm.uiState.collectAsState()
@@ -61,6 +128,15 @@ class MainActivity : ComponentActivity() {
             val vib by vm.vibrationEnabled.collectAsState()
             val multiColor by vm.multiColorEnabled.collectAsState()
             val pieceMaterial by vm.pieceMaterial.collectAsState()
+            val controllerEnabled by vm.controllerEnabled.collectAsState()
+            val controllerDeadzone by vm.controllerDeadzone.collectAsState()
+
+            // Sync controller settings to gamepad handler
+            LaunchedEffect(controllerEnabled, controllerDeadzone) {
+                gamepad.enabled = controllerEnabled
+                gamepad.deadzone = controllerDeadzone
+            }
+
             val name by vm.playerName.collectAsState()
             val hs by vm.highScore.collectAsState()
             val history by vm.scoreHistory.collectAsState()
@@ -152,6 +228,7 @@ class MainActivity : ComponentActivity() {
                             animationStyle = anim, animationDuration = animDur,
                             soundEnabled = sound, vibrationEnabled = vib, multiColorEnabled = multiColor,
                             pieceMaterial = pieceMaterial,
+                            controllerEnabled = controllerEnabled, controllerDeadzone = controllerDeadzone,
                             playerName = name, highScore = hs, scoreHistory = history,
                             customThemes = customThemes, editingTheme = editingTheme,
                             customLayouts = customLayouts, editingLayout = editingLayout,
@@ -173,6 +250,8 @@ class MainActivity : ComponentActivity() {
                             onSetVibrationEnabled = vm::setVibrationEnabled, onSetPlayerName = vm::setPlayerName,
                             onSetMultiColorEnabled = vm::setMultiColorEnabled,
                             onSetPieceMaterial = vm::setPieceMaterial,
+                            onSetControllerEnabled = vm::setControllerEnabled,
+                            onSetControllerDeadzone = vm::setControllerDeadzone,
                             onNewTheme = vm::startNewTheme, onEditTheme = vm::editTheme,
                             onUpdateEditingTheme = vm::updateEditingTheme, onSaveTheme = vm::saveEditingTheme,
                             onDeleteTheme = vm::deleteCustomTheme,
