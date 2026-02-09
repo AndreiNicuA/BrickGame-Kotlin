@@ -26,10 +26,6 @@ import com.brickgame.tetris.ui.components.*
 import com.brickgame.tetris.ui.theme.LocalGameTheme
 import kotlin.math.*
 
-/**
- * 3D Tetris game screen — integrated as a layout preset.
- * Controls use camera-relative directions: screen-left = always left.
- */
 @Composable
 fun Game3DScreen(
     state: Game3DState,
@@ -47,48 +43,40 @@ fun Game3DScreen(
 ) {
     val theme = LocalGameTheme.current
 
-    // Camera state
-    var cameraY by remember { mutableFloatStateOf(35f) }
-    var cameraX by remember { mutableFloatStateOf(25f) }
+    // Camera — full 360° on both axes
+    var azimuth by remember { mutableFloatStateOf(35f) }    // horizontal orbit
+    var elevation by remember { mutableFloatStateOf(25f) }  // vertical tilt
     var panX by remember { mutableFloatStateOf(0f) }
     var panY by remember { mutableFloatStateOf(0f) }
     var starWars by remember { mutableStateOf(false) }
     var showCamSettings by remember { mutableStateOf(false) }
 
-    val effectiveCamY = if (starWars) 0f else cameraY
-    val effectiveCamX = if (starWars) 75f else cameraX
+    // Track finger count for gesture separation
+    var fingerCount by remember { mutableIntStateOf(0) }
+
+    val effectiveAz = if (starWars) 0f else azimuth
+    val effectiveEl = if (starWars) 75f else elevation
 
     /**
-     * Camera-relative movement: project screen directions onto the XZ floor plane.
-     * Screen-left always moves the piece left from the user's perspective.
+     * Camera-relative movement — screen directions mapped to world XY floor plane.
+     * Azimuth rotation determines which world direction "screen-right" maps to.
      */
     fun moveCameraRelative(screenDx: Int, screenDz: Int) {
-        if (starWars) {
-            // Star Wars mode: fixed view, direct mapping
-            onMoveX(screenDx)
-            onMoveZ(screenDz)
-            return
-        }
-        val rad = Math.toRadians(cameraY.toDouble())
-        val cosA = cos(rad).toFloat()
-        val sinA = sin(rad).toFloat()
-
-        // Screen-right → world direction depends on camera rotation
-        // screenDx: +1 = screen right, screenDz: +1 = screen up (away)
-        val worldX = (screenDx * cosA - screenDz * sinA)
-        val worldZ = (screenDx * sinA + screenDz * cosA)
-
-        // Snap to dominant axis
-        if (abs(worldX) >= abs(worldZ)) {
+        if (starWars) { onMoveX(screenDx); onMoveZ(screenDz); return }
+        val rad = Math.toRadians(azimuth.toDouble())
+        val cosA = cos(rad).toFloat(); val sinA = sin(rad).toFloat()
+        val worldX = screenDx * cosA - screenDz * sinA
+        val worldY = screenDx * sinA + screenDz * cosA
+        if (abs(worldX) >= abs(worldY)) {
             onMoveX(if (worldX > 0) 1 else -1)
         } else {
-            onMoveZ(if (worldZ > 0) 1 else -1)
+            onMoveZ(if (worldY > 0) 1 else -1)
         }
     }
 
     Box(Modifier.fillMaxSize().background(theme.backgroundColor).systemBarsPadding()) {
         Column(Modifier.fillMaxSize()) {
-            // Compact info bar
+            // Info bar
             Row(
                 Modifier.fillMaxWidth().background(Color.Black.copy(0.4f))
                     .padding(horizontal = 10.dp, vertical = 5.dp),
@@ -127,15 +115,39 @@ fun Game3DScreen(
                 }
             }
 
-            // 3D Board — one finger rotates, two fingers pan
+            // 3D Board — gestures
             Box(
                 Modifier.weight(1f).fillMaxWidth()
                     .pointerInput(starWars) {
                         if (!starWars) {
                             detectTransformGestures { _, pan, _, _ ->
-                                // pan.x/y from transform gestures (handles multi-touch)
-                                cameraY = (cameraY + pan.x * 0.3f) % 360f
-                                cameraX = (cameraX - pan.y * 0.2f).coerceIn(-10f, 80f)
+                                // detectTransformGestures handles multi-touch:
+                                // 1 finger: pan is drag delta → rotate camera
+                                // 2+ fingers: pan is centroid delta → pan camera
+                                // We use a heuristic: small pan with large rotation = orbit
+                                // The gesture itself reports combined pan for all fingers
+                                // We'll use separate gesture detectors below
+                                azimuth = (azimuth + pan.x * 0.3f) % 360f
+                                elevation = (elevation - pan.y * 0.2f) % 360f
+                            }
+                        }
+                    }
+                    .pointerInput(starWars) {
+                        if (!starWars) {
+                            // Second pointer input for two-finger pan detection
+                            awaitPointerEventScope {
+                                while (true) {
+                                    val event = awaitPointerEvent()
+                                    val pointers = event.changes.filter { it.pressed }
+                                    if (pointers.size >= 2) {
+                                        // Two fingers — pan
+                                        val dx = pointers.map { it.position.x - it.previousPosition.x }.average().toFloat()
+                                        val dy = pointers.map { it.position.y - it.previousPosition.y }.average().toFloat()
+                                        panX += dx
+                                        panY += dy
+                                        pointers.forEach { it.consume() }
+                                    }
+                                }
                             }
                         }
                     },
@@ -145,8 +157,8 @@ fun Game3DScreen(
                     state = state,
                     modifier = Modifier.fillMaxSize().padding(2.dp),
                     showGhost = true,
-                    cameraAngleY = effectiveCamY,
-                    cameraAngleX = effectiveCamX,
+                    cameraAngleY = effectiveAz,
+                    cameraAngleX = effectiveEl,
                     panOffsetX = panX,
                     panOffsetY = panY,
                     themePixelOn = theme.pixelOn,
@@ -192,8 +204,8 @@ fun Game3DScreen(
                 if (showCamSettings) {
                     Column(
                         Modifier.align(Alignment.TopEnd).padding(top = 8.dp, end = 8.dp)
-                            .width(180.dp)
-                            .background(Color.Black.copy(0.9f), RoundedCornerShape(12.dp))
+                            .width(190.dp)
+                            .background(Color.Black.copy(0.92f), RoundedCornerShape(12.dp))
                             .padding(12.dp)
                     ) {
                         Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
@@ -201,17 +213,19 @@ fun Game3DScreen(
                             Text("✕", color = Color.White.copy(0.5f), fontSize = 16.sp,
                                 modifier = Modifier.clickable { showCamSettings = false }.padding(4.dp))
                         }
-                        Spacer(Modifier.height(8.dp))
-                        CamSlider("Angle", cameraY, -180f, 180f) { cameraY = it }
-                        CamSlider("Tilt", cameraX, -10f, 80f) { cameraX = it }
-                        CamSlider("Pan X", panX, -100f, 100f) { panX = it }
-                        CamSlider("Pan Y", panY, -100f, 100f) { panY = it }
-                        Spacer(Modifier.height(4.dp))
+                        Spacer(Modifier.height(6.dp))
+                        CamSlider("Orbit", azimuth, -180f, 180f) { azimuth = it }
+                        CamSlider("Tilt", elevation, -180f, 180f) { elevation = it }
+                        CamSlider("Pan X", panX, -200f, 200f) { panX = it }
+                        CamSlider("Pan Y", panY, -200f, 200f) { panY = it }
+                        Spacer(Modifier.height(6.dp))
                         Row(Modifier.fillMaxWidth(), Arrangement.spacedBy(4.dp)) {
-                            CamPreset("Front", Modifier.weight(1f)) { cameraY = 0f; cameraX = 15f; panX = 0f; panY = 0f }
-                            CamPreset("Side", Modifier.weight(1f)) { cameraY = 90f; cameraX = 20f; panX = 0f; panY = 0f }
-                            CamPreset("Top", Modifier.weight(1f)) { cameraY = 35f; cameraX = 70f; panX = 0f; panY = 0f }
+                            CamPreset("Front", Modifier.weight(1f)) { azimuth = 0f; elevation = 15f; panX = 0f; panY = 0f }
+                            CamPreset("Side", Modifier.weight(1f)) { azimuth = 90f; elevation = 20f; panX = 0f; panY = 0f }
+                            CamPreset("Top", Modifier.weight(1f)) { azimuth = 35f; elevation = 70f; panX = 0f; panY = 0f }
                         }
+                        Spacer(Modifier.height(4.dp))
+                        CamPreset("Reset", Modifier.fillMaxWidth()) { azimuth = 35f; elevation = 25f; panX = 0f; panY = 0f }
                     }
                 }
             }
@@ -221,7 +235,7 @@ fun Game3DScreen(
                 Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 4.dp),
                 Arrangement.SpaceBetween, Alignment.CenterVertically
             ) {
-                // Left: D-pad — camera-relative movement
+                // Left: D-pad (camera-relative)
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     TapButton(ButtonIcon.UP, 44.dp) { moveCameraRelative(0, 1) }
                     Row {
@@ -234,7 +248,7 @@ fun Game3DScreen(
                     TapButton(ButtonIcon.DOWN, 44.dp) { moveCameraRelative(0, -1) }
                 }
 
-                // Center: action buttons
+                // Center: actions
                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(3.dp)) {
                     ActionButton("HOLD", onHold, width = 54.dp, height = 24.dp)
                     ActionButton(
@@ -242,39 +256,26 @@ fun Game3DScreen(
                         { if (state.status == GameStatus.MENU) onStart() else onPause() },
                         width = 54.dp, height = 24.dp
                     )
-                    // Toggle row: SW, Freeze, Cam
                     Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
                         MiniToggle("SW", starWars, theme.accentColor) { starWars = !starWars }
-                        // Freeze button — snowflake ❄
                         MiniToggle("❄", !state.autoGravity, Color(0xFF38BDF8)) { onToggleGravity() }
                         MiniToggle("⚙", showCamSettings, Color(0xFFF59E0B)) { showCamSettings = !showCamSettings }
                     }
                     ActionButton("···", onOpenSettings, width = 36.dp, height = 18.dp)
                 }
 
-                // Right: rotations + drop
+                // Right: rotations + drops
                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(5.dp)) {
                     RotateButton(onRotateXZ, 48.dp)
-                    // Soft drop
                     TapButton(ButtonIcon.DOWN, 42.dp) { onSoftDrop() }
-                    // Hard drop
                     Box(
-                        Modifier.size(48.dp).clip(CircleShape)
-                            .background(theme.buttonPrimary)
-                            .clickable { onHardDrop() },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text("⏬", fontSize = 20.sp, color = theme.textPrimary)
-                    }
-                    // Tilt rotate
+                        Modifier.size(48.dp).clip(CircleShape).background(theme.buttonPrimary)
+                            .clickable { onHardDrop() }, contentAlignment = Alignment.Center
+                    ) { Text("⏬", fontSize = 20.sp, color = theme.textPrimary) }
                     Box(
-                        Modifier.size(38.dp).clip(CircleShape)
-                            .background(theme.buttonPrimary.copy(0.6f))
-                            .clickable { onRotateXY() },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text("⤵", fontSize = 16.sp, color = theme.textPrimary.copy(0.8f))
-                    }
+                        Modifier.size(38.dp).clip(CircleShape).background(theme.buttonPrimary.copy(0.6f))
+                            .clickable { onRotateXY() }, contentAlignment = Alignment.Center
+                    ) { Text("⤵", fontSize = 16.sp, color = theme.textPrimary.copy(0.8f)) }
                 }
             }
             Spacer(Modifier.height(2.dp))
@@ -284,12 +285,9 @@ fun Game3DScreen(
 
 @Composable
 private fun MiniToggle(label: String, active: Boolean, color: Color, onClick: () -> Unit) {
-    Box(
-        Modifier.clip(RoundedCornerShape(5.dp))
-            .background(if (active) color.copy(0.3f) else Color.White.copy(0.05f))
-            .clickable { onClick() }
-            .padding(horizontal = 7.dp, vertical = 3.dp)
-    ) {
+    Box(Modifier.clip(RoundedCornerShape(5.dp))
+        .background(if (active) color.copy(0.3f) else Color.White.copy(0.05f))
+        .clickable { onClick() }.padding(horizontal = 7.dp, vertical = 3.dp)) {
         Text(label, fontSize = 9.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace,
             color = if (active) color else Color.White.copy(0.4f))
     }
@@ -298,21 +296,20 @@ private fun MiniToggle(label: String, active: Boolean, color: Color, onClick: ()
 @Composable
 private fun CamSlider(label: String, value: Float, min: Float, max: Float, onChange: (Float) -> Unit) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Text(label, color = Color.White.copy(0.6f), fontSize = 10.sp, fontFamily = FontFamily.Monospace,
-            modifier = Modifier.width(36.dp))
+        Text(label, color = Color.White.copy(0.6f), fontSize = 9.sp, fontFamily = FontFamily.Monospace,
+            modifier = Modifier.width(34.dp))
         Slider(value = value, onValueChange = onChange, valueRange = min..max,
             modifier = Modifier.weight(1f).height(20.dp),
             colors = SliderDefaults.colors(thumbColor = Color(0xFF22C55E), activeTrackColor = Color(0xFF22C55E)))
         Text("${value.toInt()}", color = Color.White.copy(0.4f), fontSize = 9.sp,
-            modifier = Modifier.width(28.dp), textAlign = TextAlign.End)
+            modifier = Modifier.width(30.dp), textAlign = TextAlign.End)
     }
 }
 
 @Composable
 private fun CamPreset(label: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
     Box(modifier.clip(RoundedCornerShape(4.dp)).background(Color.White.copy(0.08f))
-        .clickable { onClick() }.padding(vertical = 4.dp),
-        contentAlignment = Alignment.Center) {
+        .clickable { onClick() }.padding(vertical = 4.dp), contentAlignment = Alignment.Center) {
         Text(label, fontSize = 9.sp, color = Color.White.copy(0.6f), fontFamily = FontFamily.Monospace)
     }
 }
