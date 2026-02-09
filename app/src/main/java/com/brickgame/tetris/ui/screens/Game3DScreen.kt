@@ -2,8 +2,10 @@ package com.brickgame.tetris.ui.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
@@ -13,7 +15,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.changedToUp
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -25,8 +30,18 @@ import com.brickgame.tetris.ui.theme.LocalGameTheme
 import kotlin.math.*
 
 /**
- * 3D Tetris game screen — same workflow as 2D layouts.
- * One finger: orbit camera. Two fingers: pan. Pinch: zoom.
+ * 3D Tetris game screen.
+ *
+ * Gestures:
+ *   1 finger drag = rotate camera (orbit)
+ *   2 fingers same direction = pan
+ *   2 fingers spread/pinch = zoom
+ *
+ * Controls:
+ *   D-pad: move piece (camera-relative) + UP=hard drop, DOWN=soft drop
+ *   ROT XZ / ROT XY buttons side by side
+ *   Zoom +/- buttons
+ *   ViewCube in top-right corner (Fusion 360 style)
  */
 @Composable
 fun Game3DScreen(
@@ -87,64 +102,110 @@ fun Game3DScreen(
                     Text("LAYERS", fontSize = 7.sp, color = theme.textSecondary, fontFamily = FontFamily.Monospace)
                     Text("${state.layers}", fontSize = 16.sp, fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace, color = theme.accentColor)
                 }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("NXT ", fontSize = 7.sp, color = theme.textSecondary, fontFamily = FontFamily.Monospace)
+                // Next pieces as mini 3D previews
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text("NXT", fontSize = 7.sp, color = theme.textSecondary, fontFamily = FontFamily.Monospace)
                     state.nextPieces.forEachIndexed { i, type ->
-                        Box(Modifier.size(20.dp).background(theme.pixelOn.copy(0.1f), RoundedCornerShape(3.dp)),
-                            contentAlignment = Alignment.Center) {
-                            Text(type.displayName.first().toString(), fontSize = 9.sp, fontWeight = FontWeight.Bold,
-                                color = pieceUIColor(type.colorIndex).copy(if (i == 0) 1f else 0.4f), fontFamily = FontFamily.Monospace)
-                        }
-                        if (i < state.nextPieces.size - 1) Spacer(Modifier.width(2.dp))
+                        Mini3DPiecePreview(type, Modifier.size(22.dp), theme.pixelOn, if (i == 0) 1f else 0.4f)
                     }
                 }
-                Box(Modifier.size(22.dp).background(theme.pixelOn.copy(0.1f), RoundedCornerShape(3.dp)),
-                    contentAlignment = Alignment.Center) {
-                    val hp = state.holdPiece
-                    if (hp != null) Text(hp.displayName.first().toString(), fontSize = 10.sp, fontWeight = FontWeight.Bold,
-                        color = pieceUIColor(hp.colorIndex).copy(if (state.holdUsed) 0.3f else 1f), fontFamily = FontFamily.Monospace)
-                    else Text("H", fontSize = 8.sp, color = theme.textSecondary.copy(0.3f), fontFamily = FontFamily.Monospace)
+                // Hold
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("H", fontSize = 7.sp, color = theme.textSecondary, fontFamily = FontFamily.Monospace)
+                    Mini3DPiecePreview(state.holdPiece, Modifier.size(24.dp), theme.pixelOn,
+                        if (state.holdUsed) 0.3f else 1f)
                 }
             }
 
-            // 3D Board — detectTransformGestures handles all: 1-finger drag, 2-finger pan, pinch zoom
+            // 3D Board with gesture handling
             Box(
                 Modifier.weight(1f).fillMaxWidth()
                     .pointerInput(starWars) {
-                        if (!starWars) {
-                            detectTransformGestures(panZoomLock = false) { _, pan, gestureZoom, _ ->
-                                // pan = centroid movement
-                                // If zooming (pinch), apply zoom + pan as camera pan
-                                if (abs(gestureZoom - 1f) > 0.01f) {
-                                    // Pinching — zoom + pan
-                                    zoom = (zoom * gestureZoom).coerceIn(0.3f, 3f)
-                                    panX += pan.x
-                                    panY += pan.y
-                                } else if (abs(pan.x) > 1f || abs(pan.y) > 1f) {
-                                    // Single finger drag → orbit
-                                    azimuth = (azimuth + pan.x * 0.3f) % 360f
-                                    elevation = (elevation - pan.y * 0.2f) % 360f
+                        if (starWars) return@pointerInput
+                        awaitEachGesture {
+                            val first = awaitFirstDown(pass = PointerEventPass.Main)
+                            first.consume()
+                            var prevCentroidX = first.position.x
+                            var prevCentroidY = first.position.y
+                            var prevSpread = 0f
+                            var fingerCount = 1
+
+                            while (true) {
+                                val event = awaitPointerEvent(PointerEventPass.Main)
+                                val pressed = event.changes.filter { !it.changedToUp() && it.pressed }
+                                if (pressed.isEmpty()) break
+
+                                val centX = pressed.map { it.position.x }.average().toFloat()
+                                val centY = pressed.map { it.position.y }.average().toFloat()
+                                val dx = centX - prevCentroidX
+                                val dy = centY - prevCentroidY
+
+                                if (pressed.size >= 2) {
+                                    fingerCount = 2
+                                    // Calculate spread between fingers
+                                    val spread = if (pressed.size == 2) {
+                                        val d = pressed[0].position - pressed[1].position
+                                        sqrt(d.x * d.x + d.y * d.y)
+                                    } else 0f
+
+                                    if (prevSpread > 0f && spread > 0f) {
+                                        val spreadDelta = spread - prevSpread
+                                        if (abs(spreadDelta) > 3f) {
+                                            // Fingers spreading/pinching = zoom
+                                            zoom = (zoom + spreadDelta * 0.003f).coerceIn(0.3f, 3f)
+                                        } else {
+                                            // Both fingers same direction = pan
+                                            panX += dx
+                                            panY += dy
+                                        }
+                                    }
+                                    prevSpread = spread
+                                } else if (fingerCount == 1) {
+                                    // Single finger = orbit camera
+                                    azimuth = (azimuth + dx * 0.3f) % 360f
+                                    elevation = (elevation - dy * 0.2f) % 360f
                                 }
+
+                                prevCentroidX = centX
+                                prevCentroidY = centY
+                                pressed.forEach { it.consume() }
                             }
                         }
                     },
                 contentAlignment = Alignment.Center
             ) {
                 Tetris3DBoard(
-                    state = state,
-                    modifier = Modifier.fillMaxSize().padding(2.dp),
-                    showGhost = true,
-                    cameraAngleY = effectiveAz,
-                    cameraAngleX = effectiveEl,
-                    panOffsetX = panX,
-                    panOffsetY = panY,
-                    zoom = zoom,
-                    themePixelOn = theme.pixelOn,
-                    themeBg = theme.backgroundColor,
-                    starWarsMode = starWars
+                    state = state, modifier = Modifier.fillMaxSize().padding(2.dp),
+                    showGhost = true, cameraAngleY = effectiveAz, cameraAngleX = effectiveEl,
+                    panOffsetX = panX, panOffsetY = panY, zoom = zoom,
+                    themePixelOn = theme.pixelOn, themeBg = theme.backgroundColor, starWarsMode = starWars
                 )
 
-                // Overlays — same workflow as 2D
+                // ViewCube — top right corner (Fusion 360 style)
+                if (!starWars) {
+                    ViewCube(azimuth, elevation, Modifier.align(Alignment.TopEnd).padding(8.dp).size(60.dp))
+                }
+
+                // Zoom +/- buttons — right side
+                if (!starWars) {
+                    Column(
+                        Modifier.align(Alignment.CenterEnd).padding(end = 6.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Box(Modifier.size(32.dp).clip(CircleShape).background(Color.White.copy(0.1f))
+                            .clickable { zoom = (zoom + 0.15f).coerceAtMost(3f) },
+                            contentAlignment = Alignment.Center) {
+                            Text("+", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color.White.copy(0.7f))
+                        }
+                        Box(Modifier.size(32.dp).clip(CircleShape).background(Color.White.copy(0.1f))
+                            .clickable { zoom = (zoom - 0.15f).coerceAtLeast(0.3f) },
+                            contentAlignment = Alignment.Center) {
+                            Text("−", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color.White.copy(0.7f))
+                        }
+                    }
+                }
+
+                // Overlays
                 when (state.status) {
                     GameStatus.MENU -> {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -187,7 +248,7 @@ fun Game3DScreen(
                 // Camera settings
                 if (showCamSettings) {
                     Column(
-                        Modifier.align(Alignment.TopEnd).padding(top = 8.dp, end = 8.dp)
+                        Modifier.align(Alignment.TopEnd).padding(top = 70.dp, end = 8.dp)
                             .width(190.dp).background(Color.Black.copy(0.92f), RoundedCornerShape(12.dp)).padding(12.dp)
                     ) {
                         Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
@@ -213,21 +274,23 @@ fun Game3DScreen(
                 }
             }
 
-            // Controls — using same themed buttons as 2D
+            // Controls row
             Row(
                 Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 4.dp),
                 Arrangement.SpaceBetween, Alignment.CenterVertically
             ) {
-                // D-pad (camera-relative)
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    TapButton(ButtonIcon.UP, 44.dp) { moveCameraRelative(0, 1) }
-                    Row {
-                        HoldButton(ButtonIcon.LEFT, 44.dp, onPress = { moveCameraRelative(-1, 0) }, onRelease = {})
-                        Spacer(Modifier.width(22.dp))
-                        HoldButton(ButtonIcon.RIGHT, 44.dp, onPress = { moveCameraRelative(1, 0) }, onRelease = {})
-                    }
-                    TapButton(ButtonIcon.DOWN, 44.dp) { moveCameraRelative(0, -1) }
-                }
+                // Left: D-pad — same as 2D, UP=hard drop, DOWN=soft drop, L/R=move
+                DPad(
+                    buttonSize = 44.dp,
+                    rotateInCenter = false,
+                    onUpPress = onHardDrop,
+                    onDownPress = { onSoftDrop() },
+                    onDownRelease = {},
+                    onLeftPress = { moveCameraRelative(-1, 0) },
+                    onLeftRelease = {},
+                    onRightPress = { moveCameraRelative(1, 0) },
+                    onRightRelease = {}
+                )
 
                 // Center actions
                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(3.dp)) {
@@ -237,6 +300,7 @@ fun Game3DScreen(
                         { if (state.status == GameStatus.MENU) onStart() else onPause() },
                         width = 54.dp, height = 24.dp
                     )
+                    // Toggle row
                     Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
                         MiniToggle("SW", starWars, theme.accentColor) { starWars = !starWars }
                         MiniToggle("❄", !state.autoGravity, Color(0xFF38BDF8)) { onToggleGravity() }
@@ -245,16 +309,17 @@ fun Game3DScreen(
                     ActionButton("···", onOpenSettings, width = 36.dp, height = 18.dp)
                 }
 
-                // Right: rotate, soft drop, hard drop, tilt
-                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                    // XZ rotate — use same RotateButton as 2D
-                    RotateButton(onRotateXZ, 48.dp)
-                    // Soft drop
-                    HoldButton(ButtonIcon.DOWN, 42.dp, onPress = onSoftDrop, onRelease = {})
-                    // Hard drop — uses UP icon (pieces go down instantly)
-                    TapButton(ButtonIcon.UP, 48.dp) { onHardDrop() }
-                    // XY tilt rotate
-                    RotateButton(onRotateXY, 36.dp)
+                // Right: ROT XZ and ROT XY side by side
+                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                        ActionButton("ROT XZ", onRotateXZ, width = 56.dp, height = 36.dp)
+                        ActionButton("ROT XY", onRotateXY, width = 56.dp, height = 36.dp)
+                    }
+                    // Forward / backward (depth movement)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        TapButton(ButtonIcon.UP, 38.dp) { moveCameraRelative(0, 1) }
+                        TapButton(ButtonIcon.DOWN, 38.dp) { moveCameraRelative(0, -1) }
+                    }
                 }
             }
             Spacer(Modifier.height(2.dp))
@@ -290,10 +355,4 @@ private fun CamPreset(label: String, modifier: Modifier = Modifier, onClick: () 
         .clickable { onClick() }.padding(vertical = 4.dp), contentAlignment = Alignment.Center) {
         Text(label, fontSize = 9.sp, color = Color.White.copy(0.6f), fontFamily = FontFamily.Monospace)
     }
-}
-
-private fun pieceUIColor(idx: Int): Color = when (idx) {
-    1 -> Color(0xFF00E5FF); 2 -> Color(0xFFFFD600); 3 -> Color(0xFFAA00FF); 4 -> Color(0xFF00E676)
-    5 -> Color(0xFFFF6D00); 6 -> Color(0xFFFF1744); 7 -> Color(0xFF2979FF); 8 -> Color(0xFFFF4081)
-    else -> Color(0xFF888888)
 }
