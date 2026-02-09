@@ -39,6 +39,14 @@ void main() {
     // Specular on top
     finalColor += vec3(spec);
 
+    // Edge darkening: darken pixels near the edges of each face (UV 0 or 1)
+    // This makes individual cubes distinguishable from each other
+    float edgeX = min(vTexCoord.x, 1.0 - vTexCoord.x);
+    float edgeY = min(vTexCoord.y, 1.0 - vTexCoord.y);
+    float edgeDist = min(edgeX, edgeY);
+    float edgeFactor = smoothstep(0.0, 0.08, edgeDist); // 0 at edge, 1 inside
+    finalColor *= mix(0.55, 1.0, edgeFactor);
+
     // Layer clearing flash
     if (uClearFlash > 0.0) {
         if (uClearFlash < 0.3) {

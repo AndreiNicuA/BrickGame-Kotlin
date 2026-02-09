@@ -12,10 +12,8 @@ import java.nio.ShortBuffer
  * 24 vertices (4 per face, unique normals), 36 indices (2 triangles per face).
  * Vertex format: [posX, posY, posZ, normX, normY, normZ, u, v] — 8 floats per vertex.
  *
- * Coordinate system:
- *   X = board width axis (left/right)
- *   Y = board height axis (up, pieces fall along -Y)
- *   Z = board depth axis (front/back)
+ * CRITICAL: All faces wound counter-clockwise (CCW) when viewed from OUTSIDE the cube.
+ * This is required for correct back-face culling with OpenGL's default GL_CCW front face.
  */
 class CubeGeometry {
 
@@ -23,49 +21,55 @@ class CubeGeometry {
     private val indexBuffer: ShortBuffer
     private val indexCount: Int
 
-    /** Stride in bytes: 8 floats × 4 bytes = 32 */
-    val stride = 8 * 4
+    val stride = 8 * 4 // 32 bytes per vertex
 
     companion object {
         //                 posX  posY  posZ  nX    nY    nZ    u     v
         private val VERTICES = floatArrayOf(
             // TOP face (Y=1) — Normal (0,1,0)
+            // Viewed from above: CCW order in XZ plane
             0f, 1f, 0f,   0f, 1f, 0f,   0f, 0f,
-            1f, 1f, 0f,   0f, 1f, 0f,   1f, 0f,
-            1f, 1f, 1f,   0f, 1f, 0f,   1f, 1f,
             0f, 1f, 1f,   0f, 1f, 0f,   0f, 1f,
+            1f, 1f, 1f,   0f, 1f, 0f,   1f, 1f,
+            1f, 1f, 0f,   0f, 1f, 0f,   1f, 0f,
 
             // BOTTOM face (Y=0) — Normal (0,-1,0)
-            0f, 0f, 1f,   0f, -1f, 0f,  0f, 0f,
-            1f, 0f, 1f,   0f, -1f, 0f,  1f, 0f,
-            1f, 0f, 0f,   0f, -1f, 0f,  1f, 1f,
-            0f, 0f, 0f,   0f, -1f, 0f,  0f, 1f,
+            // Viewed from below: CCW order in XZ plane
+            0f, 0f, 0f,   0f, -1f, 0f,  0f, 0f,
+            1f, 0f, 0f,   0f, -1f, 0f,  1f, 0f,
+            1f, 0f, 1f,   0f, -1f, 0f,  1f, 1f,
+            0f, 0f, 1f,   0f, -1f, 0f,  0f, 1f,
 
             // FRONT face (Z=0) — Normal (0,0,-1)
+            // Viewed from -Z: CCW in XY plane
             0f, 0f, 0f,   0f, 0f, -1f,  0f, 1f,
-            1f, 0f, 0f,   0f, 0f, -1f,  1f, 1f,
-            1f, 1f, 0f,   0f, 0f, -1f,  1f, 0f,
             0f, 1f, 0f,   0f, 0f, -1f,  0f, 0f,
+            1f, 1f, 0f,   0f, 0f, -1f,  1f, 0f,
+            1f, 0f, 0f,   0f, 0f, -1f,  1f, 1f,
 
             // BACK face (Z=1) — Normal (0,0,1)
+            // Viewed from +Z: CCW in XY plane
             1f, 0f, 1f,   0f, 0f, 1f,   0f, 1f,
-            0f, 0f, 1f,   0f, 0f, 1f,   1f, 1f,
-            0f, 1f, 1f,   0f, 0f, 1f,   1f, 0f,
             1f, 1f, 1f,   0f, 0f, 1f,   0f, 0f,
+            0f, 1f, 1f,   0f, 0f, 1f,   1f, 0f,
+            0f, 0f, 1f,   0f, 0f, 1f,   1f, 1f,
 
             // LEFT face (X=0) — Normal (-1,0,0)
-            0f, 0f, 1f,   -1f, 0f, 0f,  0f, 1f,
-            0f, 0f, 0f,   -1f, 0f, 0f,  1f, 1f,
-            0f, 1f, 0f,   -1f, 0f, 0f,  1f, 0f,
-            0f, 1f, 1f,   -1f, 0f, 0f,  0f, 0f,
+            // Viewed from -X: CCW in ZY plane
+            0f, 0f, 0f,   -1f, 0f, 0f,  0f, 1f,
+            0f, 0f, 1f,   -1f, 0f, 0f,  1f, 1f,
+            0f, 1f, 1f,   -1f, 0f, 0f,  1f, 0f,
+            0f, 1f, 0f,   -1f, 0f, 0f,  0f, 0f,
 
             // RIGHT face (X=1) — Normal (1,0,0)
-            1f, 0f, 0f,   1f, 0f, 0f,   0f, 1f,
-            1f, 0f, 1f,   1f, 0f, 0f,   1f, 1f,
-            1f, 1f, 1f,   1f, 0f, 0f,   1f, 0f,
-            1f, 1f, 0f,   1f, 0f, 0f,   0f, 0f,
+            // Viewed from +X: CCW in ZY plane
+            1f, 0f, 0f,   1f, 0f, 0f,   1f, 1f,
+            1f, 1f, 0f,   1f, 0f, 0f,   1f, 0f,
+            1f, 1f, 1f,   1f, 0f, 0f,   0f, 0f,
+            1f, 0f, 1f,   1f, 0f, 0f,   0f, 1f,
         )
 
+        // Each face: 2 triangles, index pattern (0,1,2) + (0,2,3)
         private val INDICES = shortArrayOf(
             0, 1, 2, 0, 2, 3,         // Top
             4, 5, 6, 4, 6, 7,         // Bottom
@@ -88,10 +92,6 @@ class CubeGeometry {
         indexCount = INDICES.size
     }
 
-    /**
-     * Bind vertex attributes and draw the cube.
-     * The caller must have already called shader.use() and set all uniforms.
-     */
     fun draw(shader: ShaderProgram) {
         val posLoc = shader.getAttribLocation("aPosition")
         val normalLoc = shader.getAttribLocation("aNormal")
@@ -101,17 +101,14 @@ class CubeGeometry {
         if (normalLoc >= 0) GLES20.glEnableVertexAttribArray(normalLoc)
         if (uvLoc >= 0) GLES20.glEnableVertexAttribArray(uvLoc)
 
-        // Position: offset 0
         vertexBuffer.position(0)
         GLES20.glVertexAttribPointer(posLoc, 3, GLES20.GL_FLOAT, false, stride, vertexBuffer)
 
-        // Normal: offset 3 floats
         if (normalLoc >= 0) {
             vertexBuffer.position(3)
             GLES20.glVertexAttribPointer(normalLoc, 3, GLES20.GL_FLOAT, false, stride, vertexBuffer)
         }
 
-        // UV: offset 6 floats
         if (uvLoc >= 0) {
             vertexBuffer.position(6)
             GLES20.glVertexAttribPointer(uvLoc, 2, GLES20.GL_FLOAT, false, stride, vertexBuffer)
