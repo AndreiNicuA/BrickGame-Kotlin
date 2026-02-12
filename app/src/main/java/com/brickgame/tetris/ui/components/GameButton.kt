@@ -233,7 +233,11 @@ fun ActionButton(
     ) {
         Text(text, fontSize = (height.value * 0.34f).sp, fontWeight = FontWeight.Bold,
             fontFamily = FontFamily.Monospace, letterSpacing = 1.sp,
-            color = if (enabled) theme.textPrimary else theme.textPrimary.copy(alpha = 0.3f))
+            color = if (!enabled) theme.textPrimary.copy(alpha = 0.3f)
+                    else { // Auto-contrast: use dark text on light backgrounds, light text on dark
+                        val bgLum = bg.red * 0.299f + bg.green * 0.587f + bg.blue * 0.114f
+                        if (bgLum > 0.5f) Color(0xFF1A1A1A) else Color(0xFFF0F0F0)
+                    })
     }
 }
 

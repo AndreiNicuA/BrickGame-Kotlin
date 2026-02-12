@@ -237,13 +237,14 @@ class MainActivity : ComponentActivity() {
                 Box(Modifier.fillMaxSize()) {
                     // Layer 1: Splash — rotating cube + falling pieces (visible during loading)
                     if (splashAlpha > 0.01f) {
-                        SplashScreen(Modifier.fillMaxSize().alpha(splashAlpha))
+                        SplashScreen(isDark = isDarkMode, modifier = Modifier.fillMaxSize().alpha(splashAlpha))
                     }
 
                     // Layer 2: Welcome — "Welcome, Player" over the falling pieces background
                     if (welcomeAlpha > 0.01f) {
                         WelcomeScreen(
                             playerName = name,
+                            isDark = isDarkMode,
                             modifier = Modifier.fillMaxSize().alpha(welcomeAlpha)
                         )
                     }
@@ -377,9 +378,10 @@ class MainActivity : ComponentActivity() {
 // ==================== WELCOME SCREEN ====================
 
 @Composable
-private fun WelcomeScreen(playerName: String, modifier: Modifier = Modifier) {
-    val bgColor = Color(0xFF0A0A0A)
-    val accentColor = Color(0xFFF4D03F)
+private fun WelcomeScreen(playerName: String, isDark: Boolean = true, modifier: Modifier = Modifier) {
+    val bgColor = if (isDark) Color(0xFF0A0A0A) else Color(0xFFF2F2F2)
+    val accentColor = if (isDark) Color(0xFFF4D03F) else Color(0xFFB8860B)
+    val welcomeTextColor = if (isDark) Color.White.copy(0.7f) else Color(0xFF444444)
 
     // Falling pieces in background (same as splash but dimmer)
     val inf = rememberInfiniteTransition(label = "welcomeBg")
@@ -397,6 +399,8 @@ private fun WelcomeScreen(playerName: String, modifier: Modifier = Modifier) {
         listOf(0 to 0, 1 to 0, 1 to 1, 2 to 1), listOf(1 to 0, 2 to 0, 0 to 1, 1 to 1),
         listOf(0 to 0, 1 to 0, 2 to 0, 1 to 1),
     ) }
+    val alphaBoost = if (isDark) 1f else 2.5f
+    val trailColor = if (isDark) Color(0xFF22C55E) else Color(0xFF22A050)
 
     Box(modifier.background(bgColor), contentAlignment = Alignment.Center) {
         // Falling pieces background (dimmer than splash)
@@ -406,13 +410,14 @@ private fun WelcomeScreen(playerName: String, modifier: Modifier = Modifier) {
                 val rawY = p.startY + fallAnim * p.speed
                 val baseY = (rawY % wrapH) - 200f; val x = p.col * w; val s = p.sz
                 val pColor = pieceColors[p.colorIdx]; val shape = shapes[p.shape % shapes.size]
+                val pa = (0.08f * alphaBoost).coerceAtMost(0.4f)
                 shape.forEach { (dx, dy) ->
-                    drawRoundRect(pColor.copy(0.08f), Offset(x + dx * (s + 2), baseY + dy * (s + 2)), Size(s, s), CornerRadius(2f))
+                    drawRoundRect(pColor.copy(pa), Offset(x + dx * (s + 2), baseY + dy * (s + 2)), Size(s, s), CornerRadius(2f))
                 }
                 for (ti in 1..2) {
-                    val ty = baseY - ti * (s + 2) * 1.1f; val ta = 0.04f * (1f - ti / 3f)
+                    val ty = baseY - ti * (s + 2) * 1.1f; val ta = (0.04f * alphaBoost * (1f - ti / 3f)).coerceAtMost(0.25f)
                     shape.forEach { (dx, dy) ->
-                        drawRoundRect(Color(0xFF22C55E).copy(ta), Offset(x + dx * (s + 2), ty + dy * (s + 2)), Size(s * 0.9f, s * 0.9f), CornerRadius(2f))
+                        drawRoundRect(trailColor.copy(ta), Offset(x + dx * (s + 2), ty + dy * (s + 2)), Size(s * 0.9f, s * 0.9f), CornerRadius(2f))
                     }
                 }
             }
@@ -425,7 +430,7 @@ private fun WelcomeScreen(playerName: String, modifier: Modifier = Modifier) {
                 fontSize = 22.sp,
                 fontWeight = FontWeight.Light,
                 fontFamily = FontFamily.Monospace,
-                color = Color.White.copy(0.7f),
+                color = welcomeTextColor,
                 letterSpacing = 2.sp
             )
             Spacer(Modifier.height(8.dp))
@@ -444,8 +449,8 @@ private fun WelcomeScreen(playerName: String, modifier: Modifier = Modifier) {
 // ==================== SPLASH SCREEN ====================
 
 @Composable
-private fun SplashScreen(modifier: Modifier = Modifier) {
-    val bgColor = Color(0xFF0A0A0A)
+private fun SplashScreen(isDark: Boolean = true, modifier: Modifier = Modifier) {
+    val bgColor = if (isDark) Color(0xFF0A0A0A) else Color(0xFFF2F2F2)
     val inf = rememberInfiniteTransition(label = "splash")
     val rotation by inf.animateFloat(0f, 360f, infiniteRepeatable(tween(4000, easing = LinearEasing)), label = "rot")
     val elev by inf.animateFloat(15f, 40f, infiniteRepeatable(tween(3000, easing = EaseInOutSine), RepeatMode.Reverse), label = "elev")
@@ -464,6 +469,9 @@ private fun SplashScreen(modifier: Modifier = Modifier) {
         listOf(0 to 0, 1 to 0, 1 to 1, 2 to 1), listOf(1 to 0, 2 to 0, 0 to 1, 1 to 1),
         listOf(0 to 0, 1 to 0, 2 to 0, 1 to 1),
     ) }
+    val alphaBoost = if (isDark) 1f else 2.5f
+    val trailColor = if (isDark) Color(0xFF22C55E) else Color(0xFF22A050)
+    val cubeEdgeColor = if (isDark) Color.White.copy(0.2f) else Color.Black.copy(0.15f)
 
     Box(modifier.background(bgColor), contentAlignment = Alignment.Center) {
         // Falling pieces background
@@ -473,13 +481,14 @@ private fun SplashScreen(modifier: Modifier = Modifier) {
                 val rawY = p.startY + fallAnim * p.speed
                 val baseY = (rawY % wrapH) - 200f; val x = p.col * w; val s = p.sz
                 val pColor = pieceColors[p.colorIdx]; val shape = shapes[p.shape % shapes.size]
+                val pa = (0.12f * alphaBoost).coerceAtMost(0.5f)
                 shape.forEach { (dx, dy) ->
-                    drawRoundRect(pColor.copy(0.12f), Offset(x + dx * (s + 2), baseY + dy * (s + 2)), Size(s, s), CornerRadius(2f))
+                    drawRoundRect(pColor.copy(pa), Offset(x + dx * (s + 2), baseY + dy * (s + 2)), Size(s, s), CornerRadius(2f))
                 }
                 for (ti in 1..3) {
-                    val ty = baseY - ti * (s + 2) * 1.1f; val ta = 0.06f * (1f - ti / 4f)
+                    val ty = baseY - ti * (s + 2) * 1.1f; val ta = (0.06f * alphaBoost * (1f - ti / 4f)).coerceAtMost(0.3f)
                     shape.forEach { (dx, dy) ->
-                        drawRoundRect(Color(0xFF22C55E).copy(ta), Offset(x + dx * (s + 2), ty + dy * (s + 2)), Size(s * 0.9f, s * 0.9f), CornerRadius(2f))
+                        drawRoundRect(trailColor.copy(ta), Offset(x + dx * (s + 2), ty + dy * (s + 2)), Size(s * 0.9f, s * 0.9f), CornerRadius(2f))
                     }
                 }
             }
