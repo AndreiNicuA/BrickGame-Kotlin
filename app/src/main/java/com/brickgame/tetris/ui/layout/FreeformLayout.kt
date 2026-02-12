@@ -348,7 +348,59 @@ fun FreeformEditorScreen(
             }
         }
 
-        // Popup menu overlay
+        // Bottom panel for selected element properties (visible while editing, doesn't block layout view)
+        if (selectedElement != null && !showMenu) {
+            val selType = FreeformElementType.fromKey(selectedElement.key)
+            val selKey = selectedElement.key
+            Surface(
+                modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth()
+                    .navigationBarsPadding(),
+                shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+                color = Color(0xFF1A1A1A).copy(0.95f),
+                shadowElevation = 12.dp
+            ) {
+                Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
+                    // Header: element name + close/remove
+                    Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(Modifier.size(8.dp).background(Color(0xFF22C55E), CircleShape))
+                            Spacer(Modifier.width(6.dp))
+                            Text(selType?.displayName ?: selKey, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        }
+                        Row {
+                            Text("Remove", color = Color(0xFFFF4444), fontSize = 11.sp, fontWeight = FontWeight.Bold,
+                                modifier = Modifier.clickable {
+                                    onElementRemoved(selKey); selectedKey = null
+                                }.padding(horizontal = 8.dp, vertical = 4.dp))
+                            Text("✕", color = Color(0xFF888888), fontSize = 16.sp,
+                                modifier = Modifier.clickable { selectedKey = null }.padding(4.dp))
+                        }
+                    }
+                    Spacer(Modifier.height(6.dp))
+                    // Position: H and V
+                    PositionRow("H", (selectedElement.x * 100).toInt()) { newPct ->
+                        val fresh = elements[selKey] ?: return@PositionRow
+                        onElementUpdated(fresh.copy(x = (newPct / 100f).coerceIn(0f, 1f)))
+                    }
+                    PositionRow("V", (selectedElement.y * 100).toInt()) { newPct ->
+                        val fresh = elements[selKey] ?: return@PositionRow
+                        onElementUpdated(fresh.copy(y = (newPct / 100f).coerceIn(0f, 1f)))
+                    }
+                    Spacer(Modifier.height(4.dp))
+                    // Size and Opacity sliders
+                    SliderRow("Size", selectedElement.size, 0.4f, 2.0f) { newSize ->
+                        val fresh = elements[selKey] ?: return@SliderRow
+                        onElementUpdated(fresh.copy(size = newSize))
+                    }
+                    SliderRow("Opacity", selectedElement.alpha, 0.05f, 1.0f) { newAlpha ->
+                        val fresh = elements[selKey] ?: return@SliderRow
+                        onElementUpdated(fresh.copy(alpha = newAlpha))
+                    }
+                }
+            }
+        }
+
+        // Full popup menu overlay (Add elements + Reset — only when menu button pressed)
         if (showMenu) {
             Box(Modifier.fillMaxSize().background(Color.Black.copy(0.5f)).clickable { showMenu = false })
             Surface(
@@ -364,50 +416,6 @@ fun FreeformEditorScreen(
                             modifier = Modifier.clickable { showMenu = false }.padding(4.dp))
                     }
                     Spacer(Modifier.height(12.dp))
-
-                    // Selected element properties
-                    if (selectedElement != null) {
-                        val selType = FreeformElementType.fromKey(selectedElement.key)
-                        val selKey = selectedElement.key
-                        Surface(Modifier.fillMaxWidth(), shape = RoundedCornerShape(10.dp), color = Color(0xFF222222)) {
-                            Column(Modifier.padding(12.dp)) {
-                                Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Box(Modifier.size(10.dp).background(Color(0xFF22C55E), CircleShape))
-                                        Spacer(Modifier.width(6.dp))
-                                        Text(selType?.displayName ?: selKey, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                                    }
-                                    Text("Remove", color = Color(0xFFFF4444), fontSize = 12.sp, fontWeight = FontWeight.Bold,
-                                        modifier = Modifier.clickable {
-                                            onElementRemoved(selKey); selectedKey = null
-                                        }.padding(4.dp))
-                                }
-                                Spacer(Modifier.height(8.dp))
-                                SliderRow("Size", selectedElement.size, 0.4f, 2.0f) { newSize ->
-                                    // Read fresh from elements map to avoid stale captures
-                                    val fresh = elements[selKey] ?: return@SliderRow
-                                    onElementUpdated(fresh.copy(size = newSize))
-                                }
-                                SliderRow("Opacity", selectedElement.alpha, 0.05f, 1.0f) { newAlpha ->
-                                    val fresh = elements[selKey] ?: return@SliderRow
-                                    onElementUpdated(fresh.copy(alpha = newAlpha))
-                                }
-                                Spacer(Modifier.height(10.dp))
-                                // Position controls: H and V with -10 / +10 buttons
-                                Text("Position", color = Color(0xFFAAAAAA), fontSize = 12.sp)
-                                Spacer(Modifier.height(4.dp))
-                                PositionRow("H", (selectedElement.x * 100).toInt()) { newPct ->
-                                    val fresh = elements[selKey] ?: return@PositionRow
-                                    onElementUpdated(fresh.copy(x = (newPct / 100f).coerceIn(0f, 1f)))
-                                }
-                                PositionRow("V", (selectedElement.y * 100).toInt()) { newPct ->
-                                    val fresh = elements[selKey] ?: return@PositionRow
-                                    onElementUpdated(fresh.copy(y = (newPct / 100f).coerceIn(0f, 1f)))
-                                }
-                            }
-                        }
-                        Spacer(Modifier.height(12.dp))
-                    }
 
                     // Add elements
                     val existing = elements.keys
@@ -572,56 +580,38 @@ private fun SliderRow(label: String, value: Float, min: Float, max: Float, onCha
 @Composable
 private fun PositionRow(label: String, valuePct: Int, onChange: (Int) -> Unit) {
     val clamped = valuePct.coerceIn(0, 100)
-    Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 1.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(label, color = Color(0xFFAAAAAA), fontSize = 12.sp, fontWeight = FontWeight.Bold,
-            modifier = Modifier.width(24.dp))
-        // -10 button
+            modifier = Modifier.width(20.dp))
+        // − button
         Surface(
-            modifier = Modifier.size(28.dp).clickable { if (clamped > 0) onChange((clamped - 10).coerceAtLeast(0)) },
+            modifier = Modifier.size(32.dp).clickable { if (clamped > 0) onChange(clamped - 1) },
             shape = RoundedCornerShape(6.dp),
             color = if (clamped > 0) Color(0xFF333333) else Color(0xFF222222)
         ) {
             Box(contentAlignment = Alignment.Center) {
                 Text("−", color = if (clamped > 0) Color(0xFF22C55E) else Color(0xFF555555),
-                    fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                    fontSize = 18.sp, fontWeight = FontWeight.Bold)
             }
         }
-        Spacer(Modifier.width(4.dp))
-        // -1 button
-        Surface(
-            modifier = Modifier.size(28.dp).clickable { if (clamped > 0) onChange((clamped - 1).coerceAtLeast(0)) },
-            shape = RoundedCornerShape(6.dp),
-            color = if (clamped > 0) Color(0xFF2A2A2A) else Color(0xFF222222)
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                Text("−1", color = if (clamped > 0) Color(0xFF22C55E).copy(0.7f) else Color(0xFF555555),
-                    fontSize = 10.sp, fontWeight = FontWeight.Bold)
-            }
-        }
+        // Slider for quick large jumps
+        Slider(value = clamped / 100f, onValueChange = { onChange((it * 100).toInt()) },
+            modifier = Modifier.weight(1f).height(24.dp).padding(horizontal = 4.dp),
+            colors = SliderDefaults.colors(thumbColor = Color(0xFF22C55E), activeTrackColor = Color(0xFF22C55E),
+                inactiveTrackColor = Color(0xFF22C55E).copy(0.15f)))
         // Value display
-        Text("${clamped}%", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold,
-            textAlign = TextAlign.Center, modifier = Modifier.weight(1f))
-        // +1 button
-        Surface(
-            modifier = Modifier.size(28.dp).clickable { if (clamped < 100) onChange((clamped + 1).coerceAtMost(100)) },
-            shape = RoundedCornerShape(6.dp),
-            color = if (clamped < 100) Color(0xFF2A2A2A) else Color(0xFF222222)
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                Text("+1", color = if (clamped < 100) Color(0xFF22C55E).copy(0.7f) else Color(0xFF555555),
-                    fontSize = 10.sp, fontWeight = FontWeight.Bold)
-            }
-        }
+        Text("${clamped}%", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.End, modifier = Modifier.width(32.dp))
         Spacer(Modifier.width(4.dp))
-        // +10 button
+        // + button
         Surface(
-            modifier = Modifier.size(28.dp).clickable { if (clamped < 100) onChange((clamped + 10).coerceAtMost(100)) },
+            modifier = Modifier.size(32.dp).clickable { if (clamped < 100) onChange(clamped + 1) },
             shape = RoundedCornerShape(6.dp),
             color = if (clamped < 100) Color(0xFF333333) else Color(0xFF222222)
         ) {
             Box(contentAlignment = Alignment.Center) {
                 Text("+", color = if (clamped < 100) Color(0xFF22C55E) else Color(0xFF555555),
-                    fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                    fontSize = 18.sp, fontWeight = FontWeight.Bold)
             }
         }
     }
