@@ -43,7 +43,8 @@ fun GameBoard(
     clearingLines: List<Int> = emptyList(),
     animationStyle: AnimationStyle = AnimationStyle.MODERN,
     animationDuration: Float = 0.5f,
-    multiColor: Boolean = false
+    multiColor: Boolean = false,
+    classicLCD: Boolean = false
 ) {
     val theme = LocalGameTheme.current
     val clearProgress = remember { Animatable(0f) }
@@ -80,29 +81,31 @@ fun GameBoard(
                     val offset = Offset(x * cellSize + gap, y * cellSize + gap)
                     val cs = Size(cellSize - gap * 2, cellSize - gap * 2)
 
-                    drawRoundRect(theme.pixelOff, offset, cs, CornerRadius(corner))
+                    if (classicLCD) {
+                        // Classic LCD: each cell is a recessed square with beveled inner square
+                        drawLCDCell(offset, cs, cellValue > 0, theme.pixelOff, theme.pixelOn)
+                    } else {
+                        drawRoundRect(theme.pixelOff, offset, cs, CornerRadius(corner))
 
-                    if (cellValue > 0) {
-                        val pieceColor = if (multiColor && cellValue in 1..7) PIECE_COLORS[cellValue] else theme.pixelOn
+                        if (cellValue > 0) {
+                            val pieceColor = if (multiColor && cellValue in 1..7) PIECE_COLORS[cellValue] else theme.pixelOn
 
-                        if (isClearingRow && isClearing && animationStyle != AnimationStyle.NONE) {
-                            if (isTetris && animationStyle == AnimationStyle.FLASHY) {
-                                drawTetrisExplosion(progress, x, y, cellSize, gap, corner, pieceColor)
+                            if (isClearingRow && isClearing && animationStyle != AnimationStyle.NONE) {
+                                if (isTetris && animationStyle == AnimationStyle.FLASHY) {
+                                    drawTetrisExplosion(progress, x, y, cellSize, gap, corner, pieceColor)
+                                } else {
+                                    val (color, scale) = clearingEffect(animationStyle, progress, x, y, pieceColor, clearingLines.size)
+                                    val ss = Size(cs.width * scale, cs.height * scale)
+                                    val so = Offset(offset.x + (cs.width - ss.width) / 2, offset.y + (cs.height - ss.height) / 2)
+                                    drawRoundRect(color, so, ss, CornerRadius(corner * scale))
+                                }
                             } else {
-                                val (color, scale) = clearingEffect(animationStyle, progress, x, y, pieceColor, clearingLines.size)
-                                val ss = Size(cs.width * scale, cs.height * scale)
-                                val so = Offset(offset.x + (cs.width - ss.width) / 2, offset.y + (cs.height - ss.height) / 2)
-                                drawRoundRect(color, so, ss, CornerRadius(corner * scale))
-                            }
-                        } else {
-                            drawRoundRect(pieceColor, offset, cs, CornerRadius(corner))
-                            if (multiColor && cellValue in 1..7) {
-                                // Dark outline for definition
-                                drawRoundRect(Color.Black.copy(alpha = 0.35f), offset, cs, CornerRadius(corner), style = Stroke(gap * 1.2f))
-                                // Bottom shadow
-                                drawRoundRect(Color.Black.copy(alpha = 0.2f), Offset(offset.x, offset.y + cs.height * 0.65f), Size(cs.width, cs.height * 0.35f), CornerRadius(corner))
-                                // Top highlight
-                                drawRoundRect(Color.White.copy(alpha = 0.2f), offset, Size(cs.width, cs.height * 0.3f), CornerRadius(corner))
+                                drawRoundRect(pieceColor, offset, cs, CornerRadius(corner))
+                                if (multiColor && cellValue in 1..7) {
+                                    drawRoundRect(Color.Black.copy(alpha = 0.35f), offset, cs, CornerRadius(corner), style = Stroke(gap * 1.2f))
+                                    drawRoundRect(Color.Black.copy(alpha = 0.2f), Offset(offset.x, offset.y + cs.height * 0.65f), Size(cs.width, cs.height * 0.35f), CornerRadius(corner))
+                                    drawRoundRect(Color.White.copy(alpha = 0.2f), offset, Size(cs.width, cs.height * 0.3f), CornerRadius(corner))
+                                }
                             }
                         }
                     }
@@ -118,11 +121,15 @@ fun GameBoard(
                         if (bx in 0 until TetrisGame.BOARD_WIDTH && by in 0 until TetrisGame.BOARD_HEIGHT) {
                             val offset = Offset(bx * cellSize + gap, by * cellSize + gap)
                             val cs = Size(cellSize - gap * 2, cellSize - gap * 2)
-                            drawRoundRect(pColor, offset, cs, CornerRadius(corner))
-                            if (multiColor) {
-                                drawRoundRect(Color.Black.copy(alpha = 0.35f), offset, cs, CornerRadius(corner), style = Stroke(gap * 1.2f))
-                                drawRoundRect(Color.Black.copy(alpha = 0.2f), Offset(offset.x, offset.y + cs.height * 0.65f), Size(cs.width, cs.height * 0.35f), CornerRadius(corner))
-                                drawRoundRect(Color.White.copy(alpha = 0.2f), offset, Size(cs.width, cs.height * 0.3f), CornerRadius(corner))
+                            if (classicLCD) {
+                                drawLCDCell(offset, cs, true, theme.pixelOff, theme.pixelOn)
+                            } else {
+                                drawRoundRect(pColor, offset, cs, CornerRadius(corner))
+                                if (multiColor) {
+                                    drawRoundRect(Color.Black.copy(alpha = 0.35f), offset, cs, CornerRadius(corner), style = Stroke(gap * 1.2f))
+                                    drawRoundRect(Color.Black.copy(alpha = 0.2f), Offset(offset.x, offset.y + cs.height * 0.65f), Size(cs.width, cs.height * 0.35f), CornerRadius(corner))
+                                    drawRoundRect(Color.White.copy(alpha = 0.2f), offset, Size(cs.width, cs.height * 0.3f), CornerRadius(corner))
+                                }
                             }
                         }
                     }
@@ -137,6 +144,55 @@ fun GameBoard(
         }
     }
 }
+
+/** Draw a single cell in authentic Brick Game LCD style — beveled 3D squares */
+private fun DrawScope.drawLCDCell(offset: Offset, cellSize: Size, isOn: Boolean, offColor: Color, onColor: Color) {
+    val w = cellSize.width; val h = cellSize.height
+    val bevel = w * 0.12f  // bevel thickness
+
+    if (isOn) {
+        // Filled cell: dark outer square with lighter inner square
+        // Outer square — dark
+        drawRect(onColor, offset, cellSize)
+        // Top-left highlight bevel
+        drawRect(onColor.copy(alpha = 0.4f), offset, Size(w, bevel))
+        drawRect(onColor.copy(alpha = 0.4f), offset, Size(bevel, h))
+        // Bottom-right shadow bevel
+        drawRect(Color.Black.copy(alpha = 0.3f), Offset(offset.x, offset.y + h - bevel), Size(w, bevel))
+        drawRect(Color.Black.copy(alpha = 0.3f), Offset(offset.x + w - bevel, offset.y), Size(bevel, h))
+        // Inner lighter square
+        val inset = w * 0.22f
+        val innerOff = Offset(offset.x + inset, offset.y + inset)
+        val innerSize = Size(w - inset * 2, h - inset * 2)
+        drawRect(Color.White.copy(alpha = 0.15f), innerOff, innerSize)
+    } else {
+        // Empty cell: subtle recessed indent
+        // Background
+        drawRect(offColor, offset, cellSize)
+        // Outer edge — slightly darker (recessed shadow)
+        drawRect(offColor.copy(alpha = 0.7f), offset, Size(w, 1f))
+        drawRect(offColor.copy(alpha = 0.7f), offset, Size(1f, h))
+        // Inner highlight edge (bottom-right light = recessed effect)
+        drawRect(Color.White.copy(alpha = 0.08f), Offset(offset.x + w - 1f, offset.y), Size(1f, h))
+        drawRect(Color.White.copy(alpha = 0.08f), Offset(offset.x, offset.y + h - 1f), Size(w, 1f))
+        // Center tiny indent square
+        val inset = w * 0.25f
+        val innerOff = Offset(offset.x + inset, offset.y + inset)
+        val innerSize = Size(w - inset * 2, h - inset * 2)
+        drawRect(offColor.darken(0.06f), innerOff, innerSize)
+        // Inner square shadow edges
+        drawRect(Color.Black.copy(alpha = 0.04f), innerOff, Size(innerSize.width, 1f))
+        drawRect(Color.Black.copy(alpha = 0.04f), innerOff, Size(1f, innerSize.height))
+    }
+}
+
+/** Darken a color by a factor */
+private fun Color.darken(f: Float) = Color(
+    (red * (1 - f)).coerceIn(0f, 1f),
+    (green * (1 - f)).coerceIn(0f, 1f),
+    (blue * (1 - f)).coerceIn(0f, 1f),
+    alpha
+)
 
 private fun DrawScope.drawTetrisExplosion(
     progress: Float, x: Int, y: Int, cellSize: Float,

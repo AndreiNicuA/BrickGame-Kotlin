@@ -246,75 +246,74 @@ fun GameScreen(
     onDP: () -> Unit, onDR: () -> Unit, onPause: () -> Unit, onSet: () -> Unit, onStart: () -> Unit,
     boardDimAlpha: Float = 1f, nextCount: Int = 3
 ) {
-    val theme = LocalGameTheme.current
-    // Classic: force mono-color (no colored pieces)
+    // Authentic LCD colors matching real Brick Game hardware
+    val lcdBg = Color(0xFFB8C4A0)       // olive-green LCD background
+    val lcdDark = Color(0xFF3A4530)      // dark LCD pixel color
+    val lcdGhost = Color(0xFFA4B094)     // faded "ghost segment" color
+    val lcdLabel = Color(0xFF505A42)     // label text color
+    val bezelColor = Color(0xFF9AA088)   // inner bezel
+
     Column(Modifier.fillMaxSize().padding(6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        // Device frame — retro handheld LCD style
-        Row(Modifier.fillMaxWidth().weight(1f).clip(RoundedCornerShape(10.dp)).background(theme.deviceColor)
-            .border(2.dp, theme.deviceColor.darken(0.2f), RoundedCornerShape(10.dp)).padding(6.dp)) {
-            // Board — always mono-color in classic, with LCD scanline overlay
-            Box(Modifier.weight(1f).fillMaxHeight().padding(end = 4.dp)) {
+        // Device frame — thick olive bezel like real hardware
+        Row(Modifier.fillMaxWidth().weight(1f).clip(RoundedCornerShape(8.dp)).background(lcdBg)
+            .border(3.dp, bezelColor, RoundedCornerShape(8.dp)).padding(4.dp)) {
+
+            // Board — classic LCD cell style
+            Box(Modifier.weight(1f).fillMaxHeight()) {
                 GameBoard(gs.board, Modifier.fillMaxSize().alpha(boardDimAlpha),
-                    gs.currentPiece, gs.ghostY, ghost, gs.clearedLineRows, anim, ad, multiColor = false)
-                // LCD scanline overlay
-                Canvas(Modifier.fillMaxSize().alpha(0.08f)) {
-                    val lineSpacing = 3.dp.toPx()
-                    var y = 0f
-                    while (y < size.height) {
-                        drawLine(Color.Black, start = androidx.compose.ui.geometry.Offset(0f, y),
-                            end = androidx.compose.ui.geometry.Offset(size.width, y), strokeWidth = 1f)
-                        y += lineSpacing
-                    }
-                }
+                    gs.currentPiece, gs.ghostY, ghost, gs.clearedLineRows, anim, ad,
+                    multiColor = false, classicLCD = true)
             }
-            // Right info panel — SCORE > LEVELS > SPEED > NEXT (like the real LCD)
+
+            // Vertical separator line — thick dark line like the real hardware
+            Box(Modifier.fillMaxHeight().width(2.dp).background(lcdDark.copy(0.5f)))
+
+            // Right info panel — SCORE > LEVELS > SPEED > NEXT
             Column(
-                Modifier.width(72.dp).fillMaxHeight().padding(vertical = 4.dp),
+                Modifier.width(80.dp).fillMaxHeight().padding(start = 6.dp, top = 8.dp, bottom = 8.dp, end = 2.dp),
                 verticalArrangement = Arrangement.SpaceBetween,
-                horizontalAlignment = Alignment.CenterHorizontally
+                horizontalAlignment = Alignment.End
             ) {
-                // SCORE
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("SCORE", fontSize = 9.sp, color = theme.textSecondary, fontWeight = FontWeight.Bold,
+                // SCORE — with ghost segment digits
+                Column(horizontalAlignment = Alignment.End) {
+                    Text("SCORE", fontSize = 11.sp, color = lcdLabel, fontWeight = FontWeight.ExtraBold,
                         fontFamily = FontFamily.Monospace, letterSpacing = 1.sp)
                     Spacer(Modifier.height(2.dp))
-                    Text(gs.score.toString().padStart(6, '0'), fontSize = 14.sp, fontWeight = FontWeight.ExtraBold,
-                        fontFamily = FontFamily.Monospace, color = theme.pixelOn, letterSpacing = 1.sp)
+                    LCDNumber(gs.score, 6, lcdDark, lcdGhost, 15.sp)
                 }
 
-                // LEVELS
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("LEVELS", fontSize = 9.sp, color = theme.textSecondary, fontWeight = FontWeight.Bold,
+                // LEVELS — with ghost segments
+                Column(horizontalAlignment = Alignment.End) {
+                    Text("LEVELS", fontSize = 11.sp, color = lcdLabel, fontWeight = FontWeight.ExtraBold,
                         fontFamily = FontFamily.Monospace, letterSpacing = 1.sp)
                     Spacer(Modifier.height(2.dp))
-                    Text(gs.level.toString().padStart(6, '0'), fontSize = 14.sp, fontWeight = FontWeight.ExtraBold,
-                        fontFamily = FontFamily.Monospace, color = theme.pixelOn, letterSpacing = 1.sp)
+                    LCDNumber(gs.level, 6, lcdDark, lcdGhost, 15.sp)
                 }
 
                 // SPEED
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("SPEED", fontSize = 9.sp, color = theme.textSecondary, fontWeight = FontWeight.Bold,
+                Column(horizontalAlignment = Alignment.End) {
+                    Text("SPEED", fontSize = 11.sp, color = lcdLabel, fontWeight = FontWeight.ExtraBold,
                         fontFamily = FontFamily.Monospace, letterSpacing = 1.sp)
-                    Spacer(Modifier.height(2.dp))
-                    // Speed derives from level — higher level = higher speed number
+                    Spacer(Modifier.height(4.dp))
                     val speed = gs.level.coerceIn(1, 20)
-                    Text("$speed", fontSize = 20.sp, fontWeight = FontWeight.ExtraBold,
-                        fontFamily = FontFamily.Monospace, color = theme.accentColor)
+                    Text("$speed", fontSize = 24.sp, fontWeight = FontWeight.ExtraBold,
+                        fontFamily = FontFamily.Monospace, color = lcdDark)
                 }
 
-                // NEXT — single piece preview only (classic shows just 1)
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("NEXT", fontSize = 9.sp, color = theme.textSecondary, fontWeight = FontWeight.Bold,
+                // NEXT — single piece preview with LCD cells
+                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+                    Text("NEXT", fontSize = 11.sp, color = lcdLabel, fontWeight = FontWeight.ExtraBold,
                         fontFamily = FontFamily.Monospace, letterSpacing = 1.sp)
-                    Spacer(Modifier.height(2.dp))
-                    gs.nextPieces.take(1).forEach { p ->
-                        NextPiecePreview(p.shape, Modifier.size(44.dp), 1f)
+                    Spacer(Modifier.height(4.dp))
+                    Box(Modifier.size(52.dp).background(lcdBg)) {
+                        gs.nextPieces.firstOrNull()?.let { p ->
+                            LCDPiecePreview(p.shape, lcdDark, lcdGhost)
+                        }
                     }
                 }
             }
         }
         Spacer(Modifier.height(2.dp))
-        // Classic controls — no hold button
         ClassicControls(dp, onHD, onLP, onLR, onRP, onRR, onDP, onDR, onRotate, onPause, onSet, onStart, gs.status)
     }
 }
@@ -812,6 +811,53 @@ fun GameScreen(
             }
             Spacer(Modifier.height(16.dp))
             Text(if (page < pages.size - 1) "Tap to continue" else "Tap to start!", color = Color.White.copy(0.5f), fontSize = 12.sp, fontFamily = FontFamily.Monospace)
+        }
+    }
+}
+
+/** LCD-style number display — ghost "8" segments behind active digits, like real Brick Game */
+@Composable private fun LCDNumber(value: Int, digits: Int, activeColor: Color, ghostColor: Color, fontSize: androidx.compose.ui.unit.TextUnit) {
+    val str = value.toString()
+    val padded = str.padStart(digits, ' ')
+    Row {
+        padded.forEach { ch ->
+            Box(contentAlignment = Alignment.Center) {
+                // Ghost "8" behind every digit position
+                Text("8", fontSize = fontSize, fontWeight = FontWeight.ExtraBold,
+                    fontFamily = FontFamily.Monospace, color = ghostColor, letterSpacing = 0.5.sp)
+                // Active digit on top (space = invisible)
+                if (ch != ' ') {
+                    Text("$ch", fontSize = fontSize, fontWeight = FontWeight.ExtraBold,
+                        fontFamily = FontFamily.Monospace, color = activeColor, letterSpacing = 0.5.sp)
+                }
+            }
+        }
+    }
+}
+
+/** LCD piece preview — draws piece with classic beveled cell style */
+@Composable private fun LCDPiecePreview(shape: List<List<Int>>, onColor: Color, offColor: Color) {
+    Canvas(Modifier.fillMaxSize()) {
+        val rows = shape.size; val cols = shape.maxOfOrNull { it.size } ?: 0
+        if (rows == 0 || cols == 0) return@Canvas
+        val cellSz = minOf(size.width / cols, size.height / rows)
+        val ox = (size.width - cellSz * cols) / 2f; val oy = (size.height - cellSz * rows) / 2f
+        val gap = cellSz * 0.06f
+        for (r in shape.indices) for (c in shape[r].indices) {
+            val offset = Offset(ox + c * cellSz + gap, oy + r * cellSz + gap)
+            val cs = Size(cellSz - gap * 2, cellSz - gap * 2)
+            val isOn = shape[r][c] > 0
+            // Draw LCD-style beveled cell
+            val w = cs.width; val h = cs.height
+            if (isOn) {
+                drawRect(onColor, offset, cs)
+                val inset = w * 0.22f
+                drawRect(Color.White.copy(0.15f), Offset(offset.x + inset, offset.y + inset), Size(w - inset * 2, h - inset * 2))
+            } else {
+                drawRect(offColor, offset, cs)
+                val inset = w * 0.25f
+                drawRect(offColor.copy(alpha = 0.85f), Offset(offset.x + inset, offset.y + inset), Size(w - inset * 2, h - inset * 2))
+            }
         }
     }
 }
