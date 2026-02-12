@@ -1,5 +1,6 @@
 package com.brickgame.tetris
 
+import android.content.pm.ActivityInfo
 import android.os.Bundle
 import android.view.KeyEvent
 import android.view.MotionEvent
@@ -28,6 +29,9 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.brickgame.tetris.game.GameStatus
 import com.brickgame.tetris.input.GamepadController
@@ -152,6 +156,27 @@ class MainActivity : ComponentActivity() {
                     window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
                 } else {
                     window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                }
+            }
+
+            // Apply Orientation Lock setting
+            LaunchedEffect(orientationLock) {
+                requestedOrientation = when (orientationLock) {
+                    "portrait" -> ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+                    "landscape" -> ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+                    else -> ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                }
+            }
+
+            // Apply Immersive Mode setting
+            LaunchedEffect(immersiveMode) {
+                val insetsController = WindowCompat.getInsetsController(window, window.decorView)
+                if (immersiveMode) {
+                    insetsController.hide(WindowInsetsCompat.Type.systemBars())
+                    insetsController.systemBarsBehavior =
+                        WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                } else {
+                    insetsController.show(WindowInsetsCompat.Type.systemBars())
                 }
             }
 

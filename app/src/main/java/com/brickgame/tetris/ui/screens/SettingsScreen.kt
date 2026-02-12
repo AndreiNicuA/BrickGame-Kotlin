@@ -182,7 +182,7 @@ fun SettingsScreen(
         item { Card {
             Text("UI Scale", color = TX, fontSize = 14.sp)
             Slider(uiScale, onUiScale, valueRange = 0.8f..1.5f, colors = sliderColors())
-            Text("${"$"}{(uiScale * 100).toInt()}%", color = DIM, fontSize = 12.sp)
+            Text("${(uiScale * 100).toInt()}%", color = DIM, fontSize = 12.sp)
         } }
         item { Spacer(Modifier.height(16.dp)) }
     }
@@ -218,14 +218,14 @@ fun SettingsScreen(
             val e = sorted[i]
             Card {
                 Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
-                    Text("${"$"}{i+1}.", color = DIM, modifier = Modifier.width(28.dp))
+                    Text("${i+1}.", color = DIM, modifier = Modifier.width(28.dp))
                     Column(Modifier.weight(1f)) {
                         Text(e.playerName, color = TX, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                        Text("${"$"}{e.score}", color = ACC, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                        Text("${e.score}", color = ACC, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                     }
                     Column(horizontalAlignment = Alignment.End) {
-                        Text("Lv${"$"}{e.level}", color = DIM, fontSize = 12.sp)
-                        Text("${"$"}{e.lines}L", color = DIM, fontSize = 12.sp)
+                        Text("Lv${e.level}", color = DIM, fontSize = 12.sp)
+                        Text("${e.lines}L", color = DIM, fontSize = 12.sp)
                     }
                 }
             }
@@ -331,8 +331,8 @@ fun SettingsScreen(
 @Composable private fun GameplayPage(diff: Difficulty, mode: GameMode, ghost: Boolean, onD: (Difficulty) -> Unit, onM: (GameMode) -> Unit, onG: (Boolean) -> Unit, onBack: () -> Unit) {
     LazyColumn(Modifier.fillMaxSize().padding(20.dp)) {
         item { Header("Gameplay", onBack) }
-        item { Lbl("Difficulty") }; items(Difficulty.entries.size) { i -> val d = Difficulty.entries[i]; Sel("${"$"}{d.displayName} — ${"$"}{d.description}", d == diff) { onD(d) } }
-        item { Lbl("Game Mode") }; items(GameMode.entries.size) { i -> val m = GameMode.entries[i]; Sel("${"$"}{m.displayName} — ${"$"}{m.description}", m == mode) { onM(m) } }
+        item { Lbl("Difficulty") }; items(Difficulty.entries.size) { i -> val d = Difficulty.entries[i]; Sel("${d.displayName} — ${d.description}", d == diff) { onD(d) } }
+        item { Lbl("Game Mode") }; items(GameMode.entries.size) { i -> val m = GameMode.entries[i]; Sel("${m.displayName} — ${m.description}", m == mode) { onM(m) } }
         item { Lbl("Options") }; item { Card { Toggle("Ghost Piece", ghost, onG) } }
     }
 }
@@ -341,8 +341,8 @@ fun SettingsScreen(
 @Composable private fun ExperiencePage(aS: AnimationStyle, aD: Float, s: Boolean, v: Boolean, onAS: (AnimationStyle) -> Unit, onAD: (Float) -> Unit, onS: (Boolean) -> Unit, onV: (Boolean) -> Unit, onBack: () -> Unit) {
     LazyColumn(Modifier.fillMaxSize().padding(20.dp)) {
         item { Header("Experience", onBack) }
-        item { Lbl("Animation") }; items(AnimationStyle.entries.size) { i -> val x = AnimationStyle.entries[i]; Sel("${"$"}{x.displayName} — ${"$"}{x.description}", x == aS) { onAS(x) } }
-        item { Card { Text("Speed", color = TX, fontSize = 14.sp); Slider(aD, onAD, valueRange = 0.1f..2f, colors = sliderColors()); Text("${"$"}{(aD*1000).toInt()}ms", color = DIM, fontSize = 12.sp) } }
+        item { Lbl("Animation") }; items(AnimationStyle.entries.size) { i -> val x = AnimationStyle.entries[i]; Sel("${x.displayName} — ${x.description}", x == aS) { onAS(x) } }
+        item { Card { Text("Speed", color = TX, fontSize = 14.sp); Slider(aD, onAD, valueRange = 0.1f..2f, colors = sliderColors()); Text("${(aD*1000).toInt()}ms", color = DIM, fontSize = 12.sp) } }
         item { Lbl("Sound & Vibration") }; item { Card { Toggle("Sound", s, onS); Spacer(Modifier.height(8.dp)); Toggle("Vibration", v, onV) } }
     }
 }
@@ -361,7 +361,7 @@ fun SettingsScreen(
         item { Card {
             Text("Stick Deadzone", color = TX, fontSize = 14.sp)
             Slider(deadzone, onDeadzone, valueRange = 0.05f..0.8f, colors = sliderColors())
-            Text("${"$"}{(deadzone * 100).toInt()}%", color = DIM, fontSize = 12.sp)
+            Text("${(deadzone * 100).toInt()}%", color = DIM, fontSize = 12.sp)
             Text("Higher = less sensitive to small stick movements", color = DIM, fontSize = 11.sp)
         } }
         item { Lbl("Connected Controllers") }
@@ -372,7 +372,7 @@ fun SettingsScreen(
                 val c = controllers[i]
                 Card {
                     Text(c.name, color = TX, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                    Text("Vendor: ${"$"}{c.vendorId}  Product: ${"$"}{c.productId}", color = DIM, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+                    Text("Vendor: ${c.vendorId}  Product: ${c.productId}", color = DIM, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
                     Text("✓ Connected", color = Color(0xFF22C55E), fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 }
             }
