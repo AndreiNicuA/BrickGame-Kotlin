@@ -448,20 +448,22 @@ fun FreeformEditorScreen(
                             FreeformElementType.LINES, FreeformElementType.HOLD_PREVIEW, FreeformElementType.NEXT_PREVIEW)
                         items(infoTypes.size) { i ->
                             val t = infoTypes[i]; val el = elements[t.key]
-                            ElementToggleRow(t.displayName, el != null, el?.visible ?: false,
-                                onToggle = { el?.let { onElementUpdated(it.copy(visible = !it.visible)) } },
-                                onAdd = { onElementAdded(FreeformElement(t.key, 0.5f, 0.5f)); selectedKey = t.key },
-                                onRemove = { onElementRemoved(t.key); if (selectedKey == t.key) selectedKey = null })
+                            val isOn = el != null && el.visible
+                            ElementToggleRow(t.displayName, isOn) {
+                                if (el == null) { onElementAdded(FreeformElement(t.key, 0.5f, 0.5f)); selectedKey = t.key }
+                                else onElementUpdated(el.copy(visible = !el.visible))
+                            }
                         }
                         // Buttons section
                         item { Spacer(Modifier.height(8.dp)); Text("Buttons", color = Color(0xFF3B82F6), fontSize = 12.sp, fontWeight = FontWeight.Bold); Spacer(Modifier.height(4.dp)) }
                         val ctrlTypes = FreeformElementType.entries.filter { it.category == ElementCategory.CONTROL }
                         items(ctrlTypes.size) { i ->
                             val t = ctrlTypes[i]; val el = elements[t.key]
-                            ElementToggleRow(t.displayName, el != null, el?.visible ?: false,
-                                onToggle = { el?.let { onElementUpdated(it.copy(visible = !it.visible)) } },
-                                onAdd = { onElementAdded(FreeformElement(t.key, 0.5f, 0.5f)); selectedKey = t.key },
-                                onRemove = { onElementRemoved(t.key); if (selectedKey == t.key) selectedKey = null })
+                            val isOn = el != null && el.visible
+                            ElementToggleRow(t.displayName, isOn) {
+                                if (el == null) { onElementAdded(FreeformElement(t.key, 0.5f, 0.5f)); selectedKey = t.key }
+                                else onElementUpdated(el.copy(visible = !el.visible))
+                            }
                         }
                     }
                     Spacer(Modifier.height(6.dp))
@@ -632,22 +634,15 @@ private fun PositionRow(label: String, valuePct: Int, onChange: (Int) -> Unit) {
 }
 
 @Composable
-private fun ElementToggleRow(name: String, isPresent: Boolean, isVisible: Boolean,
-    onToggle: () -> Unit, onAdd: () -> Unit, onRemove: () -> Unit) {
+private fun ElementToggleRow(name: String, isOn: Boolean, onToggle: () -> Unit) {
     Row(Modifier.fillMaxWidth().padding(vertical = 2.dp).clip(RoundedCornerShape(6.dp))
-        .background(Color(0xFF252525)).padding(horizontal = 8.dp, vertical = 6.dp),
+        .background(Color(0xFF252525)).clickable { onToggle() }
+        .padding(horizontal = 10.dp, vertical = 8.dp),
         Arrangement.SpaceBetween, Alignment.CenterVertically) {
-        Text(name, color = if (isPresent && isVisible) Color.White else Color(0xFF666666),
-            fontSize = 12.sp, modifier = Modifier.weight(1f))
-        if (isPresent) {
-            Text(if (isVisible) "●" else "○", color = if (isVisible) Color(0xFF22C55E) else Color(0xFF555555),
-                fontSize = 16.sp, modifier = Modifier.clickable { onToggle() }.padding(horizontal = 6.dp))
-            Text("✕", color = Color(0xFFFF4444), fontSize = 12.sp, fontWeight = FontWeight.Bold,
-                modifier = Modifier.clickable { onRemove() }.padding(start = 2.dp))
-        } else {
-            Text("+ Add", color = Color(0xFF22C55E), fontSize = 11.sp, fontWeight = FontWeight.Bold,
-                modifier = Modifier.clickable { onAdd() }.padding(4.dp))
-        }
+        Text(name, color = if (isOn) Color.White else Color(0xFF666666), fontSize = 12.sp)
+        Text(if (isOn) "ON" else "OFF",
+            color = if (isOn) Color(0xFF22C55E) else Color(0xFF555555),
+            fontSize = 11.sp, fontWeight = FontWeight.Bold)
     }
 }
 
