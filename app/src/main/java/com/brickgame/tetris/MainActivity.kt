@@ -70,7 +70,30 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        enableEdgeToEdge()
+        // Read saved theme mode BEFORE enableEdgeToEdge so bars match from first frame
+        val prefs = getSharedPreferences("app_theme_cache", MODE_PRIVATE)
+        val cachedMode = prefs.getString("mode", "auto") ?: "auto"
+        val isSystemDark = (resources.configuration.uiMode and
+                android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
+                android.content.res.Configuration.UI_MODE_NIGHT_YES
+        val startDark = when (cachedMode) {
+            "light" -> false
+            "dark" -> true
+            else -> isSystemDark
+        }
+        if (startDark) {
+            enableEdgeToEdge(
+                statusBarStyle = SystemBarStyle.dark(AndroidColor.TRANSPARENT),
+                navigationBarStyle = SystemBarStyle.dark(AndroidColor.TRANSPARENT)
+            )
+        } else {
+            enableEdgeToEdge(
+                statusBarStyle = SystemBarStyle.light(AndroidColor.TRANSPARENT, AndroidColor.TRANSPARENT),
+                navigationBarStyle = SystemBarStyle.light(
+                    AndroidColor.parseColor("#F2F2F2"), AndroidColor.parseColor("#F2F2F2"))
+            )
+            window.decorView.setBackgroundColor(AndroidColor.parseColor("#F2F2F2"))
+        }
         super.onCreate(savedInstanceState)
         setContent {
             val vm: GameViewModel = viewModel()
@@ -231,8 +254,10 @@ class MainActivity : ComponentActivity() {
                 // Control system bar appearance based on theme mode
                 val isDarkMode = LocalIsDarkMode.current
                 LaunchedEffect(isDarkMode) {
-                    // Re-call enableEdgeToEdge with correct styles for current theme
-                    // This ensures status bar and nav bar backgrounds match the content
+                    // Cache for next app start so bars match from first frame
+                    getSharedPreferences("app_theme_cache", MODE_PRIVATE)
+                        .edit().putString("mode", appThemeMode).apply()
+                    // Re-call enableEdgeToEdge with correct styles
                     if (isDarkMode) {
                         enableEdgeToEdge(
                             statusBarStyle = SystemBarStyle.dark(AndroidColor.TRANSPARENT),
@@ -242,7 +267,8 @@ class MainActivity : ComponentActivity() {
                     } else {
                         enableEdgeToEdge(
                             statusBarStyle = SystemBarStyle.light(AndroidColor.TRANSPARENT, AndroidColor.TRANSPARENT),
-                            navigationBarStyle = SystemBarStyle.light(AndroidColor.parseColor("#F2F2F2"), AndroidColor.parseColor("#F2F2F2"))
+                            navigationBarStyle = SystemBarStyle.light(
+                                AndroidColor.parseColor("#F2F2F2"), AndroidColor.parseColor("#F2F2F2"))
                         )
                         window.decorView.setBackgroundColor(AndroidColor.parseColor("#F2F2F2"))
                     }
