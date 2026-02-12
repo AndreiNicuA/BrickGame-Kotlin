@@ -59,10 +59,14 @@ fun GameScreen(
     val theme = LocalGameTheme.current
 
     CompositionLocalProvider(LocalMultiColor provides multiColor) {
-    Box(Modifier.fillMaxSize().background(theme.backgroundColor).systemBarsPadding()) {
-        when {
-            gameState.status == GameStatus.MENU -> MenuOverlay(gameState.highScore, scoreHistory, onStartGame, onOpenSettings)
-            else -> {
+    val isMenu = gameState.status == GameStatus.MENU
+    Box(Modifier.fillMaxSize()) {
+        if (isMenu) {
+            // Menu overlay draws edge-to-edge (behind system bars) with its own background
+            MenuOverlay(gameState.highScore, scoreHistory, onStartGame, onOpenSettings)
+        } else {
+            // Game content draws inside system bar padding with game theme background
+            Box(Modifier.fillMaxSize().background(theme.backgroundColor).systemBarsPadding()) {
                 if (customLayout != null) {
                     CustomGameLayout(gameState, customLayout, ghostEnabled, animationStyle, animationDuration, onRotate, onHardDrop, onHold, onLeftPress, onLeftRelease, onRightPress, onRightRelease, onDownPress, onDownRelease, onPause, onOpenSettings, onStartGame)
                 } else when (layoutPreset) {
