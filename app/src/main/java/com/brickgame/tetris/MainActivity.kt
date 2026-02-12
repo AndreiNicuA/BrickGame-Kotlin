@@ -233,6 +233,12 @@ class MainActivity : ComponentActivity() {
                     // Light status bar = dark icons (for light backgrounds)
                     insetsController.isAppearanceLightStatusBars = !isDarkMode
                     insetsController.isAppearanceLightNavigationBars = !isDarkMode
+                    // Match system bar colors to theme background so no dark strips appear
+                    val bgArgb = if (isDarkMode) android.graphics.Color.parseColor("#FF0A0A0A")
+                                 else android.graphics.Color.parseColor("#FFF2F2F2")
+                    window.statusBarColor = android.graphics.Color.TRANSPARENT
+                    window.navigationBarColor = bgArgb
+                    window.decorView.setBackgroundColor(bgArgb)
                 }
                 Box(Modifier.fillMaxSize()) {
                     // Layer 1: Splash — rotating cube + falling pieces (visible during loading)
