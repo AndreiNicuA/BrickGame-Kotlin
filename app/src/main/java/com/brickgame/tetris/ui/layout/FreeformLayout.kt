@@ -392,6 +392,18 @@ fun FreeformEditorScreen(
                                     val fresh = elements[selKey] ?: return@SliderRow
                                     onElementUpdated(fresh.copy(alpha = newAlpha))
                                 }
+                                Spacer(Modifier.height(10.dp))
+                                // Position controls: H and V with -10 / +10 buttons
+                                Text("Position", color = Color(0xFFAAAAAA), fontSize = 12.sp)
+                                Spacer(Modifier.height(4.dp))
+                                PositionRow("H", (selectedElement.x * 100).toInt()) { newPct ->
+                                    val fresh = elements[selKey] ?: return@PositionRow
+                                    onElementUpdated(fresh.copy(x = (newPct / 100f).coerceIn(0f, 1f)))
+                                }
+                                PositionRow("V", (selectedElement.y * 100).toInt()) { newPct ->
+                                    val fresh = elements[selKey] ?: return@PositionRow
+                                    onElementUpdated(fresh.copy(y = (newPct / 100f).coerceIn(0f, 1f)))
+                                }
                             }
                         }
                         Spacer(Modifier.height(12.dp))
@@ -554,6 +566,64 @@ private fun SliderRow(label: String, value: Float, min: Float, max: Float, onCha
             modifier = Modifier.weight(1f).height(24.dp),
             colors = SliderDefaults.colors(thumbColor = Color(0xFF22C55E), activeTrackColor = Color(0xFF22C55E)))
         Text("${(value * 100).toInt()}%", color = Color(0xFF888888), fontSize = 11.sp, modifier = Modifier.width(36.dp), textAlign = TextAlign.End)
+    }
+}
+
+@Composable
+private fun PositionRow(label: String, valuePct: Int, onChange: (Int) -> Unit) {
+    val clamped = valuePct.coerceIn(0, 100)
+    Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(label, color = Color(0xFFAAAAAA), fontSize = 12.sp, fontWeight = FontWeight.Bold,
+            modifier = Modifier.width(24.dp))
+        // -10 button
+        Surface(
+            modifier = Modifier.size(28.dp).clickable { if (clamped > 0) onChange((clamped - 10).coerceAtLeast(0)) },
+            shape = RoundedCornerShape(6.dp),
+            color = if (clamped > 0) Color(0xFF333333) else Color(0xFF222222)
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Text("−", color = if (clamped > 0) Color(0xFF22C55E) else Color(0xFF555555),
+                    fontSize = 16.sp, fontWeight = FontWeight.Bold)
+            }
+        }
+        Spacer(Modifier.width(4.dp))
+        // -1 button
+        Surface(
+            modifier = Modifier.size(28.dp).clickable { if (clamped > 0) onChange((clamped - 1).coerceAtLeast(0)) },
+            shape = RoundedCornerShape(6.dp),
+            color = if (clamped > 0) Color(0xFF2A2A2A) else Color(0xFF222222)
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Text("−1", color = if (clamped > 0) Color(0xFF22C55E).copy(0.7f) else Color(0xFF555555),
+                    fontSize = 10.sp, fontWeight = FontWeight.Bold)
+            }
+        }
+        // Value display
+        Text("${clamped}%", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center, modifier = Modifier.weight(1f))
+        // +1 button
+        Surface(
+            modifier = Modifier.size(28.dp).clickable { if (clamped < 100) onChange((clamped + 1).coerceAtMost(100)) },
+            shape = RoundedCornerShape(6.dp),
+            color = if (clamped < 100) Color(0xFF2A2A2A) else Color(0xFF222222)
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Text("+1", color = if (clamped < 100) Color(0xFF22C55E).copy(0.7f) else Color(0xFF555555),
+                    fontSize = 10.sp, fontWeight = FontWeight.Bold)
+            }
+        }
+        Spacer(Modifier.width(4.dp))
+        // +10 button
+        Surface(
+            modifier = Modifier.size(28.dp).clickable { if (clamped < 100) onChange((clamped + 10).coerceAtMost(100)) },
+            shape = RoundedCornerShape(6.dp),
+            color = if (clamped < 100) Color(0xFF333333) else Color(0xFF222222)
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Text("+", color = if (clamped < 100) Color(0xFF22C55E) else Color(0xFF555555),
+                    fontSize = 16.sp, fontWeight = FontWeight.Bold)
+            }
+        }
     }
 }
 
