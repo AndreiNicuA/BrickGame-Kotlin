@@ -13,6 +13,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -761,83 +762,137 @@ private fun FallingPiecesBackground(theme: com.brickgame.tetris.ui.theme.GameThe
 // =============================================================================
 @Composable
 private fun ActionPopup(label: String, linesCleared: Int) {
-    // Track when label changes to trigger animation
-    var currentLabel by remember { mutableStateOf("") }
+    // Track the label we've already shown to prevent re-triggering on recompose
+    var lastShownLabel by remember { mutableStateOf("") }
+    var lastShownTime by remember { mutableStateOf(0L) }
     var showPopup by remember { mutableStateOf(false) }
     var popupText by remember { mutableStateOf("") }
     var popupLines by remember { mutableStateOf(0) }
 
-    // Detect label changes
+    // Only trigger on NEW labels during active gameplay (not when returning from settings)
     LaunchedEffect(label) {
-        if (label.isNotEmpty()) {
+        if (label.isNotEmpty() && (label != lastShownLabel || System.currentTimeMillis() - lastShownTime > 1500L)) {
+            // Skip "Single" — only 1 line, not worth a popup
+            if (linesCleared == 1 && !label.contains("T-Spin", ignoreCase = true) && !label.contains("B2B", ignoreCase = true)) {
+                lastShownLabel = label
+                lastShownTime = System.currentTimeMillis()
+                return@LaunchedEffect
+            }
             popupText = label
             popupLines = linesCleared
             showPopup = true
-            currentLabel = label
-            // Auto-dismiss after duration
-            delay(1000L)
+            lastShownLabel = label
+            lastShownTime = System.currentTimeMillis()
+            // Auto-dismiss: longer for bigger clears
+            val duration = when {
+                linesCleared >= 4 -> 1800L
+                linesCleared == 3 -> 1400L
+                else -> 1100L
+            }
+            delay(duration)
             showPopup = false
         }
     }
 
     if (showPopup && popupText.isNotEmpty()) {
-        // Color based on action type
-        val (bgColor, textColor, fontSize) = remember(popupText, popupLines) {
+        // Escalating style based on lines cleared
+        data class PopupStyle(val bg: Color, val text: Color, val fontSize: Int, val shake: Boolean, val glow: Boolean)
+        val style = remember(popupText, popupLines) {
             when {
                 popupText.contains("Tetris", ignoreCase = true) && popupText.contains("B2B", ignoreCase = true) ->
-                    Triple(Color(0xFFFF4400).copy(alpha = 0.55f), Color.White, 38)
+                    PopupStyle(Color(0xFFFF2200).copy(0.7f), Color.White, 42, shake = true, glow = true)
                 popupText.contains("Tetris", ignoreCase = true) ->
-                    Triple(Color(0xFFFF2222).copy(alpha = 0.5f), Color.White, 36)
+                    PopupStyle(Color(0xFFFF4400).copy(0.65f), Color.White, 40, shake = true, glow = true)
                 popupText.contains("T-Spin", ignoreCase = true) ->
-                    Triple(Color(0xFF9B59B6).copy(alpha = 0.5f), Color.White, 32)
+                    PopupStyle(Color(0xFF9B59B6).copy(0.6f), Color.White, 34, shake = true, glow = false)
                 popupText.contains("B2B", ignoreCase = true) ->
-                    Triple(Color(0xFFFF8800).copy(alpha = 0.5f), Color.White, 32)
+                    PopupStyle(Color(0xFFFF8800).copy(0.6f), Color.White, 34, shake = false, glow = true)
                 popupLines >= 3 ->
-                    Triple(Color(0xFFFF6600).copy(alpha = 0.45f), Color.White, 30)
+                    PopupStyle(Color(0xFFFF6600).copy(0.55f), Color.White, 34, shake = true, glow = false)
                 popupLines == 2 ->
-                    Triple(Color(0xFFF4D03F).copy(alpha = 0.45f), Color.Black, 28)
-                popupLines == 1 ->
-                    Triple(Color.White.copy(alpha = 0.4f), Color.Black, 26)
-                else -> // Combo, other labels
-                    Triple(Color(0xFF3498DB).copy(alpha = 0.45f), Color.White, 28)
+                    PopupStyle(Color(0xFFF4D03F).copy(0.55f), Color.Black, 30, shake = false, glow = false)
+                else -> // Combo or other
+                    PopupStyle(Color(0xFF3498DB).copy(0.5f), Color.White, 28, shake = false, glow = false)
             }
         }
 
-        // Animate: scale in then fade out
-        val animScale = remember { Animatable(0.3f) }
+        // Animate: scale, alpha, rotation (shake for big clears)
+        val animScale = remember { Animatable(0.2f) }
         val animAlpha = remember { Animatable(0f) }
+        val animRotation = remember { Animatable(0f) }
 
         LaunchedEffect(popupText) {
-            // Scale in
-            animScale.snapTo(0.3f)
+            animScale.snapTo(0.2f)
             animAlpha.snapTo(0f)
-            // Quick pop in
-            animScale.animateTo(1.1f, tween(100, easing = FastOutSlowInEasing))
-            animAlpha.animateTo(1f, tween(80))
-            // Settle
-            animScale.animateTo(1f, tween(60))
-            // Hold
-            delay(500L)
-            // Fade out
-            animAlpha.animateTo(0f, tween(250))
+            animRotation.snapTo(0f)
+
+            when {
+                popupLines >= 4 || style.shake -> {
+                    // EPIC: Slam in with shake
+                    launch { animAlpha.animateTo(1f, tween(60)) }
+                    animScale.animateTo(1.3f, tween(80, easing = LinearOutSlowInEasing))
+                    animScale.animateTo(0.95f, tween(60))
+                    animScale.animateTo(1.05f, tween(50))
+                    animScale.animateTo(1f, tween(40))
+                    // Shake
+                    repeat(3) {
+                        animRotation.animateTo(3f, tween(30))
+                        animRotation.animateTo(-3f, tween(30))
+                    }
+                    animRotation.animateTo(0f, tween(30))
+                    // Hold
+                    delay(600L)
+                    // Dramatic fade + scale out
+                    launch { animScale.animateTo(1.8f, tween(400)) }
+                    animAlpha.animateTo(0f, tween(350))
+                }
+                popupLines == 3 -> {
+                    // STRONG: Fast pop with bounce
+                    launch { animAlpha.animateTo(1f, tween(70)) }
+                    animScale.animateTo(1.2f, tween(90, easing = FastOutSlowInEasing))
+                    animScale.animateTo(0.97f, tween(60))
+                    animScale.animateTo(1.02f, tween(50))
+                    animScale.animateTo(1f, tween(40))
+                    delay(500L)
+                    launch { animScale.animateTo(1.3f, tween(300)) }
+                    animAlpha.animateTo(0f, tween(300))
+                }
+                else -> {
+                    // MODERATE: Simple pop in/out for Double and combos
+                    launch { animAlpha.animateTo(1f, tween(80)) }
+                    animScale.animateTo(1.08f, tween(100, easing = FastOutSlowInEasing))
+                    animScale.animateTo(1f, tween(60))
+                    delay(400L)
+                    animAlpha.animateTo(0f, tween(250))
+                }
+            }
         }
 
-        Box(
-            Modifier.fillMaxSize(),
-            Alignment.Center
-        ) {
+        Box(Modifier.fillMaxSize(), Alignment.Center) {
+            // Optional glow effect behind text for Tetris-level clears
+            if (style.glow && animAlpha.value > 0.1f) {
+                Box(
+                    Modifier
+                        .scale(animScale.value * 1.4f)
+                        .alpha(animAlpha.value * 0.3f)
+                        .clip(RoundedCornerShape(28.dp))
+                        .background(style.bg.copy(alpha = 0.4f))
+                        .padding(horizontal = 52.dp, vertical = 28.dp)
+                ) {}
+            }
             Text(
                 popupText,
                 modifier = Modifier
                     .scale(animScale.value)
                     .alpha(animAlpha.value)
+                    .graphicsLayer { rotationZ = animRotation.value }
                     .clip(RoundedCornerShape(20.dp))
-                    .background(bgColor)
+                    .background(style.bg)
                     .padding(horizontal = 36.dp, vertical = 16.dp),
-                fontSize = fontSize.sp,
+                fontSize = style.fontSize.sp,
                 fontWeight = FontWeight.ExtraBold,
                 fontFamily = FontFamily.Monospace,
-                color = textColor,
+                color = style.text,
                 textAlign = TextAlign.Center,
                 letterSpacing = 2.sp
             )
