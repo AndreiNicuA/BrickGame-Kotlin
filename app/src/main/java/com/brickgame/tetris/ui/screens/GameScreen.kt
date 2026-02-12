@@ -65,6 +65,7 @@ fun GameScreen(
     controllerConnected: Boolean = false,
     timerExpired: Boolean = false,
     remainingSeconds: Int = 0,
+    onCloseApp: () -> Unit = {},
     onStartGame: () -> Unit, onPause: () -> Unit, onResume: () -> Unit,
     onRotate: () -> Unit, onRotateCCW: () -> Unit,
     onHardDrop: () -> Unit, onHold: () -> Unit,
@@ -164,7 +165,7 @@ fun GameScreen(
         }
         ActionPopup(gameState.lastActionLabel, gameState.linesCleared)
         // Timer expired — blocks all gameplay
-        if (timerExpired) TimerExpiredOverlay(onQuit)
+        if (timerExpired) TimerExpiredOverlay(onCloseApp)
     }
     } // end CompositionLocalProvider
 }

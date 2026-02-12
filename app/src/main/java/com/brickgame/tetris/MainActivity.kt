@@ -418,6 +418,7 @@ class MainActivity : ComponentActivity() {
                                 controllerConnected = GamepadController.getConnectedControllers().isNotEmpty(),
                                 timerExpired = timerExpired,
                                 remainingSeconds = remainingSeconds,
+                                onCloseApp = { this@MainActivity.finishAndRemoveTask() },
                                 onStartGame = if (is3D) vm::start3DGame else vm::startGame,
                                 onPause = vm::pauseGame, onResume = vm::resumeGame,
                                 onRotate = vm::rotate, onRotateCCW = vm::rotateCounterClockwise,
