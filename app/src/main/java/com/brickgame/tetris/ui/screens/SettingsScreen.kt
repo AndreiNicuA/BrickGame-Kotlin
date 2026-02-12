@@ -345,7 +345,7 @@ fun SettingsScreen(
 
 // ===== LAYOUT =====
 @Composable private fun LayoutPage(p: LayoutPreset, l: LayoutPreset, d: DPadStyle, buttonStyle: String, custom: List<CustomLayoutData>, active: CustomLayoutData?,
-                                    onP: (LayoutPreset) -> Unit, onL: (LayoutPreset) -> Unit, onD: (DPadStyle) -> Unit,
+                                    onP: (LayoutPreset) -> Unit, onL: (LayoutPreset) -> Unit, onD: (DPadStyle) -> Unit, onSetButtonStyle: (String) -> Unit,
                                     onNew: () -> Unit, onEdit: (CustomLayoutData) -> Unit, onSelect: (CustomLayoutData) -> Unit, onClear: () -> Unit, onDelete: (String) -> Unit,
                                     onEditFreeform: () -> Unit = {}, onBack: () -> Unit) {
     LazyColumn(Modifier.fillMaxSize().padding(20.dp)) {
