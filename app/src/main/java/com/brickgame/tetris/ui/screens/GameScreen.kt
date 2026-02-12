@@ -184,7 +184,9 @@ fun GameScreen(
                     LayoutPreset.PORTRAIT_3D -> {}
                 }
                 if (gameState.status == GameStatus.PAUSED) PauseOverlay(onResume, onOpenSettings, onQuit)
-                if (gameState.status == GameStatus.GAME_OVER) GameOverOverlay(gameState.score, gameState.level, gameState.lines, onStartGame, onOpenSettings, onQuit)
+                // Classic layout handles its own game-over with LCD curtain animation
+                if (gameState.status == GameStatus.GAME_OVER && layoutPreset != LayoutPreset.PORTRAIT_CLASSIC)
+                    GameOverOverlay(gameState.score, gameState.level, gameState.lines, onStartGame, onOpenSettings, onQuit)
             }
         }
         ActionPopup(gameState.lastActionLabel, gameState.linesCleared)
@@ -255,16 +257,106 @@ fun GameScreen(
     val lcdLabel = Color(0xFF3A4030)     // bold label text
     val bezelColor = Color(0xFFB0B89C)   // inner bezel
 
+    // === Classic-specific overrides ===
+    // No ghost piece, force RETRO blink animation, instant lock
+    val classicGhost = false
+    val classicAnim = AnimationStyle.RETRO
+
+    // === Game Over curtain animation ===
+    // When game over: fill board bottom→top, then show overlay
+    var curtainRow by remember { mutableIntStateOf(-1) }
+    var showGameOverText by remember { mutableStateOf(false) }
+    var curtainPhase by remember { mutableIntStateOf(0) } // 0=idle, 1=filling, 2=clearing, 3=done
+
+    LaunchedEffect(gs.status) {
+        if (gs.status == GameStatus.GAME_OVER) {
+            showGameOverText = false
+            curtainPhase = 1
+            // Phase 1: Fill from bottom to top
+            for (row in 19 downTo 0) {
+                curtainRow = row
+                delay(35L)
+            }
+            delay(300L)
+            // Phase 2: Clear from top to bottom
+            curtainPhase = 2
+            for (row in 0..19) {
+                curtainRow = row
+                delay(35L)
+            }
+            curtainPhase = 3
+            curtainRow = -1
+            delay(200L)
+            showGameOverText = true
+        } else {
+            curtainRow = -1
+            curtainPhase = 0
+            showGameOverText = false
+        }
+    }
+
     Column(Modifier.fillMaxSize().padding(6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         // Device frame — olive bezel like real hardware
         Row(Modifier.fillMaxWidth().weight(1f).clip(RoundedCornerShape(8.dp)).background(lcdBg)
             .border(3.dp, bezelColor, RoundedCornerShape(8.dp)).padding(4.dp)) {
 
-            // Board — classic LCD 3-layer cell style
+            // Board — classic LCD 3-layer cell style with curtain overlay
             Box(Modifier.weight(1f).fillMaxHeight()) {
                 GameBoard(gs.board, Modifier.fillMaxSize().alpha(boardDimAlpha),
-                    gs.currentPiece, gs.ghostY, ghost, gs.clearedLineRows, anim, ad,
+                    gs.currentPiece, gs.ghostY, classicGhost, gs.clearedLineRows, classicAnim, ad,
                     multiColor = false, classicLCD = true)
+
+                // Curtain overlay — draws filled/empty rows during game over animation
+                if (curtainPhase > 0 && curtainRow >= 0) {
+                    Canvas(Modifier.fillMaxSize()) {
+                        val cellW = size.width / 10f
+                        val cellH = size.height / 20f
+                        val gap = cellW * 0.06f
+                        val lcdLightColor = Color(0xFFC2CCAE)
+                        val darkColor = Color(0xFF2A2E22)
+
+                        for (row in 0 until 20) {
+                            val shouldFill = when (curtainPhase) {
+                                1 -> row >= curtainRow  // filling bottom→top
+                                2 -> row <= curtainRow  // clearing top→bottom (row becomes empty)
+                                else -> false
+                            }
+                            val shouldBeOn = (curtainPhase == 1 && shouldFill) || (curtainPhase == 2 && !shouldFill)
+                            if (shouldBeOn) {
+                                for (col in 0 until 10) {
+                                    val x = col * cellW + gap
+                                    val y = row * cellH + gap
+                                    val w = cellW - gap * 2
+                                    val h = cellH - gap * 2
+                                    // Draw filled LCD cell
+                                    drawRect(darkColor, Offset(x, y), Size(w, h))
+                                    val borderW = w * 0.14f
+                                    drawRect(lcdLightColor, Offset(x + borderW, y + borderW), Size(w - borderW * 2, h - borderW * 2))
+                                    val centerInset = w * 0.28f
+                                    drawRect(darkColor, Offset(x + centerInset, y + centerInset), Size(w - centerInset * 2, h - centerInset * 2))
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Classic Game Over overlay — simple LCD text
+                if (showGameOverText) {
+                    Box(Modifier.fillMaxSize().background(lcdBg), Alignment.Center) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("GAME", fontSize = 28.sp, fontWeight = FontWeight.ExtraBold,
+                                fontFamily = FontFamily.Monospace, color = lcdDark, letterSpacing = 6.sp)
+                            Text("OVER", fontSize = 28.sp, fontWeight = FontWeight.ExtraBold,
+                                fontFamily = FontFamily.Monospace, color = lcdDark, letterSpacing = 6.sp)
+                            Spacer(Modifier.height(12.dp))
+                            Text(gs.score.toString(), fontSize = 20.sp, fontWeight = FontWeight.ExtraBold,
+                                fontFamily = FontFamily.Monospace, color = lcdDark)
+                            Spacer(Modifier.height(16.dp))
+                            Text("TAP TO RESTART", fontSize = 10.sp, fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Monospace, color = lcdLabel.copy(0.6f), letterSpacing = 1.sp)
+                        }
+                    }
+                }
             }
 
             // Vertical separator line
