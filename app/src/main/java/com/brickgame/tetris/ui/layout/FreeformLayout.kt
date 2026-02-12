@@ -272,7 +272,8 @@ fun FreeformEditorScreen(
                         showLabels = showLabels,
                         maxWidthPx = maxWidthPx,
                         maxHeightPx = maxHeightPx,
-                        elemSizePx = handleSizePx,
+                        elemWidthPx = handleSizePx,
+                        elemHeightPx = handleSizePx,
                         isSelected = isSelected,
                         onTap = { selectedKey = if (selectedKey == elem.key) null else elem.key },
                         onDragEnd = { newX, newY -> onElementUpdated(elem.copy(x = newX, y = newY)) },
@@ -292,13 +293,12 @@ fun FreeformEditorScreen(
                         }
                     )
                 } else {
-                    // Normal elements — same as before
+                    // Normal elements — use actual width/height for centering (matches game layout)
                     val baseSize = elementBaseSize(type)
-                    val elemSizeDp = when (type) {
-                        FreeformElementType.DPAD, FreeformElementType.DPAD_ROTATE -> (150 * scale).dp
-                        else -> minOf(baseSize.first, baseSize.second) * scale
-                    }
-                    val elemSizePx = with(density) { elemSizeDp.toPx() }
+                    val elemW = baseSize.first * scale
+                    val elemH = baseSize.second * scale
+                    val elemWPx = with(density) { elemW.toPx() }
+                    val elemHPx = with(density) { elemH.toPx() }
 
                     DraggableRealElement(
                         key = elem.key,
@@ -309,7 +309,8 @@ fun FreeformEditorScreen(
                         showLabels = showLabels,
                         maxWidthPx = maxWidthPx,
                         maxHeightPx = maxHeightPx,
-                        elemSizePx = elemSizePx,
+                        elemWidthPx = elemWPx,
+                        elemHeightPx = elemHPx,
                         isSelected = isSelected,
                         onTap = { selectedKey = if (selectedKey == elem.key) null else elem.key },
                         onDragEnd = { newX, newY -> onElementUpdated(elem.copy(x = newX, y = newY)) },
@@ -494,7 +495,8 @@ private fun BoxWithConstraintsScope.DraggableRealElement(
     scale: Float,
     maxWidthPx: Float,
     maxHeightPx: Float,
-    elemSizePx: Float,
+    elemWidthPx: Float,
+    elemHeightPx: Float,
     isSelected: Boolean,
     onTap: () -> Unit,
     onDragEnd: (Float, Float) -> Unit,
@@ -503,9 +505,9 @@ private fun BoxWithConstraintsScope.DraggableRealElement(
     showLabels: Boolean = true,
     customContent: (@Composable () -> Unit)? = null
 ) {
-    // Committed position (stored state)
-    val committedX = position.x * maxWidthPx - elemSizePx / 2
-    val committedY = position.y * maxHeightPx - elemSizePx / 2
+    // Committed position (stored state) — center using actual w/h
+    val committedX = position.x * maxWidthPx - elemWidthPx / 2
+    val committedY = position.y * maxHeightPx - elemHeightPx / 2
 
     // Transient drag delta (only during active drag)
     var dragDeltaX by remember { mutableFloatStateOf(0f) }
@@ -513,11 +515,12 @@ private fun BoxWithConstraintsScope.DraggableRealElement(
     var isDragging by remember { mutableStateOf(false) }
 
     // Reset drag delta when position changes externally
-    LaunchedEffect(position.x, position.y, elemSizePx) {
+    LaunchedEffect(position.x, position.y, elemWidthPx, elemHeightPx) {
         if (!isDragging) { dragDeltaX = 0f; dragDeltaY = 0f }
     }
 
-    val currentElemSizePx by rememberUpdatedState(elemSizePx)
+    val currentElemWPx by rememberUpdatedState(elemWidthPx)
+    val currentElemHPx by rememberUpdatedState(elemHeightPx)
 
     // Snap helper
     fun snap(v: Float): Float = if (snapEnabled && snapGridPx > 0f) {
@@ -537,26 +540,26 @@ private fun BoxWithConstraintsScope.DraggableRealElement(
                 detectTapGestures { onTap() }
             }
             // Drag detection
-            .pointerInput(key, elemSizePx) {
+            .pointerInput(key, elemWidthPx, elemHeightPx) {
                 detectDragGestures(
                     onDragStart = { isDragging = true; onTap() },
                     onDragEnd = {
-                        val sz = currentElemSizePx
+                        val w = currentElemWPx; val h = currentElemHPx
                         val finalX = snap(dragDeltaX)
                         val finalY = snap(dragDeltaY)
                         val newAbsX = committedX + finalX
                         val newAbsY = committedY + finalY
-                        val cx = (newAbsX + sz / 2).coerceIn(0f, maxWidthPx) / maxWidthPx
-                        val cy = (newAbsY + sz / 2).coerceIn(0f, maxHeightPx) / maxHeightPx
+                        val cx = (newAbsX + w / 2).coerceIn(0f, maxWidthPx) / maxWidthPx
+                        val cy = (newAbsY + h / 2).coerceIn(0f, maxHeightPx) / maxHeightPx
                         isDragging = false; dragDeltaX = 0f; dragDeltaY = 0f
                         onDragEnd(cx.coerceIn(0.03f, 0.97f), cy.coerceIn(0.03f, 0.97f))
                     },
                     onDragCancel = { isDragging = false; dragDeltaX = 0f; dragDeltaY = 0f },
                     onDrag = { change, dragAmount ->
                         change.consume()
-                        val sz = currentElemSizePx
-                        dragDeltaX = (dragDeltaX + dragAmount.x).coerceIn(-committedX, maxWidthPx - sz - committedX)
-                        dragDeltaY = (dragDeltaY + dragAmount.y).coerceIn(-committedY, maxHeightPx - sz - committedY)
+                        val w = currentElemWPx; val h = currentElemHPx
+                        dragDeltaX = (dragDeltaX + dragAmount.x).coerceIn(-committedX, maxWidthPx - w - committedX)
+                        dragDeltaY = (dragDeltaY + dragAmount.y).coerceIn(-committedY, maxHeightPx - h - committedY)
                     }
                 )
             }
@@ -571,11 +574,12 @@ private fun BoxWithConstraintsScope.DraggableRealElement(
         } else {
             RenderEditorPreview(type, scale)
         }
-        // 5D: Labels — togglable
+        // 5D: Labels — togglable, never clipped by parent size
         if (customContent == null && showLabels) {
             Text(label, fontSize = 10.sp, color = Color.White.copy(0.85f),
-                textAlign = TextAlign.Center, maxLines = 1,
+                textAlign = TextAlign.Center, maxLines = 1, softWrap = false,
                 modifier = Modifier.align(Alignment.BottomCenter).offset(y = 14.dp)
+                    .wrapContentWidth(unbounded = true)
                     .background(Color.Black.copy(0.65f), RoundedCornerShape(4.dp))
                     .padding(horizontal = 4.dp, vertical = 1.dp))
         }
