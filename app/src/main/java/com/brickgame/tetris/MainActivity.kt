@@ -1,10 +1,12 @@
 package com.brickgame.tetris
 
 import android.content.pm.ActivityInfo
+import android.graphics.Color as AndroidColor
 import android.os.Bundle
 import android.view.KeyEvent
 import android.view.MotionEvent
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -226,19 +228,24 @@ class MainActivity : ComponentActivity() {
             val is3D = activeLayout == LayoutPreset.PORTRAIT_3D
 
             BrickGameTheme(gameTheme = theme, appThemeMode = appThemeMode) {
-                // Control status bar icon appearance based on theme mode
+                // Control system bar appearance based on theme mode
                 val isDarkMode = LocalIsDarkMode.current
                 LaunchedEffect(isDarkMode) {
-                    val insetsController = WindowCompat.getInsetsController(window, window.decorView)
-                    // Light status bar = dark icons (for light backgrounds)
-                    insetsController.isAppearanceLightStatusBars = !isDarkMode
-                    insetsController.isAppearanceLightNavigationBars = !isDarkMode
-                    // Match system bar colors to theme background so no dark strips appear
-                    val bgArgb = if (isDarkMode) android.graphics.Color.parseColor("#FF0A0A0A")
-                                 else android.graphics.Color.parseColor("#FFF2F2F2")
-                    window.statusBarColor = android.graphics.Color.TRANSPARENT
-                    window.navigationBarColor = bgArgb
-                    window.decorView.setBackgroundColor(bgArgb)
+                    // Re-call enableEdgeToEdge with correct styles for current theme
+                    // This ensures status bar and nav bar backgrounds match the content
+                    if (isDarkMode) {
+                        enableEdgeToEdge(
+                            statusBarStyle = SystemBarStyle.dark(AndroidColor.TRANSPARENT),
+                            navigationBarStyle = SystemBarStyle.dark(AndroidColor.TRANSPARENT)
+                        )
+                        window.decorView.setBackgroundColor(AndroidColor.parseColor("#0A0A0A"))
+                    } else {
+                        enableEdgeToEdge(
+                            statusBarStyle = SystemBarStyle.light(AndroidColor.TRANSPARENT, AndroidColor.TRANSPARENT),
+                            navigationBarStyle = SystemBarStyle.light(AndroidColor.parseColor("#F2F2F2"), AndroidColor.parseColor("#F2F2F2"))
+                        )
+                        window.decorView.setBackgroundColor(AndroidColor.parseColor("#F2F2F2"))
+                    }
                 }
                 Box(Modifier.fillMaxSize()) {
                     // Layer 1: Splash — rotating cube + falling pieces (visible during loading)
