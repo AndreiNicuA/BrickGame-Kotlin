@@ -45,6 +45,10 @@ fun SettingsScreen(
     soundEnabled: Boolean, vibrationEnabled: Boolean, multiColorEnabled: Boolean,
     pieceMaterial: String = "CLASSIC",
     controllerEnabled: Boolean = true, controllerDeadzone: Float = 0.25f,
+    appThemeMode: String = "auto", keepScreenOn: Boolean = true,
+    orientationLock: String = "auto", immersiveMode: Boolean = false,
+    frameRateTarget: Int = 60, batterySaver: Boolean = false,
+    highContrast: Boolean = false, uiScale: Float = 1.0f,
     playerName: String, highScore: Int, scoreHistory: List<ScoreEntry>,
     customThemes: List<GameTheme>, editingTheme: GameTheme?,
     customLayouts: List<CustomLayoutData>, editingLayout: CustomLayoutData?,
@@ -60,6 +64,14 @@ fun SettingsScreen(
     onSetPieceMaterial: (String) -> Unit = {},
     onSetControllerEnabled: (Boolean) -> Unit = {},
     onSetControllerDeadzone: (Float) -> Unit = {},
+    onSetAppThemeMode: (String) -> Unit = {},
+    onSetKeepScreenOn: (Boolean) -> Unit = {},
+    onSetOrientationLock: (String) -> Unit = {},
+    onSetImmersiveMode: (Boolean) -> Unit = {},
+    onSetFrameRateTarget: (Int) -> Unit = {},
+    onSetBatterySaver: (Boolean) -> Unit = {},
+    onSetHighContrast: (Boolean) -> Unit = {},
+    onSetUiScale: (Float) -> Unit = {},
     onNewTheme: () -> Unit, onEditTheme: (GameTheme) -> Unit,
     onUpdateEditingTheme: (GameTheme) -> Unit, onSaveTheme: () -> Unit, onDeleteTheme: (String) -> Unit,
     onNewLayout: () -> Unit, onEditLayout: (CustomLayoutData) -> Unit,
@@ -72,6 +84,7 @@ fun SettingsScreen(
     Box(Modifier.fillMaxSize().background(BG).systemBarsPadding()) {
         when (page) {
             GameViewModel.SettingsPage.MAIN -> MainPage(onNavigate, onBack, on3DMode)
+            GameViewModel.SettingsPage.GENERAL -> GeneralPage(appThemeMode, keepScreenOn, orientationLock, immersiveMode, frameRateTarget, batterySaver, highContrast, uiScale, onSetAppThemeMode, onSetKeepScreenOn, onSetOrientationLock, onSetImmersiveMode, onSetFrameRateTarget, onSetBatterySaver, onSetHighContrast, onSetUiScale) { onNavigate(GameViewModel.SettingsPage.MAIN) }
             GameViewModel.SettingsPage.PROFILE -> ProfilePage(playerName, highScore, scoreHistory, onSetPlayerName) { onNavigate(GameViewModel.SettingsPage.MAIN) }
             GameViewModel.SettingsPage.THEME -> ThemePage(currentTheme, customThemes, multiColorEnabled, pieceMaterial, onSetTheme, onSetMultiColorEnabled, onSetPieceMaterial, onNewTheme, onEditTheme, onDeleteTheme) { onNavigate(GameViewModel.SettingsPage.MAIN) }
             GameViewModel.SettingsPage.THEME_EDITOR -> if (editingTheme != null) ThemeEditorScreen(editingTheme, onUpdateEditingTheme, onSaveTheme) { onNavigate(GameViewModel.SettingsPage.THEME) }
@@ -89,6 +102,7 @@ fun SettingsScreen(
 @Composable private fun MainPage(onNav: (GameViewModel.SettingsPage) -> Unit, onBack: () -> Unit, on3D: () -> Unit = {}) {
     Column(Modifier.fillMaxSize().padding(20.dp)) {
         Header("Settings", onBack); Spacer(Modifier.height(16.dp))
+        MenuItem("General", "Theme mode, screen, performance") { onNav(GameViewModel.SettingsPage.GENERAL) }
         MenuItem("Profile", "Name, scores") { onNav(GameViewModel.SettingsPage.PROFILE) }
         MenuItem("Theme", "Colours and style") { onNav(GameViewModel.SettingsPage.THEME) }
         MenuItem("Layout", "Screen arrangement + 3D mode") { onNav(GameViewModel.SettingsPage.LAYOUT) }
@@ -99,10 +113,85 @@ fun SettingsScreen(
     }
 }
 
+// ===== GENERAL APP SETTINGS =====
+@Composable private fun GeneralPage(
+    appThemeMode: String, keepScreenOn: Boolean, orientationLock: String, immersiveMode: Boolean,
+    frameRateTarget: Int, batterySaver: Boolean, highContrast: Boolean, uiScale: Float,
+    onThemeMode: (String) -> Unit, onKeepScreen: (Boolean) -> Unit, onOrientation: (String) -> Unit,
+    onImmersive: (Boolean) -> Unit, onFrameRate: (Int) -> Unit, onBatterySaver: (Boolean) -> Unit,
+    onHighContrast: (Boolean) -> Unit, onUiScale: (Float) -> Unit, onBack: () -> Unit
+) {
+    LazyColumn(Modifier.fillMaxSize().padding(20.dp)) {
+        item { Header("General", onBack) }
+        item { Lbl("App Theme Mode") }
+        item { Card {
+            Text("Controls the app interface appearance (settings, menus, dialogs)", color = DIM, fontSize = 11.sp)
+            Spacer(Modifier.height(8.dp))
+            listOf("auto" to "Auto (System)", "dark" to "Dark Mode", "light" to "Light Mode").forEach { (id, label) ->
+                Sel(label, appThemeMode == id) { onThemeMode(id) }
+            }
+        } }
+        item { Lbl("Screen") }
+        item { Card {
+            Toggle("Keep Screen On", keepScreenOn, onKeepScreen)
+            Spacer(Modifier.height(4.dp))
+            Text("Prevents screen dimming during gameplay", color = DIM, fontSize = 11.sp)
+        } }
+        item { Card {
+            Toggle("Immersive Mode", immersiveMode, onImmersive)
+            Spacer(Modifier.height(4.dp))
+            Text("Hide status bar and navigation bar during gameplay", color = DIM, fontSize = 11.sp)
+        } }
+        item { Card {
+            Text("Orientation Lock", color = TX, fontSize = 14.sp)
+            Spacer(Modifier.height(6.dp))
+            listOf("auto" to "Auto", "portrait" to "Portrait Only", "landscape" to "Landscape Only").forEach { (id, label) ->
+                Sel(label, orientationLock == id) { onOrientation(id) }
+            }
+        } }
+        item { Lbl("Performance") }
+        item { Card {
+            Text("Frame Rate", color = TX, fontSize = 14.sp)
+            Spacer(Modifier.height(6.dp))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                listOf(30, 60, 120).forEach { fps ->
+                    val sel = frameRateTarget == fps
+                    Box(Modifier.weight(1f).clip(RoundedCornerShape(8.dp))
+                        .background(if (sel) ACC.copy(0.2f) else CARD)
+                        .then(if (sel) Modifier.border(1.dp, ACC, RoundedCornerShape(8.dp)) else Modifier)
+                        .clickable { onFrameRate(fps) }.padding(vertical = 10.dp),
+                        contentAlignment = Alignment.Center) {
+                        Text("$fps FPS", color = if (sel) ACC else DIM, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+            Spacer(Modifier.height(4.dp))
+            Text("Higher frame rates use more battery", color = DIM, fontSize = 11.sp)
+        } }
+        item { Card {
+            Toggle("Battery Saver", batterySaver, onBatterySaver)
+            Spacer(Modifier.height(4.dp))
+            Text("Reduces animations and lowers frame rate to save battery", color = DIM, fontSize = 11.sp)
+        } }
+        item { Lbl("Accessibility") }
+        item { Card {
+            Toggle("High Contrast", highContrast, onHighContrast)
+            Spacer(Modifier.height(4.dp))
+            Text("Increases colour contrast for better visibility", color = DIM, fontSize = 11.sp)
+        } }
+        item { Card {
+            Text("UI Scale", color = TX, fontSize = 14.sp)
+            Slider(uiScale, onUiScale, valueRange = 0.8f..1.5f, colors = sliderColors())
+            Text("${"$"}{(uiScale * 100).toInt()}%", color = DIM, fontSize = 12.sp)
+        } }
+        item { Spacer(Modifier.height(16.dp)) }
+    }
+}
+
 // ===== PROFILE =====
 @Composable private fun ProfilePage(name: String, hs: Int, history: List<ScoreEntry>, onName: (String) -> Unit, onBack: () -> Unit) {
     var editName by remember { mutableStateOf(name) }
-    var sortBy by remember { mutableStateOf("score") } // score, level, lines, recent
+    var sortBy by remember { mutableStateOf("score") }
     LaunchedEffect(name) { editName = name }
     val sorted = remember(history, sortBy) {
         when (sortBy) {
@@ -117,7 +206,6 @@ fun SettingsScreen(
         item { Card { Text("Player Name", color = DIM, fontSize = 12.sp); Spacer(Modifier.height(4.dp)); EditField(editName) { editName = it; onName(it) } } }
         item { Card { Text("High Score", color = DIM, fontSize = 12.sp); Text(hs.toString(), color = ACC, fontSize = 24.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace) } }
         item { Lbl("Score History") }
-        // Sort filter
         item {
             Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), Arrangement.spacedBy(6.dp)) {
                 listOf("score" to "Score", "level" to "Level", "lines" to "Lines", "recent" to "Recent").forEach { (k, v) ->
@@ -130,14 +218,14 @@ fun SettingsScreen(
             val e = sorted[i]
             Card {
                 Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
-                    Text("${i+1}.", color = DIM, modifier = Modifier.width(28.dp))
+                    Text("${"$"}{i+1}.", color = DIM, modifier = Modifier.width(28.dp))
                     Column(Modifier.weight(1f)) {
                         Text(e.playerName, color = TX, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                        Text("${e.score}", color = ACC, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                        Text("${"$"}{e.score}", color = ACC, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                     }
                     Column(horizontalAlignment = Alignment.End) {
-                        Text("Lv${e.level}", color = DIM, fontSize = 12.sp)
-                        Text("${e.lines}L", color = DIM, fontSize = 12.sp)
+                        Text("Lv${"$"}{e.level}", color = DIM, fontSize = 12.sp)
+                        Text("${"$"}{e.lines}L", color = DIM, fontSize = 12.sp)
                     }
                 }
             }
@@ -150,7 +238,6 @@ fun SettingsScreen(
 @Composable private fun ThemePage(current: GameTheme, custom: List<GameTheme>, multiColor: Boolean, pieceMaterial: String, onSet: (GameTheme) -> Unit, onMultiColor: (Boolean) -> Unit, onMaterial: (String) -> Unit, onNew: () -> Unit, onEdit: (GameTheme) -> Unit, onDelete: (String) -> Unit, onBack: () -> Unit) {
     LazyColumn(Modifier.fillMaxSize().padding(20.dp)) {
         item { Header("Theme", onBack); Spacer(Modifier.height(16.dp)) }
-        // Multicolor toggle
         item { Card {
             Toggle("Multicolor Pieces", multiColor, onMultiColor)
             Text("Each piece type has its own color (Cyan, Yellow, Purple, Green, Red, Blue, Orange)", color = DIM, fontSize = 11.sp)
@@ -163,7 +250,6 @@ fun SettingsScreen(
                 }
             }
         } }
-        // Piece Material selector
         item { Card {
             Text("Piece Material", color = TX, fontWeight = FontWeight.Bold, fontSize = 14.sp)
             Spacer(Modifier.height(4.dp))
@@ -215,7 +301,6 @@ fun SettingsScreen(
     }
 }
 
-
 // ===== LAYOUT =====
 @Composable private fun LayoutPage(p: LayoutPreset, l: LayoutPreset, d: DPadStyle, custom: List<CustomLayoutData>, active: CustomLayoutData?,
                                     onP: (LayoutPreset) -> Unit, onL: (LayoutPreset) -> Unit, onD: (DPadStyle) -> Unit,
@@ -225,7 +310,6 @@ fun SettingsScreen(
         item { Header("Layout", onBack) }
         item { Lbl("Portrait") }
         items(LayoutPreset.portraitPresets().size) { i -> val x = LayoutPreset.portraitPresets()[i]; Sel(x.displayName, x == p && active == null) { onClear(); onP(x) } }
-        // Freeform hint + edit button
         if (p == LayoutPreset.PORTRAIT_FREEFORM && active == null) {
             item {
                 Column(Modifier.fillMaxWidth().padding(vertical = 4.dp).clip(RoundedCornerShape(8.dp)).background(ACC.copy(0.08f)).padding(12.dp)) {
@@ -243,13 +327,12 @@ fun SettingsScreen(
     }
 }
 
-
 // ===== GAMEPLAY =====
 @Composable private fun GameplayPage(diff: Difficulty, mode: GameMode, ghost: Boolean, onD: (Difficulty) -> Unit, onM: (GameMode) -> Unit, onG: (Boolean) -> Unit, onBack: () -> Unit) {
     LazyColumn(Modifier.fillMaxSize().padding(20.dp)) {
         item { Header("Gameplay", onBack) }
-        item { Lbl("Difficulty") }; items(Difficulty.entries.size) { i -> val d = Difficulty.entries[i]; Sel("${d.displayName} — ${d.description}", d == diff) { onD(d) } }
-        item { Lbl("Game Mode") }; items(GameMode.entries.size) { i -> val m = GameMode.entries[i]; Sel("${m.displayName} — ${m.description}", m == mode) { onM(m) } }
+        item { Lbl("Difficulty") }; items(Difficulty.entries.size) { i -> val d = Difficulty.entries[i]; Sel("${"$"}{d.displayName} — ${"$"}{d.description}", d == diff) { onD(d) } }
+        item { Lbl("Game Mode") }; items(GameMode.entries.size) { i -> val m = GameMode.entries[i]; Sel("${"$"}{m.displayName} — ${"$"}{m.description}", m == mode) { onM(m) } }
         item { Lbl("Options") }; item { Card { Toggle("Ghost Piece", ghost, onG) } }
     }
 }
@@ -258,8 +341,8 @@ fun SettingsScreen(
 @Composable private fun ExperiencePage(aS: AnimationStyle, aD: Float, s: Boolean, v: Boolean, onAS: (AnimationStyle) -> Unit, onAD: (Float) -> Unit, onS: (Boolean) -> Unit, onV: (Boolean) -> Unit, onBack: () -> Unit) {
     LazyColumn(Modifier.fillMaxSize().padding(20.dp)) {
         item { Header("Experience", onBack) }
-        item { Lbl("Animation") }; items(AnimationStyle.entries.size) { i -> val x = AnimationStyle.entries[i]; Sel("${x.displayName} — ${x.description}", x == aS) { onAS(x) } }
-        item { Card { Text("Speed", color = TX, fontSize = 14.sp); Slider(aD, onAD, valueRange = 0.1f..2f, colors = sliderColors()); Text("${(aD*1000).toInt()}ms", color = DIM, fontSize = 12.sp) } }
+        item { Lbl("Animation") }; items(AnimationStyle.entries.size) { i -> val x = AnimationStyle.entries[i]; Sel("${"$"}{x.displayName} — ${"$"}{x.description}", x == aS) { onAS(x) } }
+        item { Card { Text("Speed", color = TX, fontSize = 14.sp); Slider(aD, onAD, valueRange = 0.1f..2f, colors = sliderColors()); Text("${"$"}{(aD*1000).toInt()}ms", color = DIM, fontSize = 12.sp) } }
         item { Lbl("Sound & Vibration") }; item { Card { Toggle("Sound", s, onS); Spacer(Modifier.height(8.dp)); Toggle("Vibration", v, onV) } }
     }
 }
@@ -278,7 +361,7 @@ fun SettingsScreen(
         item { Card {
             Text("Stick Deadzone", color = TX, fontSize = 14.sp)
             Slider(deadzone, onDeadzone, valueRange = 0.05f..0.8f, colors = sliderColors())
-            Text("${(deadzone * 100).toInt()}%", color = DIM, fontSize = 12.sp)
+            Text("${"$"}{(deadzone * 100).toInt()}%", color = DIM, fontSize = 12.sp)
             Text("Higher = less sensitive to small stick movements", color = DIM, fontSize = 11.sp)
         } }
         item { Lbl("Connected Controllers") }
@@ -289,7 +372,7 @@ fun SettingsScreen(
                 val c = controllers[i]
                 Card {
                     Text(c.name, color = TX, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                    Text("Vendor: ${c.vendorId}  Product: ${c.productId}", color = DIM, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+                    Text("Vendor: ${"$"}{c.vendorId}  Product: ${"$"}{c.productId}", color = DIM, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
                     Text("✓ Connected", color = Color(0xFF22C55E), fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 }
             }
@@ -320,31 +403,27 @@ fun SettingsScreen(
     }
 }
 
-// ===== ABOUT =====
+// ===== ABOUT (Updated v3.6.0, no changelog) =====
 @Composable private fun AboutPage(onBack: () -> Unit) {
     LazyColumn(Modifier.fillMaxSize().padding(20.dp)) {
         item { Header("About", onBack); Spacer(Modifier.height(24.dp)) }
         item { Card { Text("BRICK GAME", color = ACC, fontSize = 24.sp, fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace); Text("Kotlin Edition", color = TX, fontSize = 14.sp) } }
-        item { Card { Info("Version", "3.5.0"); Info("Build", "315"); Info("Platform", "Android 8.0+"); Info("Engine", "Compose + Canvas") } }
+        item { Card { Info("Version", "3.6.0"); Info("Build", "16"); Info("Platform", "Android 8.0+"); Info("Engine", "Compose + OpenGL ES") } }
         item { Card { Text("Developer", color = DIM, fontSize = 12.sp); Text("Andrei Anton", color = TX, fontSize = 16.sp, fontWeight = FontWeight.Bold) } }
         item { Lbl("Features") }
         item { Card {
-            Text("3D Tetris mode — isometric + Star Wars perspective", color = TX, fontSize = 12.sp)
-            Text("Free camera rotation with swipe controls", color = TX, fontSize = 12.sp)
-            Text("Manual / auto gravity toggle for 3D mode", color = TX, fontSize = 12.sp)
+            Text("3D Tetris mode with OpenGL ES rendering", color = TX, fontSize = 12.sp)
+            Text("Free camera rotation, zoom, and pan", color = TX, fontSize = 12.sp)
+            Text("Realistic piece materials (Stone, Granite, Marble, Diamond)", color = TX, fontSize = 12.sp)
+            Text("6 layouts (Classic, Modern, Fullscreen, Compact, Freeform, 3D)", color = TX, fontSize = 12.sp)
+            Text("Freeform editor: drag, resize, snap grid, transparency", color = TX, fontSize = 12.sp)
             Text("5 built-in themes + custom theme editor", color = TX, fontSize = 12.sp)
-            Text("5 layouts (Classic, Modern, Fullscreen, One-Hand, Freeform)", color = TX, fontSize = 12.sp)
-            Text("Freeform editor: drag, resize, transparency for every element", color = TX, fontSize = 12.sp)
+            Text("General app settings with Auto/Dark/Light mode", color = TX, fontSize = 12.sp)
             Text("Hold piece, Next queue (1-3), Ghost piece", color = TX, fontSize = 12.sp)
-            Text("D-Pad and Swipe control styles", color = TX, fontSize = 12.sp)
-            Text("Score history with sort & filter", color = TX, fontSize = 12.sp)
+            Text("D-Pad and Swipe control styles + Gamepad support", color = TX, fontSize = 12.sp)
+            Text("Score history with sort and filter", color = TX, fontSize = 12.sp)
             Text("SRS rotation + wall kicks", color = TX, fontSize = 12.sp)
         } }
-        item { Lbl("Changelog") }
-        item { Card { Text("v3.5.0", color = ACC, fontSize = 13.sp, fontWeight = FontWeight.Bold); Text("3D Tetris mode with perspective camera, Star Wars crawl view, camera settings, auto/manual gravity, 8 piece types (5 flat + 3 true-3D), layer clearing", color = TX, fontSize = 12.sp) } }
-        item { Card { Text("v3.4.1", color = ACC, fontSize = 13.sp, fontWeight = FontWeight.Bold); Text("Freeform editor v2: floating toolbar, per-element size/opacity, board outline mode, classic info panel redesign", color = TX, fontSize = 12.sp) } }
-        item { Card { Text("v3.2.0", color = ACC, fontSize = 13.sp, fontWeight = FontWeight.Bold); Text("Custom theme & layout editors, drag-and-drop positioning, RGB color picker, grid snap, undo/redo", color = TX, fontSize = 12.sp) } }
-        item { Card { Text("v3.0.0", color = ACC, fontSize = 13.sp, fontWeight = FontWeight.Bold); Text("Complete rewrite — new game engine, Canvas rendering, 5 themes, 3 layouts, custom controls, score tracking", color = TX, fontSize = 12.sp) } }
         item { Spacer(Modifier.height(20.dp)) }
     }
 }

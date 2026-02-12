@@ -33,6 +33,15 @@ class SettingsRepository(private val context: Context) {
         private val PIECE_MATERIAL = stringPreferencesKey("piece_material")
         private val CONTROLLER_ENABLED = booleanPreferencesKey("controller_enabled")
         private val CONTROLLER_DEADZONE = floatPreferencesKey("controller_deadzone")
+        // General App Settings
+        private val APP_THEME_MODE = stringPreferencesKey("app_theme_mode")
+        private val KEEP_SCREEN_ON = booleanPreferencesKey("keep_screen_on")
+        private val ORIENTATION_LOCK = stringPreferencesKey("orientation_lock")
+        private val IMMERSIVE_MODE = booleanPreferencesKey("immersive_mode")
+        private val FRAME_RATE_TARGET = intPreferencesKey("frame_rate_target")
+        private val BATTERY_SAVER = booleanPreferencesKey("battery_saver")
+        private val HIGH_CONTRAST = booleanPreferencesKey("high_contrast")
+        private val UI_SCALE = floatPreferencesKey("ui_scale")
     }
     
     private fun <T> pref(key: Preferences.Key<T>, default: T): Flow<T> =
@@ -97,4 +106,29 @@ class SettingsRepository(private val context: Context) {
 
     val controllerDeadzone get() = pref(CONTROLLER_DEADZONE, 0.25f)
     suspend fun setControllerDeadzone(v: Float) = set(CONTROLLER_DEADZONE, v.coerceIn(0.05f, 0.8f))
+
+    // General App Settings
+    val appThemeMode get() = pref(APP_THEME_MODE, "auto")
+    suspend fun setAppThemeMode(v: String) = set(APP_THEME_MODE, v)
+
+    val keepScreenOn get() = pref(KEEP_SCREEN_ON, true)
+    suspend fun setKeepScreenOn(v: Boolean) = set(KEEP_SCREEN_ON, v)
+
+    val orientationLock get() = pref(ORIENTATION_LOCK, "auto")
+    suspend fun setOrientationLock(v: String) = set(ORIENTATION_LOCK, v)
+
+    val immersiveMode get() = pref(IMMERSIVE_MODE, false)
+    suspend fun setImmersiveMode(v: Boolean) = set(IMMERSIVE_MODE, v)
+
+    val frameRateTarget get() = pref(FRAME_RATE_TARGET, 60)
+    suspend fun setFrameRateTarget(v: Int) = set(FRAME_RATE_TARGET, v)
+
+    val batterySaver get() = pref(BATTERY_SAVER, false)
+    suspend fun setBatterySaver(v: Boolean) = set(BATTERY_SAVER, v)
+
+    val highContrast get() = pref(HIGH_CONTRAST, false)
+    suspend fun setHighContrast(v: Boolean) = set(HIGH_CONTRAST, v)
+
+    val uiScale get() = pref(UI_SCALE, 1.0f)
+    suspend fun setUiScale(v: Float) = set(UI_SCALE, v.coerceIn(0.8f, 1.5f))
 }

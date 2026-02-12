@@ -130,11 +130,29 @@ class MainActivity : ComponentActivity() {
             val pieceMaterial by vm.pieceMaterial.collectAsState()
             val controllerEnabled by vm.controllerEnabled.collectAsState()
             val controllerDeadzone by vm.controllerDeadzone.collectAsState()
+            // General App Settings
+            val appThemeMode by vm.appThemeMode.collectAsState()
+            val keepScreenOn by vm.keepScreenOn.collectAsState()
+            val orientationLock by vm.orientationLock.collectAsState()
+            val immersiveMode by vm.immersiveMode.collectAsState()
+            val frameRateTarget by vm.frameRateTarget.collectAsState()
+            val batterySaver by vm.batterySaver.collectAsState()
+            val highContrast by vm.highContrast.collectAsState()
+            val uiScale by vm.uiScale.collectAsState()
 
             // Sync controller settings to gamepad handler
             LaunchedEffect(controllerEnabled, controllerDeadzone) {
                 gamepad.enabled = controllerEnabled
                 gamepad.deadzone = controllerDeadzone
+            }
+
+            // Apply Keep Screen On setting
+            LaunchedEffect(keepScreenOn) {
+                if (keepScreenOn) {
+                    window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                } else {
+                    window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                }
             }
 
             val name by vm.playerName.collectAsState()
@@ -229,6 +247,10 @@ class MainActivity : ComponentActivity() {
                             soundEnabled = sound, vibrationEnabled = vib, multiColorEnabled = multiColor,
                             pieceMaterial = pieceMaterial,
                             controllerEnabled = controllerEnabled, controllerDeadzone = controllerDeadzone,
+                            appThemeMode = appThemeMode, keepScreenOn = keepScreenOn,
+                            orientationLock = orientationLock, immersiveMode = immersiveMode,
+                            frameRateTarget = frameRateTarget, batterySaver = batterySaver,
+                            highContrast = highContrast, uiScale = uiScale,
                             playerName = name, highScore = hs, scoreHistory = history,
                             customThemes = customThemes, editingTheme = editingTheme,
                             customLayouts = customLayouts, editingLayout = editingLayout,
@@ -252,6 +274,14 @@ class MainActivity : ComponentActivity() {
                             onSetPieceMaterial = vm::setPieceMaterial,
                             onSetControllerEnabled = vm::setControllerEnabled,
                             onSetControllerDeadzone = vm::setControllerDeadzone,
+                            onSetAppThemeMode = vm::setAppThemeMode,
+                            onSetKeepScreenOn = vm::setKeepScreenOn,
+                            onSetOrientationLock = vm::setOrientationLock,
+                            onSetImmersiveMode = vm::setImmersiveMode,
+                            onSetFrameRateTarget = vm::setFrameRateTarget,
+                            onSetBatterySaver = vm::setBatterySaver,
+                            onSetHighContrast = vm::setHighContrast,
+                            onSetUiScale = vm::setUiScale,
                             onNewTheme = vm::startNewTheme, onEditTheme = vm::editTheme,
                             onUpdateEditingTheme = vm::updateEditingTheme, onSaveTheme = vm::saveEditingTheme,
                             onDeleteTheme = vm::deleteCustomTheme,

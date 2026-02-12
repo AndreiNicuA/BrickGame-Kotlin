@@ -30,7 +30,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     val gameState: StateFlow<GameState> = game.state
 
     data class UiState(val showSettings: Boolean = false, val settingsPage: SettingsPage = SettingsPage.MAIN)
-    enum class SettingsPage { MAIN, PROFILE, THEME, THEME_EDITOR, LAYOUT, LAYOUT_EDITOR, GAMEPLAY, EXPERIENCE, CONTROLLER, ABOUT }
+    enum class SettingsPage { MAIN, GENERAL, PROFILE, THEME, THEME_EDITOR, LAYOUT, LAYOUT_EDITOR, GAMEPLAY, EXPERIENCE, CONTROLLER, ABOUT }
     private val _uiState = MutableStateFlow(UiState())
     val uiState: StateFlow<UiState> = _uiState.asStateFlow()
 
@@ -64,6 +64,23 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     val controllerEnabled: StateFlow<Boolean> = _controllerEnabled.asStateFlow()
     private val _controllerDeadzone = MutableStateFlow(0.25f)
     val controllerDeadzone: StateFlow<Float> = _controllerDeadzone.asStateFlow()
+    // General App Settings
+    private val _appThemeMode = MutableStateFlow("auto")
+    val appThemeMode: StateFlow<String> = _appThemeMode.asStateFlow()
+    private val _keepScreenOn = MutableStateFlow(true)
+    val keepScreenOn: StateFlow<Boolean> = _keepScreenOn.asStateFlow()
+    private val _orientationLock = MutableStateFlow("auto")
+    val orientationLock: StateFlow<String> = _orientationLock.asStateFlow()
+    private val _immersiveMode = MutableStateFlow(false)
+    val immersiveMode: StateFlow<Boolean> = _immersiveMode.asStateFlow()
+    private val _frameRateTarget = MutableStateFlow(60)
+    val frameRateTarget: StateFlow<Int> = _frameRateTarget.asStateFlow()
+    private val _batterySaver = MutableStateFlow(false)
+    val batterySaver: StateFlow<Boolean> = _batterySaver.asStateFlow()
+    private val _highContrast = MutableStateFlow(false)
+    val highContrast: StateFlow<Boolean> = _highContrast.asStateFlow()
+    private val _uiScale = MutableStateFlow(1.0f)
+    val uiScale: StateFlow<Float> = _uiScale.asStateFlow()
     private val _dataLoaded = MutableStateFlow(false)
     val dataLoaded: StateFlow<Boolean> = _dataLoaded.asStateFlow()
     val playerName = playerRepo.playerName.stateIn(viewModelScope, SharingStarted.Eagerly, "Player")
@@ -126,6 +143,15 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch { settingsRepo.pieceMaterial.collect { _pieceMaterial.value = it } }
         viewModelScope.launch { settingsRepo.controllerEnabled.collect { _controllerEnabled.value = it } }
         viewModelScope.launch { settingsRepo.controllerDeadzone.collect { _controllerDeadzone.value = it } }
+        // General App Settings
+        viewModelScope.launch { settingsRepo.appThemeMode.collect { _appThemeMode.value = it } }
+        viewModelScope.launch { settingsRepo.keepScreenOn.collect { _keepScreenOn.value = it } }
+        viewModelScope.launch { settingsRepo.orientationLock.collect { _orientationLock.value = it } }
+        viewModelScope.launch { settingsRepo.immersiveMode.collect { _immersiveMode.value = it } }
+        viewModelScope.launch { settingsRepo.frameRateTarget.collect { _frameRateTarget.value = it } }
+        viewModelScope.launch { settingsRepo.batterySaver.collect { _batterySaver.value = it } }
+        viewModelScope.launch { settingsRepo.highContrast.collect { _highContrast.value = it } }
+        viewModelScope.launch { settingsRepo.uiScale.collect { _uiScale.value = it } }
         // Signal that data is loaded after critical settings have their first emission
         viewModelScope.launch {
             kotlinx.coroutines.flow.combine(
@@ -217,6 +243,16 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     fun setPieceMaterial(v: String) { _pieceMaterial.value = v; viewModelScope.launch { settingsRepo.setPieceMaterial(v) } }
     fun setControllerEnabled(v: Boolean) { _controllerEnabled.value = v; viewModelScope.launch { settingsRepo.setControllerEnabled(v) } }
     fun setControllerDeadzone(v: Float) { _controllerDeadzone.value = v; viewModelScope.launch { settingsRepo.setControllerDeadzone(v) } }
+
+    // General App Settings setters
+    fun setAppThemeMode(v: String) { _appThemeMode.value = v; viewModelScope.launch { settingsRepo.setAppThemeMode(v) } }
+    fun setKeepScreenOn(v: Boolean) { _keepScreenOn.value = v; viewModelScope.launch { settingsRepo.setKeepScreenOn(v) } }
+    fun setOrientationLock(v: String) { _orientationLock.value = v; viewModelScope.launch { settingsRepo.setOrientationLock(v) } }
+    fun setImmersiveMode(v: Boolean) { _immersiveMode.value = v; viewModelScope.launch { settingsRepo.setImmersiveMode(v) } }
+    fun setFrameRateTarget(v: Int) { _frameRateTarget.value = v; viewModelScope.launch { settingsRepo.setFrameRateTarget(v) } }
+    fun setBatterySaver(v: Boolean) { _batterySaver.value = v; viewModelScope.launch { settingsRepo.setBatterySaver(v) } }
+    fun setHighContrast(v: Boolean) { _highContrast.value = v; viewModelScope.launch { settingsRepo.setHighContrast(v) } }
+    fun setUiScale(v: Float) { _uiScale.value = v; viewModelScope.launch { settingsRepo.setUiScale(v) } }
 
     // ===== Custom Theme =====
     fun startNewTheme() {
