@@ -214,7 +214,8 @@ private fun FreeCameraBoard(
         data class Face(val pts: List<Offset>, val fill: Color, val edge: Color?, val shine: Boolean, val d: Float)
         val faces = mutableListOf<Face>()
 
-        fun addCube(dx: Int, dy: Int, dz: Int, color: Color, alpha: Float, highlight: Boolean = false, isGhost: Boolean = false, clearing: Float = 0f) {
+        fun addCube(dx: Int, dy: Int, dz: Int, color: Color, alpha: Float, highlight: Boolean = false, isGhost: Boolean = false, clearing: Float = 0f,
+                   hasTop: Boolean = false, hasBot: Boolean = false, hasFront: Boolean = false, hasBack: Boolean = false, hasLeft: Boolean = false, hasRight: Boolean = false) {
             val x=dx.toFloat();val y=dy.toFloat();val z=dz.toFloat();val a=alpha.coerceIn(0f,1f)
             val p000=project(x,y,z)?:return;val p100=project(x+1,y,z)?:return;val p010=project(x,y+1,z)?:return
             val p110=project(x+1,y+1,z)?:return;val p001=project(x,y,z+1)?:return;val p101=project(x+1,y,z+1)?:return
@@ -272,12 +273,14 @@ private fun FreeCameraBoard(
             }
             val mx=x+0.5f;val my=y+0.5f;val mz=z+0.5f
 
-            faces.add(Face(listOf(p001,p101,p111,p011),topC,edgeC,highlight,depth(mx,my,z+1)))
-            faces.add(Face(listOf(p000,p100,p110,p010),botC,null,false,depth(mx,my,z)))
-            faces.add(Face(listOf(p000,p100,p101,p001),frontC,edgeC,false,depth(mx,y,mz)))
-            faces.add(Face(listOf(p010,p110,p111,p011),backC,null,false,depth(mx,y+1,mz)))
-            faces.add(Face(listOf(p000,p010,p011,p001),leftC,edgeC,false,depth(x,my,mz)))
-            faces.add(Face(listOf(p100,p110,p111,p101),rightC,edgeC,false,depth(x+1,my,mz)))
+            // Task 6: Adjacency culling — skip internal faces shared with neighbors
+            // This eliminates the primary source of Z-fighting between adjacent cubes
+            if (!hasTop) faces.add(Face(listOf(p001,p101,p111,p011),topC,edgeC,highlight,depth(mx,my,z+1)))
+            if (!hasBot) faces.add(Face(listOf(p000,p100,p110,p010),botC,null,false,depth(mx,my,z)))
+            if (!hasFront) faces.add(Face(listOf(p000,p100,p101,p001),frontC,edgeC,false,depth(mx,y,mz)))
+            if (!hasBack) faces.add(Face(listOf(p010,p110,p111,p011),backC,null,false,depth(mx,y+1,mz)))
+            if (!hasLeft) faces.add(Face(listOf(p000,p010,p011,p001),leftC,edgeC,false,depth(x,my,mz)))
+            if (!hasRight) faces.add(Face(listOf(p100,p110,p111,p101),rightC,edgeC,false,depth(x+1,my,mz)))
 
             // Extra material effects — visible patterns
             if (material == PieceMaterial.GLASS || material == PieceMaterial.CRYSTAL) {
@@ -322,13 +325,20 @@ private fun FreeCameraBoard(
             }
         }
 
-        // Board blocks
+        // Board blocks — with adjacency culling to eliminate Z-fighting (Task 6)
         if (state.board.isNotEmpty()) {
             for (ey in 0 until Tetris3DGame.BOARD_H) {
                 val clearing = if (ey in state.clearingLayers) clearAnimProgress else 0f
                 for (ez in 0 until Tetris3DGame.BOARD_D) { for (ex in 0 until Tetris3DGame.BOARD_W) {
                     if (ey<state.board.size&&ez<state.board[ey].size&&ex<state.board[ey][ez].size) {
-                        val c=state.board[ey][ez][ex]; if (c>0) addCube(ex,ez,ey,pieceColor(c,themeColor),1f,clearing=clearing)
+                        val c=state.board[ey][ez][ex]; if (c>0) addCube(ex,ez,ey,pieceColor(c,themeColor),1f,clearing=clearing,
+                            // Pass neighbor info for adjacency culling
+                            hasTop = (ey+1 < Tetris3DGame.BOARD_H && ey+1 < state.board.size && ez < state.board[ey+1].size && ex < state.board[ey+1][ez].size && state.board[ey+1][ez][ex] > 0),
+                            hasBot = (ey-1 >= 0 && ey-1 < state.board.size && ez < state.board[ey-1].size && ex < state.board[ey-1][ez].size && state.board[ey-1][ez][ex] > 0),
+                            hasFront = (ez-1 >= 0 && ey < state.board.size && ez-1 < state.board[ey].size && ex < state.board[ey][ez-1].size && state.board[ey][ez-1][ex] > 0),
+                            hasBack = (ez+1 < Tetris3DGame.BOARD_D && ey < state.board.size && ez+1 < state.board[ey].size && ex < state.board[ey][ez+1].size && state.board[ey][ez+1][ex] > 0),
+                            hasLeft = (ex-1 >= 0 && ey < state.board.size && ez < state.board[ey].size && ex-1 < state.board[ey][ez].size && state.board[ey][ez][ex-1] > 0),
+                            hasRight = (ex+1 < Tetris3DGame.BOARD_W && ey < state.board.size && ez < state.board[ey].size && ex+1 < state.board[ey][ez].size && state.board[ey][ez][ex+1] > 0))
                     }
                 }}
             }
@@ -348,11 +358,16 @@ private fun FreeCameraBoard(
                 if(pdz>=0) addCube(pdx,pdy,pdz,pieceColor(piece.type.colorIndex,themeColor),1f,true) }
         }
 
-        // Sort & draw
-        faces.sortByDescending { it.d }
+        // Sort & draw — stable sort with deterministic tie-breaking to prevent flicker
+        faces.sortWith(compareByDescending<Face> { it.d }
+            .thenByDescending { it.fill.alpha }
+            .thenBy { it.pts[0].x }
+            .thenBy { it.pts[0].y })
         faces.forEach { face ->
             val path = Path().apply { moveTo(face.pts[0].x,face.pts[0].y); for(i in 1 until face.pts.size) lineTo(face.pts[i].x,face.pts[i].y); close() }
             drawPath(path, face.fill, style = Fill)
+            // Sub-pixel edge overlap: draw thin stroke in face's own color to seal seam gaps
+            drawPath(path, face.fill.copy(alpha = face.fill.alpha.coerceAtLeast(0.3f)), style = Stroke(0.8f))
             if (face.shine) {
                 val p0=face.pts[0];val p1=face.pts[1];val p2=face.pts[2];val p3=face.pts[3]
                 val hlPath = Path().apply {

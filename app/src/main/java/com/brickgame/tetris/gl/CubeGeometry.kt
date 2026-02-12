@@ -120,4 +120,44 @@ class CubeGeometry {
         if (normalLoc >= 0) GLES20.glDisableVertexAttribArray(normalLoc)
         if (uvLoc >= 0) GLES20.glDisableVertexAttribArray(uvLoc)
     }
+
+    /** Draw only selected faces — used for adjacency culling to prevent Z-fighting.
+     *  Each face = 6 indices (2 triangles). Face order: Top, Bottom, Front, Back, Left, Right. */
+    fun drawSelective(shader: ShaderProgram, top: Boolean, bot: Boolean, front: Boolean, back: Boolean, left: Boolean, right: Boolean) {
+        val posLoc = shader.getAttribLocation("aPosition")
+        val normalLoc = shader.getAttribLocation("aNormal")
+        val uvLoc = shader.getAttribLocation("aTexCoord")
+
+        GLES20.glEnableVertexAttribArray(posLoc)
+        if (normalLoc >= 0) GLES20.glEnableVertexAttribArray(normalLoc)
+        if (uvLoc >= 0) GLES20.glEnableVertexAttribArray(uvLoc)
+
+        vertexBuffer.position(0)
+        GLES20.glVertexAttribPointer(posLoc, 3, GLES20.GL_FLOAT, false, stride, vertexBuffer)
+
+        if (normalLoc >= 0) {
+            vertexBuffer.position(3)
+            GLES20.glVertexAttribPointer(normalLoc, 3, GLES20.GL_FLOAT, false, stride, vertexBuffer)
+        }
+
+        if (uvLoc >= 0) {
+            vertexBuffer.position(6)
+            GLES20.glVertexAttribPointer(uvLoc, 2, GLES20.GL_FLOAT, false, stride, vertexBuffer)
+        }
+
+        // Each face has 6 indices (2 triangles), faces ordered: Top, Bot, Front, Back, Left, Right
+        val faces = booleanArrayOf(top, bot, front, back, left, right)
+        for (i in faces.indices) {
+            if (faces[i]) {
+                // Set index buffer position to this face's start (i * 6 indices, 2 bytes each)
+                indexBuffer.position(i * 6)
+                GLES20.glDrawElements(GLES20.GL_TRIANGLES, 6, GLES20.GL_UNSIGNED_SHORT, indexBuffer)
+            }
+        }
+        indexBuffer.position(0)
+
+        GLES20.glDisableVertexAttribArray(posLoc)
+        if (normalLoc >= 0) GLES20.glDisableVertexAttribArray(normalLoc)
+        if (uvLoc >= 0) GLES20.glDisableVertexAttribArray(uvLoc)
+    }
 }

@@ -95,7 +95,7 @@ class BoardRenderer(private val context: Context) : GLSurfaceView.Renderer {
         cubeShader.setUniform1f("uSpecularPower", matParams.specularPower)
         cubeShader.setUniform1f("uSpecularStrength", matParams.specularStrength)
 
-        // Board blocks
+        // Board blocks — with adjacency culling to eliminate Z-fighting (Task 6)
         if (state.board.isNotEmpty()) {
             for (y in 0 until Tetris3DGame.BOARD_H) {
                 val clearing = if (y in state.clearingLayers) state.clearAnimProgress else 0f
@@ -103,7 +103,21 @@ class BoardRenderer(private val context: Context) : GLSurfaceView.Renderer {
                     for (x in 0 until Tetris3DGame.BOARD_W) {
                         if (y < state.board.size && z < state.board[y].size && x < state.board[y][z].size) {
                             val ci = state.board[y][z][x]
-                            if (ci > 0) drawCube(x.toFloat(), y.toFloat(), z.toFloat(), pieceColorRGB(ci), 1f, clearing)
+                            if (ci > 0) {
+                                // Check neighbors for adjacency culling
+                                val hasTop = y+1 < Tetris3DGame.BOARD_H && y+1 < state.board.size && z < state.board[y+1].size && x < state.board[y+1][z].size && state.board[y+1][z][x] > 0
+                                val hasBot = y-1 >= 0 && z < state.board[y-1].size && x < state.board[y-1][z].size && state.board[y-1][z][x] > 0
+                                val hasFront = z-1 >= 0 && z-1 < state.board[y].size && x < state.board[y][z-1].size && state.board[y][z-1][x] > 0
+                                val hasBack = z+1 < Tetris3DGame.BOARD_D && z+1 < state.board[y].size && x < state.board[y][z+1].size && state.board[y][z+1][x] > 0
+                                val hasLeft = x-1 >= 0 && state.board[y][z][x-1] > 0
+                                val hasRight = x+1 < Tetris3DGame.BOARD_W && state.board[y][z][x+1] > 0
+
+                                // Only draw if at least one face is visible
+                                if (!hasTop || !hasBot || !hasFront || !hasBack || !hasLeft || !hasRight) {
+                                    drawCubeSelective(x.toFloat(), y.toFloat(), z.toFloat(), pieceColorRGB(ci), 1f, clearing,
+                                        !hasTop, !hasBot, !hasFront, !hasBack, !hasLeft, !hasRight)
+                                }
+                            }
                         }
                     }
                 }
@@ -142,6 +156,20 @@ class BoardRenderer(private val context: Context) : GLSurfaceView.Renderer {
         cubeShader.setUniform1f("uAlpha", alpha)
         cubeShader.setUniform1f("uClearFlash", clearing)
         cube.draw(cubeShader)
+    }
+
+    /** Draw only visible faces of a cube — skips internal shared faces to prevent Z-fighting */
+    private fun drawCubeSelective(x: Float, y: Float, z: Float, rgb: FloatArray, alpha: Float, clearing: Float,
+                                  top: Boolean, bot: Boolean, front: Boolean, back: Boolean, left: Boolean, right: Boolean) {
+        Matrix.setIdentityM(modelMatrix, 0)
+        Matrix.translateM(modelMatrix, 0, x, y, z)
+        camera.getMVP(modelMatrix, mvpMatrix)
+        cubeShader.setUniformMatrix4fv("uMVPMatrix", mvpMatrix)
+        cubeShader.setUniformMatrix4fv("uModelMatrix", modelMatrix)
+        cubeShader.setUniform3f("uBaseColor", rgb[0], rgb[1], rgb[2])
+        cubeShader.setUniform1f("uAlpha", alpha)
+        cubeShader.setUniform1f("uClearFlash", clearing)
+        cube.drawSelective(cubeShader, top, bot, front, back, left, right)
     }
 
     private fun drawGhost(state: Game3DState, piece: Piece3DState) {

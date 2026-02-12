@@ -4,6 +4,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -212,6 +214,9 @@ fun FreeformEditorScreen(
     var selectedKey by remember { mutableStateOf<String?>(null) }
     val selectedElement = selectedKey?.let { elements[it] }
     var showMenu by remember { mutableStateOf(false) }
+    var snapEnabled by remember { mutableStateOf(false) }
+    val snapGridDp = 16.dp
+    val snapGridPx = with(density) { snapGridDp.toPx() }
 
     Box(Modifier.fillMaxSize().background(theme.backgroundColor).systemBarsPadding()) {
         // Empty board grid background
@@ -267,6 +272,8 @@ fun FreeformEditorScreen(
                         isSelected = isSelected,
                         onTap = { selectedKey = if (selectedKey == elem.key) null else elem.key },
                         onDragEnd = { newX, newY -> onElementUpdated(elem.copy(x = newX, y = newY)) },
+                        snapEnabled = snapEnabled,
+                        snapGridPx = snapGridPx,
                         customContent = {
                             // Small "Board" label as the drag handle
                             Surface(
@@ -300,7 +307,9 @@ fun FreeformEditorScreen(
                         elemSizePx = elemSizePx,
                         isSelected = isSelected,
                         onTap = { selectedKey = if (selectedKey == elem.key) null else elem.key },
-                        onDragEnd = { newX, newY -> onElementUpdated(elem.copy(x = newX, y = newY)) }
+                        onDragEnd = { newX, newY -> onElementUpdated(elem.copy(x = newX, y = newY)) },
+                        snapEnabled = snapEnabled,
+                        snapGridPx = snapGridPx
                     )
                 }
             }
@@ -422,15 +431,11 @@ fun FreeformEditorScreen(
                         Spacer(Modifier.height(8.dp))
                     }
 
-                    // Actions
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally)) {
+                    // Actions (5E: Done button only on top bar)
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
                         OutlinedButton(onClick = { selectedKey = null; onReset(); showMenu = false },
                             colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)) {
                             Text("↺ Reset All")
-                        }
-                        Button(onClick = { showMenu = false; onDone() },
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF22C55E))) {
-                            Text("✓ Done", color = Color.White)
                         }
                     }
                 }
@@ -439,7 +444,12 @@ fun FreeformEditorScreen(
     }
 }
 
-/** Draggable element that renders the REAL button/component preview */
+/** Draggable element that renders the REAL button/component preview.
+ *  5A: Separate tap detection for immediate selection (green outline on first tap)
+ *  5B: graphicsLayer for smooth drag rendering (no layout thrashing)
+ *  5C: Snap-to-grid support during drag
+ *  5D: Fixed labels — centered, auto-hide when element too small
+ */
 @Composable
 private fun BoxWithConstraintsScope.DraggableRealElement(
     key: String,
@@ -453,68 +463,85 @@ private fun BoxWithConstraintsScope.DraggableRealElement(
     isSelected: Boolean,
     onTap: () -> Unit,
     onDragEnd: (Float, Float) -> Unit,
+    snapEnabled: Boolean = false,
+    snapGridPx: Float = 0f,
     customContent: (@Composable () -> Unit)? = null
 ) {
-    // Use position + size as remember keys so offset recalculates on ANY property change
-    var offsetX by remember(key, position.x, position.y, elemSizePx) {
-        mutableFloatStateOf(position.x * maxWidthPx - elemSizePx / 2)
-    }
-    var offsetY by remember(key, position.x, position.y, elemSizePx) {
-        mutableFloatStateOf(position.y * maxHeightPx - elemSizePx / 2)
-    }
+    // Committed position (stored state)
+    val committedX = position.x * maxWidthPx - elemSizePx / 2
+    val committedY = position.y * maxHeightPx - elemSizePx / 2
+
+    // Transient drag delta (only during active drag)
+    var dragDeltaX by remember { mutableFloatStateOf(0f) }
+    var dragDeltaY by remember { mutableFloatStateOf(0f) }
     var isDragging by remember { mutableStateOf(false) }
 
-    // Sync position when changed externally (and not currently dragging)
+    // Reset drag delta when position changes externally
     LaunchedEffect(position.x, position.y, elemSizePx) {
-        if (!isDragging) {
-            offsetX = position.x * maxWidthPx - elemSizePx / 2
-            offsetY = position.y * maxHeightPx - elemSizePx / 2
-        }
+        if (!isDragging) { dragDeltaX = 0f; dragDeltaY = 0f }
     }
 
-    // Capture current elemSizePx for use inside drag lambda
     val currentElemSizePx by rememberUpdatedState(elemSizePx)
+
+    // Snap helper
+    fun snap(v: Float): Float = if (snapEnabled && snapGridPx > 0f) {
+        (v / snapGridPx).roundToInt() * snapGridPx
+    } else v
 
     Box(
         modifier = Modifier
-            .offset { IntOffset(offsetX.roundToInt(), offsetY.roundToInt()) }
+            .offset { IntOffset(committedX.roundToInt(), committedY.roundToInt()) }
+            // 5B: Use graphicsLayer for drag delta — GPU-accelerated, no recomposition
+            .graphicsLayer {
+                translationX = if (isDragging) snap(dragDeltaX) else 0f
+                translationY = if (isDragging) snap(dragDeltaY) else 0f
+            }
+            // 5A: Separate tap detection — fires immediately on touch, no drag threshold needed
+            .pointerInput(key) {
+                detectTapGestures { onTap() }
+            }
+            // Drag detection
             .pointerInput(key, elemSizePx) {
                 detectDragGestures(
                     onDragStart = { isDragging = true; onTap() },
                     onDragEnd = {
-                        isDragging = false
                         val sz = currentElemSizePx
-                        val cx = (offsetX + sz / 2) / maxWidthPx
-                        val cy = (offsetY + sz / 2) / maxHeightPx
+                        val finalX = snap(dragDeltaX)
+                        val finalY = snap(dragDeltaY)
+                        val newAbsX = committedX + finalX
+                        val newAbsY = committedY + finalY
+                        val cx = (newAbsX + sz / 2).coerceIn(0f, maxWidthPx) / maxWidthPx
+                        val cy = (newAbsY + sz / 2).coerceIn(0f, maxHeightPx) / maxHeightPx
+                        isDragging = false; dragDeltaX = 0f; dragDeltaY = 0f
                         onDragEnd(cx.coerceIn(0.03f, 0.97f), cy.coerceIn(0.03f, 0.97f))
                     },
+                    onDragCancel = { isDragging = false; dragDeltaX = 0f; dragDeltaY = 0f },
                     onDrag = { change, dragAmount ->
                         change.consume()
                         val sz = currentElemSizePx
-                        offsetX = (offsetX + dragAmount.x).coerceIn(0f, maxWidthPx - sz)
-                        offsetY = (offsetY + dragAmount.y).coerceIn(0f, maxHeightPx - sz)
+                        dragDeltaX = (dragDeltaX + dragAmount.x).coerceIn(-committedX, maxWidthPx - sz - committedX)
+                        dragDeltaY = (dragDeltaY + dragAmount.y).coerceIn(-committedY, maxHeightPx - sz - committedY)
                     }
                 )
             }
-            .clickable { onTap() }
             .alpha(position.alpha)
     ) {
-        // Selection highlight border
+        // Selection highlight border (5A: shows immediately on tap)
         if (isSelected && customContent == null) {
             Box(Modifier.matchParentSize().border(2.dp, Color(0xFF22C55E), RoundedCornerShape(8.dp)))
         }
-        // Render the actual button/component or custom content
         if (customContent != null) {
             customContent()
         } else {
             RenderEditorPreview(type, scale)
         }
-        // Small label underneath (skip for custom content — it has its own label)
-        if (customContent == null) {
-            Text(label, fontSize = 9.sp, color = Color.White.copy(0.8f),
+        // 5D: Fixed labels — centered with fixed font, auto-hide when element too small
+        if (customContent == null && elemSizePx > 60f) {
+            Text(label, fontSize = 10.sp, color = Color.White.copy(0.85f),
+                textAlign = TextAlign.Center, maxLines = 1,
                 modifier = Modifier.align(Alignment.BottomCenter).offset(y = 14.dp)
-                    .background(Color.Black.copy(0.6f), RoundedCornerShape(3.dp))
-                    .padding(horizontal = 3.dp, vertical = 1.dp))
+                    .background(Color.Black.copy(0.65f), RoundedCornerShape(4.dp))
+                    .padding(horizontal = 4.dp, vertical = 1.dp))
         }
     }
 }
