@@ -348,16 +348,20 @@ fun FreeformEditorScreen(
             }
         }
 
-        // Bottom panel for selected element properties (visible while editing, doesn't block layout view)
+        // Bottom/Top panel for selected element properties
+        // Flips position: if element is in lower half → show at top, else → show at bottom
         if (selectedElement != null && !showMenu) {
             val selType = FreeformElementType.fromKey(selectedElement.key)
             val selKey = selectedElement.key
+            val panelOnTop = selectedElement.y > 0.5f
             Surface(
-                modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth()
-                    .navigationBarsPadding(),
-                shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
-                color = Color(0xFF1A1A1A).copy(0.95f),
-                shadowElevation = 12.dp
+                modifier = Modifier
+                    .then(if (panelOnTop) Modifier.align(Alignment.TopCenter).statusBarsPadding()
+                          else Modifier.align(Alignment.BottomCenter).navigationBarsPadding()),
+                shape = if (panelOnTop) RoundedCornerShape(bottomStart = 16.dp, bottomEnd = 16.dp)
+                        else RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+                color = Color(0xFF1A1A1A).copy(0.75f),
+                shadowElevation = 0.dp
             ) {
                 Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
                     // Header: element name + close/remove
@@ -555,8 +559,8 @@ private fun BoxWithConstraintsScope.DraggableRealElement(
         } else {
             RenderEditorPreview(type, scale)
         }
-        // 5D: Fixed labels — centered with fixed font, auto-hide when element too small
-        if (customContent == null && elemSizePx > 60f) {
+        // 5D: Fixed labels — always visible, centered below element
+        if (customContent == null) {
             Text(label, fontSize = 10.sp, color = Color.White.copy(0.85f),
                 textAlign = TextAlign.Center, maxLines = 1,
                 modifier = Modifier.align(Alignment.BottomCenter).offset(y = 14.dp)
