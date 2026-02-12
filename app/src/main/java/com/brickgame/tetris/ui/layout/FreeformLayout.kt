@@ -7,6 +7,8 @@ import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
@@ -75,7 +77,7 @@ fun FreeformGameLayout(
                 // Board uses same base size as editor
                 val baseSize = elementBaseSize(type)
                 val bw = baseSize.first * scale
-                val bh = baseSize.second * scale
+                val bh = baseSize.second * elem.effectiveH
                 Box(
                     Modifier
                         .offset(x = maxW * elem.x - bw / 2, y = maxH * elem.y - bh / 2)
@@ -215,6 +217,7 @@ fun FreeformEditorScreen(
     val selectedElement = selectedKey?.let { elements[it] }
     var showMenu by remember { mutableStateOf(false) }
     var snapEnabled by remember { mutableStateOf(false) }
+    var showLabels by remember { mutableStateOf(true) }
     val snapGridDp = 16.dp
     val snapGridPx = with(density) { snapGridDp.toPx() }
 
@@ -242,7 +245,7 @@ fun FreeformEditorScreen(
                     // Board: outline + centered text handle (non-blocking)
                     val bs = elementBaseSize(type)
                     val bw = bs.first * scale
-                    val bh = bs.second * scale
+                    val bh = bs.second * elem.effectiveH
                     val bwPx = with(density) { bw.toPx() }
                     val bhPx = with(density) { bh.toPx() }
 
@@ -266,6 +269,7 @@ fun FreeformEditorScreen(
                         position = elem,
                         type = type,
                         scale = scale,
+                        showLabels = showLabels,
                         maxWidthPx = maxWidthPx,
                         maxHeightPx = maxHeightPx,
                         elemSizePx = handleSizePx,
@@ -302,6 +306,7 @@ fun FreeformEditorScreen(
                         position = elem,
                         type = type,
                         scale = scale,
+                        showLabels = showLabels,
                         maxWidthPx = maxWidthPx,
                         maxHeightPx = maxHeightPx,
                         elemSizePx = elemSizePx,
@@ -392,9 +397,15 @@ fun FreeformEditorScreen(
                     }
                     Spacer(Modifier.height(4.dp))
                     // Size and Opacity sliders
-                    SliderRow("Size", selectedElement.size, 0.4f, 2.0f) { newSize ->
+                    SliderRow(if (selKey == "BOARD") "Width" else "Size", selectedElement.size, 0.4f, 2.0f) { newSize ->
                         val fresh = elements[selKey] ?: return@SliderRow
                         onElementUpdated(fresh.copy(size = newSize))
+                    }
+                    if (selKey == "BOARD") {
+                        SliderRow("Height", selectedElement.effectiveH, 0.4f, 2.5f) { newH ->
+                            val fresh = elements[selKey] ?: return@SliderRow
+                            onElementUpdated(fresh.copy(sizeH = newH))
+                        }
                     }
                     SliderRow("Opacity", selectedElement.alpha, 0.05f, 1.0f) { newAlpha ->
                         val fresh = elements[selKey] ?: return@SliderRow
@@ -404,58 +415,55 @@ fun FreeformEditorScreen(
             }
         }
 
-        // Full popup menu overlay (Add elements + Reset — only when menu button pressed)
+        // Side panel drawer (slides from right)
         if (showMenu) {
-            Box(Modifier.fillMaxSize().background(Color.Black.copy(0.5f)).clickable { showMenu = false })
+            Box(Modifier.fillMaxSize().background(Color.Black.copy(0.4f)).clickable { showMenu = false })
             Surface(
-                modifier = Modifier.align(Alignment.Center).fillMaxWidth(0.88f),
-                shape = RoundedCornerShape(16.dp),
-                color = Color(0xFF1A1A1A),
-                shadowElevation = 16.dp
+                modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight().fillMaxWidth(0.55f),
+                shape = RoundedCornerShape(topStart = 16.dp, bottomStart = 16.dp),
+                color = Color(0xFF1A1A1A).copy(0.95f)
             ) {
-                Column(Modifier.padding(16.dp)) {
+                Column(Modifier.fillMaxSize().systemBarsPadding().padding(12.dp)) {
                     Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
-                        Text("Freeform Editor", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                        Text("Elements", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
                         Text("✕", color = Color(0xFF888888), fontSize = 20.sp,
                             modifier = Modifier.clickable { showMenu = false }.padding(4.dp))
                     }
-                    Spacer(Modifier.height(12.dp))
-
-                    // Add elements
-                    val existing = elements.keys
-                    val available = PlayerProfile.availableElements().filter { it.key !in existing }
-                    if (available.isNotEmpty()) {
-                        Text("Add Element", color = Color(0xFF888888), fontSize = 12.sp)
-                        Spacer(Modifier.height(6.dp))
-                        available.chunked(3).forEach { row ->
-                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                row.forEach { type ->
-                                    val c = when (type.category) {
-                                        ElementCategory.CONTROL -> Color(0xFF3B82F6)
-                                        ElementCategory.INFO -> Color(0xFFF59E0B)
-                                        ElementCategory.BOARD -> Color(0xFF8B5CF6)
-                                    }
-                                    Surface(
-                                        modifier = Modifier.weight(1f).clickable {
-                                            onElementAdded(FreeformElement(type.key, 0.5f, 0.5f))
-                                            selectedKey = type.key; showMenu = false
-                                        },
-                                        shape = RoundedCornerShape(8.dp), color = c.copy(0.15f)
-                                    ) {
-                                        Column(Modifier.padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                                            Text(type.displayName, color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
-                                            Text(type.description, color = Color.White.copy(0.4f), fontSize = 9.sp, textAlign = TextAlign.Center)
-                                        }
-                                    }
-                                }
-                                repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
-                            }
-                            Spacer(Modifier.height(6.dp))
-                        }
-                        Spacer(Modifier.height(8.dp))
+                    Spacer(Modifier.height(6.dp))
+                    // Labels toggle
+                    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(Color(0xFF222222))
+                        .clickable { showLabels = !showLabels }.padding(horizontal = 10.dp, vertical = 7.dp),
+                        Arrangement.SpaceBetween, Alignment.CenterVertically) {
+                        Text("Show Labels", color = Color.White, fontSize = 12.sp)
+                        Text(if (showLabels) "ON" else "OFF", color = if (showLabels) Color(0xFF22C55E) else Color(0xFF888888),
+                            fontSize = 11.sp, fontWeight = FontWeight.Bold)
                     }
+                    Spacer(Modifier.height(8.dp))
 
-                    // Actions (5E: Done button only on top bar)
+                    LazyColumn(Modifier.weight(1f)) {
+                        // LCD / Info section
+                        item { Text("LCD & Info", color = Color(0xFFF59E0B), fontSize = 12.sp, fontWeight = FontWeight.Bold); Spacer(Modifier.height(4.dp)) }
+                        val infoTypes = listOf(FreeformElementType.BOARD, FreeformElementType.SCORE, FreeformElementType.LEVEL,
+                            FreeformElementType.LINES, FreeformElementType.HOLD_PREVIEW, FreeformElementType.NEXT_PREVIEW)
+                        items(infoTypes.size) { i ->
+                            val t = infoTypes[i]; val el = elements[t.key]
+                            ElementToggleRow(t.displayName, el != null, el?.visible ?: false,
+                                onToggle = { el?.let { onElementUpdated(it.copy(visible = !it.visible)) } },
+                                onAdd = { onElementAdded(FreeformElement(t.key, 0.5f, 0.5f)); selectedKey = t.key },
+                                onRemove = { onElementRemoved(t.key); if (selectedKey == t.key) selectedKey = null })
+                        }
+                        // Buttons section
+                        item { Spacer(Modifier.height(8.dp)); Text("Buttons", color = Color(0xFF3B82F6), fontSize = 12.sp, fontWeight = FontWeight.Bold); Spacer(Modifier.height(4.dp)) }
+                        val ctrlTypes = FreeformElementType.entries.filter { it.category == ElementCategory.CONTROL }
+                        items(ctrlTypes.size) { i ->
+                            val t = ctrlTypes[i]; val el = elements[t.key]
+                            ElementToggleRow(t.displayName, el != null, el?.visible ?: false,
+                                onToggle = { el?.let { onElementUpdated(it.copy(visible = !it.visible)) } },
+                                onAdd = { onElementAdded(FreeformElement(t.key, 0.5f, 0.5f)); selectedKey = t.key },
+                                onRemove = { onElementRemoved(t.key); if (selectedKey == t.key) selectedKey = null })
+                        }
+                    }
+                    Spacer(Modifier.height(6.dp))
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
                         OutlinedButton(onClick = { selectedKey = null; onReset(); showMenu = false },
                             colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)) {
@@ -489,6 +497,7 @@ private fun BoxWithConstraintsScope.DraggableRealElement(
     onDragEnd: (Float, Float) -> Unit,
     snapEnabled: Boolean = false,
     snapGridPx: Float = 0f,
+    showLabels: Boolean = true,
     customContent: (@Composable () -> Unit)? = null
 ) {
     // Committed position (stored state)
@@ -559,8 +568,8 @@ private fun BoxWithConstraintsScope.DraggableRealElement(
         } else {
             RenderEditorPreview(type, scale)
         }
-        // 5D: Fixed labels — always visible, centered below element
-        if (customContent == null) {
+        // 5D: Labels — togglable
+        if (customContent == null && showLabels) {
             Text(label, fontSize = 10.sp, color = Color.White.copy(0.85f),
                 textAlign = TextAlign.Center, maxLines = 1,
                 modifier = Modifier.align(Alignment.BottomCenter).offset(y = 14.dp)
@@ -617,6 +626,26 @@ private fun PositionRow(label: String, valuePct: Int, onChange: (Int) -> Unit) {
                 Text("+", color = if (clamped < 100) Color(0xFF22C55E) else Color(0xFF555555),
                     fontSize = 18.sp, fontWeight = FontWeight.Bold)
             }
+        }
+    }
+}
+
+@Composable
+private fun ElementToggleRow(name: String, isPresent: Boolean, isVisible: Boolean,
+    onToggle: () -> Unit, onAdd: () -> Unit, onRemove: () -> Unit) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 2.dp).clip(RoundedCornerShape(6.dp))
+        .background(Color(0xFF252525)).padding(horizontal = 8.dp, vertical = 6.dp),
+        Arrangement.SpaceBetween, Alignment.CenterVertically) {
+        Text(name, color = if (isPresent && isVisible) Color.White else Color(0xFF666666),
+            fontSize = 12.sp, modifier = Modifier.weight(1f))
+        if (isPresent) {
+            Text(if (isVisible) "●" else "○", color = if (isVisible) Color(0xFF22C55E) else Color(0xFF555555),
+                fontSize = 16.sp, modifier = Modifier.clickable { onToggle() }.padding(horizontal = 6.dp))
+            Text("✕", color = Color(0xFFFF4444), fontSize = 12.sp, fontWeight = FontWeight.Bold,
+                modifier = Modifier.clickable { onRemove() }.padding(start = 2.dp))
+        } else {
+            Text("+ Add", color = Color(0xFF22C55E), fontSize = 11.sp, fontWeight = FontWeight.Bold,
+                modifier = Modifier.clickable { onAdd() }.padding(4.dp))
         }
     }
 }

@@ -60,9 +60,13 @@ data class FreeformElement(
     val x: Float,
     val y: Float,
     val size: Float = 1.0f,
+    val sizeH: Float = -1f, // -1 means use size for both; positive = independent height scale
     val alpha: Float = 1.0f,
     val visible: Boolean = true
-)
+) {
+    /** Effective height scale — uses sizeH if set, otherwise falls back to size */
+    val effectiveH: Float get() = if (sizeH < 0f) size else sizeH
+}
 
 enum class FreeformElementType(
     val key: String,
