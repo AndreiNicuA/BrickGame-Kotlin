@@ -410,7 +410,7 @@ class MainActivity : ComponentActivity() {
                                 levelEventsEnabled = levelEvents,
                                 buttonStyle = buttonStyle,
                                 controllerLayoutMode = controllerLayoutMode,
-                                controllerConnected = gamepad.isConnected,
+                                controllerConnected = GamepadController.getConnectedControllers().isNotEmpty(),
                                 onStartGame = if (is3D) vm::start3DGame else vm::startGame,
                                 onPause = vm::pauseGame, onResume = vm::resumeGame,
                                 onRotate = vm::rotate, onRotateCCW = vm::rotateCounterClockwise,
