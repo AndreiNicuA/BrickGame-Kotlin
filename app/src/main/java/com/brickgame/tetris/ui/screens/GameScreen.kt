@@ -63,6 +63,8 @@ fun GameScreen(
     buttonStyle: String = "ROUND",
     controllerLayoutMode: String = "normal",
     controllerConnected: Boolean = false,
+    timerExpired: Boolean = false,
+    remainingSeconds: Int = 0,
     onStartGame: () -> Unit, onPause: () -> Unit, onResume: () -> Unit,
     onRotate: () -> Unit, onRotateCCW: () -> Unit,
     onHardDrop: () -> Unit, onHold: () -> Unit,
@@ -161,6 +163,8 @@ fun GameScreen(
             }
         }
         ActionPopup(gameState.lastActionLabel, gameState.linesCleared)
+        // Timer expired — blocks all gameplay
+        if (timerExpired) TimerExpiredOverlay(onQuit)
     }
     } // end CompositionLocalProvider
 }
@@ -831,6 +835,21 @@ private fun FallingPiecesBackground(theme: com.brickgame.tetris.ui.theme.GameThe
             Spacer(Modifier.height(28.dp)); ActionButton("RESUME", onResume, width = 160.dp, height = 48.dp)
             Spacer(Modifier.height(12.dp)); ActionButton("SETTINGS", onSet, width = 160.dp, height = 42.dp, backgroundColor = LocalGameTheme.current.buttonSecondary)
             Spacer(Modifier.height(12.dp)); ActionButton("LEAVE", onQuit, width = 160.dp, height = 42.dp, backgroundColor = Color(0xFFB91C1C))
+        }
+    }
+}
+
+@Composable private fun TimerExpiredOverlay(onLeave: () -> Unit) {
+    Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.92f)), Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text("⏰", fontSize = 48.sp)
+            Spacer(Modifier.height(12.dp))
+            Text("TIME'S", fontSize = 36.sp, fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace, color = Color(0xFFF4D03F), letterSpacing = 4.sp)
+            Text("UP!", fontSize = 36.sp, fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace, color = Color(0xFFF4D03F), letterSpacing = 4.sp)
+            Spacer(Modifier.height(16.dp))
+            Text("Time to take a break!", fontSize = 15.sp, fontFamily = FontFamily.Monospace, color = Color.White.copy(alpha = 0.7f))
+            Spacer(Modifier.height(32.dp))
+            ActionButton("LEAVE", onLeave, width = 180.dp, height = 52.dp, backgroundColor = Color(0xFFB91C1C))
         }
     }
 }

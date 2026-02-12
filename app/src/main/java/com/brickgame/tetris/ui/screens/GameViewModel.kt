@@ -90,6 +90,14 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     val controllerLayout: StateFlow<String> = _controllerLayout.asStateFlow()
     private val _infinityTimer = MutableStateFlow(0)
     val infinityTimer: StateFlow<Int> = _infinityTimer.asStateFlow()
+    private val _infinityTimerEnabled = MutableStateFlow(false)
+    val infinityTimerEnabled: StateFlow<Boolean> = _infinityTimerEnabled.asStateFlow()
+    // Countdown state
+    private val _remainingSeconds = MutableStateFlow(0)
+    val remainingSeconds: StateFlow<Int> = _remainingSeconds.asStateFlow()
+    private val _timerExpired = MutableStateFlow(false)
+    val timerExpired: StateFlow<Boolean> = _timerExpired.asStateFlow()
+    private var countdownJob: Job? = null
     private val _dataLoaded = MutableStateFlow(false)
     val dataLoaded: StateFlow<Boolean> = _dataLoaded.asStateFlow()
     val playerName = playerRepo.playerName.stateIn(viewModelScope, SharingStarted.Eagerly, "Player")
@@ -167,6 +175,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch { settingsRepo.controllerLayout.collect { _controllerLayout.value = it } }
         viewModelScope.launch { settingsRepo.gameMode.collect { name -> _gameMode.value = GameMode.entries.find { it.name == name } ?: GameMode.MARATHON; game.setGameMode(_gameMode.value) } }
         viewModelScope.launch { settingsRepo.infinityTimer.collect { _infinityTimer.value = it } }
+        viewModelScope.launch { settingsRepo.infinityTimerEnabled.collect { _infinityTimerEnabled.value = it } }
         // Signal that data is loaded after critical settings have their first emission
         viewModelScope.launch {
             kotlinx.coroutines.flow.combine(
@@ -180,9 +189,14 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch { customLayoutRepo.customLayouts.collect { _customLayouts.value = it } }
     }
 
-    fun startGame() { game.setDifficulty(_difficulty.value); game.setGameMode(_gameMode.value); game.startGame(); handlingLineClear = false; startGameLoop() }
-    fun pauseGame() { game.pauseGame(); stopGameLoop() }
-    fun resumeGame() { game.resumeGame(); startGameLoop() }
+    fun startGame() {
+        game.setDifficulty(_difficulty.value); game.setGameMode(_gameMode.value); game.startGame(); handlingLineClear = false
+        _timerExpired.value = false
+        startGameLoop()
+        startCountdownIfNeeded()
+    }
+    fun pauseGame() { game.pauseGame(); stopGameLoop(); countdownJob?.cancel() }
+    fun resumeGame() { game.resumeGame(); startGameLoop(); startCountdownIfNeeded() }
     fun togglePause() { if (gameState.value.status == GameStatus.PLAYING) pauseGame() else if (gameState.value.status == GameStatus.PAUSED) resumeGame() }
 
     fun moveLeft() { if (game.moveLeft()) { soundManager.playMove(); vibrationManager.vibrateMove() } }
@@ -197,6 +211,30 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     fun startRightDAS() { stopDAS(); moveRight(); dasJob = viewModelScope.launch { delay(170); while (isActive) { moveRight(); delay(50) } } }
     fun startDownDAS() { stopDAS(); softDrop(); dasJob = viewModelScope.launch { delay(60); while (isActive) { softDrop(); delay(30) } } }
     fun stopDAS() { dasJob?.cancel(); dasJob = null }
+
+    private fun startCountdownIfNeeded() {
+        countdownJob?.cancel()
+        val mode = _gameMode.value
+        val timerEnabled = _infinityTimerEnabled.value
+        val timerSecs = _infinityTimer.value
+        if (mode != GameMode.INFINITY || !timerEnabled || timerSecs <= 0) {
+            _remainingSeconds.value = 0
+            return
+        }
+        // If remaining is 0 (fresh start), initialize from setting
+        if (_remainingSeconds.value <= 0) _remainingSeconds.value = timerSecs
+        countdownJob = viewModelScope.launch {
+            while (isActive && _remainingSeconds.value > 0 && gameState.value.status == GameStatus.PLAYING) {
+                delay(1000L)
+                _remainingSeconds.value = (_remainingSeconds.value - 1).coerceAtLeast(0)
+            }
+            if (_remainingSeconds.value <= 0 && gameState.value.status == GameStatus.PLAYING) {
+                _timerExpired.value = true
+                game.pauseGame()
+                stopGameLoop()
+            }
+        }
+    }
 
     private fun startGameLoop() {
         gravityJob?.cancel(); lockDelayJob?.cancel(); handlingLineClear = false
@@ -249,6 +287,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     fun setButtonStyle(v: String) { _buttonStyle.value = v; viewModelScope.launch { settingsRepo.setButtonStyle(v) } }
     fun setControllerLayout(v: String) { _controllerLayout.value = v; viewModelScope.launch { settingsRepo.setControllerLayout(v) } }
     fun setInfinityTimer(v: Int) { _infinityTimer.value = v; viewModelScope.launch { settingsRepo.setInfinityTimer(v) } }
+    fun setInfinityTimerEnabled(v: Boolean) { _infinityTimerEnabled.value = v; viewModelScope.launch { settingsRepo.setInfinityTimerEnabled(v) } }
     fun setAnimationStyle(s: AnimationStyle) { _animationStyle.value = s; viewModelScope.launch { settingsRepo.setAnimationStyle(s.name) } }
     fun setAnimationDuration(d: Float) { _animationDuration.value = d; viewModelScope.launch { settingsRepo.setAnimationDuration(d) } }
     fun setSoundEnabled(v: Boolean) { _soundEnabled.value = v; soundManager.setEnabled(v); viewModelScope.launch { settingsRepo.setSoundEnabled(v) } }

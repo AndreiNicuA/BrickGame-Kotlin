@@ -174,6 +174,9 @@ class MainActivity : ComponentActivity() {
             val buttonStyle by vm.buttonStyle.collectAsState()
             val controllerLayoutMode by vm.controllerLayout.collectAsState()
             val infinityTimer by vm.infinityTimer.collectAsState()
+            val infinityTimerEnabled by vm.infinityTimerEnabled.collectAsState()
+            val timerExpired by vm.timerExpired.collectAsState()
+            val remainingSeconds by vm.remainingSeconds.collectAsState()
 
             // Sync controller settings to gamepad handler
             LaunchedEffect(controllerEnabled, controllerDeadzone) {
@@ -378,7 +381,9 @@ class MainActivity : ComponentActivity() {
                             controllerLayoutMode = controllerLayoutMode,
                             onSetControllerLayout = vm::setControllerLayout,
                             infinityTimer = infinityTimer,
-                            onSetInfinityTimer = vm::setInfinityTimer
+                            onSetInfinityTimer = vm::setInfinityTimer,
+                            infinityTimerEnabled = infinityTimerEnabled,
+                            onSetInfinityTimerEnabled = vm::setInfinityTimerEnabled
                         )
                     }
 
@@ -411,6 +416,8 @@ class MainActivity : ComponentActivity() {
                                 buttonStyle = buttonStyle,
                                 controllerLayoutMode = controllerLayoutMode,
                                 controllerConnected = GamepadController.getConnectedControllers().isNotEmpty(),
+                                timerExpired = timerExpired,
+                                remainingSeconds = remainingSeconds,
                                 onStartGame = if (is3D) vm::start3DGame else vm::startGame,
                                 onPause = vm::pauseGame, onResume = vm::resumeGame,
                                 onRotate = vm::rotate, onRotateCCW = vm::rotateCounterClockwise,

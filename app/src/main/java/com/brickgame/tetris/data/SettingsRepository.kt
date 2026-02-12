@@ -48,6 +48,7 @@ class SettingsRepository(private val context: Context) {
         private val CONTROLLER_LAYOUT = stringPreferencesKey("controller_layout")
         private val GAME_MODE = stringPreferencesKey("game_mode")
         private val INFINITY_TIMER = intPreferencesKey("infinity_timer_minutes")
+        private val INFINITY_TIMER_ENABLED = booleanPreferencesKey("infinity_timer_enabled")
     }
     
     private fun <T> pref(key: Preferences.Key<T>, default: T): Flow<T> =
@@ -154,7 +155,10 @@ class SettingsRepository(private val context: Context) {
     val gameMode get() = pref(GAME_MODE, "MARATHON")
     suspend fun setGameMode(v: String) = set(GAME_MODE, v)
 
-    // Infinity timer in seconds (0 = disabled, max 36000 = 10h)
+    // Infinity timer in seconds (max 36000 = 10h)
     val infinityTimer get() = pref(INFINITY_TIMER, 0)
     suspend fun setInfinityTimer(v: Int) = set(INFINITY_TIMER, v.coerceIn(0, 36000))
+
+    val infinityTimerEnabled get() = pref(INFINITY_TIMER_ENABLED, false)
+    suspend fun setInfinityTimerEnabled(v: Boolean) = set(INFINITY_TIMER_ENABLED, v)
 }
