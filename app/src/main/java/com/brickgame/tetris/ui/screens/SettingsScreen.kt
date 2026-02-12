@@ -1,6 +1,7 @@
 package com.brickgame.tetris.ui.screens
 
 import androidx.compose.foundation.*
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -32,9 +33,16 @@ import com.brickgame.tetris.ui.layout.LayoutPreset
 import com.brickgame.tetris.ui.styles.AnimationStyle
 import com.brickgame.tetris.ui.theme.GameTheme
 import com.brickgame.tetris.ui.theme.GameThemes
+import com.brickgame.tetris.ui.theme.LocalIsDarkMode
 
-private val BG = Color(0xFF0D0D0D); private val CARD = Color(0xFF1A1A1A)
-private val ACC = Color(0xFFF4D03F); private val TX = Color(0xFFE8E8E8); private val DIM = Color(0xFF888888)
+// Adaptive colors — respond to light/dark mode via LocalIsDarkMode
+@Composable private fun bg() = if (LocalIsDarkMode.current) Color(0xFF0D0D0D) else Color(0xFFF5F5F5)
+@Composable private fun card() = if (LocalIsDarkMode.current) Color(0xFF1A1A1A) else Color(0xFFFFFFFF)
+@Composable private fun acc() = if (LocalIsDarkMode.current) Color(0xFFF4D03F) else Color(0xFFB8860B)
+@Composable private fun tx() = if (LocalIsDarkMode.current) Color(0xFFE8E8E8) else Color(0xFF1A1A1A)
+@Composable private fun dim() = if (LocalIsDarkMode.current) Color(0xFF888888) else Color(0xFF666666)
+@Composable private fun selBg() = if (LocalIsDarkMode.current) acc().copy(0.15f) else acc().copy(0.12f)
+@Composable private fun cardBorder() = if (LocalIsDarkMode.current) Color.Transparent else Color(0xFFE0E0E0)
 
 @Composable
 fun SettingsScreen(
@@ -81,7 +89,7 @@ fun SettingsScreen(
     onEditFreeform: () -> Unit = {},
     on3DMode: () -> Unit = {}
 ) {
-    Box(Modifier.fillMaxSize().background(BG).systemBarsPadding()) {
+    Box(Modifier.fillMaxSize().background(bg()).systemBarsPadding()) {
         when (page) {
             GameViewModel.SettingsPage.MAIN -> MainPage(onNavigate, onBack, on3DMode)
             GameViewModel.SettingsPage.GENERAL -> GeneralPage(appThemeMode, keepScreenOn, orientationLock, immersiveMode, frameRateTarget, batterySaver, highContrast, uiScale, onSetAppThemeMode, onSetKeepScreenOn, onSetOrientationLock, onSetImmersiveMode, onSetFrameRateTarget, onSetBatterySaver, onSetHighContrast, onSetUiScale) { onNavigate(GameViewModel.SettingsPage.MAIN) }
@@ -125,7 +133,7 @@ fun SettingsScreen(
         item { Header("General", onBack) }
         item { Lbl("App Theme Mode") }
         item { Card {
-            Text("Controls the app interface appearance (settings, menus, dialogs)", color = DIM, fontSize = 11.sp)
+            Text("Controls the app interface appearance (settings, menus, dialogs)", color = dim(), fontSize = 11.sp)
             Spacer(Modifier.height(8.dp))
             listOf("auto" to "Auto (System)", "dark" to "Dark Mode", "light" to "Light Mode").forEach { (id, label) ->
                 Sel(label, appThemeMode == id) { onThemeMode(id) }
@@ -135,15 +143,15 @@ fun SettingsScreen(
         item { Card {
             Toggle("Keep Screen On", keepScreenOn, onKeepScreen)
             Spacer(Modifier.height(4.dp))
-            Text("Prevents screen dimming during gameplay", color = DIM, fontSize = 11.sp)
+            Text("Prevents screen dimming during gameplay", color = dim(), fontSize = 11.sp)
         } }
         item { Card {
             Toggle("Immersive Mode", immersiveMode, onImmersive)
             Spacer(Modifier.height(4.dp))
-            Text("Hide status bar and navigation bar during gameplay", color = DIM, fontSize = 11.sp)
+            Text("Hide status bar and navigation bar during gameplay", color = dim(), fontSize = 11.sp)
         } }
         item { Card {
-            Text("Orientation Lock", color = TX, fontSize = 14.sp)
+            Text("Orientation Lock", color = tx(), fontSize = 14.sp)
             Spacer(Modifier.height(6.dp))
             listOf("auto" to "Auto", "portrait" to "Portrait Only", "landscape" to "Landscape Only").forEach { (id, label) ->
                 Sel(label, orientationLock == id) { onOrientation(id) }
@@ -151,38 +159,38 @@ fun SettingsScreen(
         } }
         item { Lbl("Performance") }
         item { Card {
-            Text("Frame Rate", color = TX, fontSize = 14.sp)
+            Text("Frame Rate", color = tx(), fontSize = 14.sp)
             Spacer(Modifier.height(6.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                listOf(30, 60, 120).forEach { fps ->
+                listOf(0, 30, 60, 120).forEach { fps ->
                     val sel = frameRateTarget == fps
                     Box(Modifier.weight(1f).clip(RoundedCornerShape(8.dp))
-                        .background(if (sel) ACC.copy(0.2f) else CARD)
-                        .then(if (sel) Modifier.border(1.dp, ACC, RoundedCornerShape(8.dp)) else Modifier)
+                        .background(if (sel) acc().copy(0.2f) else card())
+                        .then(if (sel) Modifier.border(1.dp, acc(), RoundedCornerShape(8.dp)) else Modifier)
                         .clickable { onFrameRate(fps) }.padding(vertical = 10.dp),
                         contentAlignment = Alignment.Center) {
-                        Text("$fps FPS", color = if (sel) ACC else DIM, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        Text(if (fps == 0) "Auto" else "$fps FPS", color = if (sel) acc() else dim(), fontSize = 13.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }
             Spacer(Modifier.height(4.dp))
-            Text("Higher frame rates use more battery", color = DIM, fontSize = 11.sp)
+            Text("Higher frame rates use more battery", color = dim(), fontSize = 11.sp)
         } }
         item { Card {
             Toggle("Battery Saver", batterySaver, onBatterySaver)
             Spacer(Modifier.height(4.dp))
-            Text("Reduces animations and lowers frame rate to save battery", color = DIM, fontSize = 11.sp)
+            Text("Reduces animations and lowers frame rate to save battery", color = dim(), fontSize = 11.sp)
         } }
         item { Lbl("Accessibility") }
         item { Card {
             Toggle("High Contrast", highContrast, onHighContrast)
             Spacer(Modifier.height(4.dp))
-            Text("Increases colour contrast for better visibility", color = DIM, fontSize = 11.sp)
+            Text("Increases colour contrast for better visibility", color = dim(), fontSize = 11.sp)
         } }
         item { Card {
-            Text("UI Scale", color = TX, fontSize = 14.sp)
+            Text("UI Scale", color = tx(), fontSize = 14.sp)
             Slider(uiScale, onUiScale, valueRange = 0.8f..1.5f, colors = sliderColors())
-            Text("${(uiScale * 100).toInt()}%", color = DIM, fontSize = 12.sp)
+            Text("${(uiScale * 100).toInt()}%", color = dim(), fontSize = 12.sp)
         } }
         item { Spacer(Modifier.height(16.dp)) }
     }
@@ -203,8 +211,8 @@ fun SettingsScreen(
     }
     LazyColumn(Modifier.fillMaxSize().padding(20.dp)) {
         item { Header("Profile", onBack); Spacer(Modifier.height(16.dp)) }
-        item { Card { Text("Player Name", color = DIM, fontSize = 12.sp); Spacer(Modifier.height(4.dp)); EditField(editName) { editName = it; onName(it) } } }
-        item { Card { Text("High Score", color = DIM, fontSize = 12.sp); Text(hs.toString(), color = ACC, fontSize = 24.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace) } }
+        item { Card { Text("Player Name", color = dim(), fontSize = 12.sp); Spacer(Modifier.height(4.dp)); EditField(editName) { editName = it; onName(it) } } }
+        item { Card { Text("High Score", color = dim(), fontSize = 12.sp); Text(hs.toString(), color = acc(), fontSize = 24.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace) } }
         item { Lbl("Score History") }
         item {
             Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), Arrangement.spacedBy(6.dp)) {
@@ -213,19 +221,19 @@ fun SettingsScreen(
                 }
             }
         }
-        if (sorted.isEmpty()) { item { Card { Text("No games yet", color = DIM) } } }
+        if (sorted.isEmpty()) { item { Card { Text("No games yet", color = dim()) } } }
         items(sorted.size.coerceAtMost(50)) { i ->
             val e = sorted[i]
             Card {
                 Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
-                    Text("${i+1}.", color = DIM, modifier = Modifier.width(28.dp))
+                    Text("${i+1}.", color = dim(), modifier = Modifier.width(28.dp))
                     Column(Modifier.weight(1f)) {
-                        Text(e.playerName, color = TX, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                        Text("${e.score}", color = ACC, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                        Text(e.playerName, color = tx(), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        Text("${e.score}", color = acc(), fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                     }
                     Column(horizontalAlignment = Alignment.End) {
-                        Text("Lv${e.level}", color = DIM, fontSize = 12.sp)
-                        Text("${e.lines}L", color = DIM, fontSize = 12.sp)
+                        Text("Lv${e.level}", color = dim(), fontSize = 12.sp)
+                        Text("${e.lines}L", color = dim(), fontSize = 12.sp)
                     }
                 }
             }
@@ -240,7 +248,7 @@ fun SettingsScreen(
         item { Header("Theme", onBack); Spacer(Modifier.height(16.dp)) }
         item { Card {
             Toggle("Multicolor Pieces", multiColor, onMultiColor)
-            Text("Each piece type has its own color (Cyan, Yellow, Purple, Green, Red, Blue, Orange)", color = DIM, fontSize = 11.sp)
+            Text("Each piece type has its own color (Cyan, Yellow, Purple, Green, Red, Blue, Orange)", color = dim(), fontSize = 11.sp)
             if (multiColor) {
                 Spacer(Modifier.height(6.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -251,19 +259,19 @@ fun SettingsScreen(
             }
         } }
         item { Card {
-            Text("Piece Material", color = TX, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+            Text("Piece Material", color = tx(), fontWeight = FontWeight.Bold, fontSize = 14.sp)
             Spacer(Modifier.height(4.dp))
-            Text("Visual texture for 3D and 2D pieces", color = DIM, fontSize = 11.sp)
+            Text("Visual texture for 3D and 2D pieces", color = dim(), fontSize = 11.sp)
             Spacer(Modifier.height(8.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 listOf("CLASSIC" to "Classic", "STONE" to "Stone", "GRANITE" to "Granite", "GLASS" to "Marble", "CRYSTAL" to "Diamond").forEach { (id, label) ->
                     val sel = pieceMaterial == id
                     Box(Modifier.weight(1f).clip(RoundedCornerShape(8.dp))
-                        .background(if (sel) ACC.copy(0.2f) else CARD)
-                        .then(if (sel) Modifier.border(1.dp, ACC, RoundedCornerShape(8.dp)) else Modifier)
+                        .background(if (sel) acc().copy(0.2f) else card())
+                        .then(if (sel) Modifier.border(1.dp, acc(), RoundedCornerShape(8.dp)) else Modifier)
                         .clickable { onMaterial(id) }.padding(vertical = 8.dp),
                         contentAlignment = Alignment.Center) {
-                        Text(label, color = if (sel) ACC else DIM, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                        Text(label, color = if (sel) acc() else dim(), fontSize = 10.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -274,11 +282,11 @@ fun SettingsScreen(
             item { Lbl("Custom") }
             items(custom.size) { i ->
                 val t = custom[i]; val sel = t.id == current.id
-                Row(Modifier.fillMaxWidth().padding(vertical = 4.dp).clip(RoundedCornerShape(12.dp)).background(if (sel) ACC.copy(0.15f) else CARD).clickable { onSet(t) }.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    ThemeSwatches(t); Spacer(Modifier.width(12.dp)); Text(t.name, color = TX, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                    Text("EDIT", color = ACC, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { onEdit(t) }.padding(8.dp))
+                Row(Modifier.fillMaxWidth().padding(vertical = 4.dp).clip(RoundedCornerShape(12.dp)).background(if (sel) selBg() else card()).clickable { onSet(t) }.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    ThemeSwatches(t); Spacer(Modifier.width(12.dp)); Text(t.name, color = tx(), fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                    Text("EDIT", color = acc(), fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { onEdit(t) }.padding(8.dp))
                     Text("✕", color = Color(0xFFFF4444), fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { onDelete(t.id) }.padding(8.dp))
-                    if (sel) Text("✓", color = ACC, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                    if (sel) Text("✓", color = acc(), fontSize = 18.sp, fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -287,17 +295,17 @@ fun SettingsScreen(
 }
 
 @Composable private fun ThemeRow(t: GameTheme, sel: Boolean, onClick: () -> Unit) {
-    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp).clip(RoundedCornerShape(12.dp)).background(if (sel) ACC.copy(0.15f) else CARD).clickable { onClick() }.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-        ThemeSwatches(t); Spacer(Modifier.width(12.dp)); Text(t.name, color = TX, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-        if (sel) Text("✓", color = ACC, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp).clip(RoundedCornerShape(12.dp)).background(if (sel) selBg() else card()).clickable { onClick() }.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+        ThemeSwatches(t); Spacer(Modifier.width(12.dp)); Text(t.name, color = tx(), fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+        if (sel) Text("✓", color = acc(), fontSize = 18.sp, fontWeight = FontWeight.Bold)
     }
 }
 
 @Composable private fun ThemeSwatches(t: GameTheme) {
     Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-        Box(Modifier.size(22.dp).clip(CircleShape).background(t.screenBackground).border(1.dp, DIM.copy(0.3f), CircleShape))
-        Box(Modifier.size(22.dp).clip(CircleShape).background(t.pixelOn).border(1.dp, DIM.copy(0.3f), CircleShape))
-        Box(Modifier.size(22.dp).clip(CircleShape).background(t.accentColor).border(1.dp, DIM.copy(0.3f), CircleShape))
+        Box(Modifier.size(22.dp).clip(CircleShape).background(t.screenBackground).border(1.dp, dim().copy(0.3f), CircleShape))
+        Box(Modifier.size(22.dp).clip(CircleShape).background(t.pixelOn).border(1.dp, dim().copy(0.3f), CircleShape))
+        Box(Modifier.size(22.dp).clip(CircleShape).background(t.accentColor).border(1.dp, dim().copy(0.3f), CircleShape))
     }
 }
 
@@ -312,12 +320,12 @@ fun SettingsScreen(
         items(LayoutPreset.portraitPresets().size) { i -> val x = LayoutPreset.portraitPresets()[i]; Sel(x.displayName, x == p && active == null) { onClear(); onP(x) } }
         if (p == LayoutPreset.PORTRAIT_FREEFORM && active == null) {
             item {
-                Column(Modifier.fillMaxWidth().padding(vertical = 4.dp).clip(RoundedCornerShape(8.dp)).background(ACC.copy(0.08f)).padding(12.dp)) {
-                    Text("Board fills the screen. Drag controls and info to any position.", color = DIM, fontSize = 12.sp)
+                Column(Modifier.fillMaxWidth().padding(vertical = 4.dp).clip(RoundedCornerShape(8.dp)).background(acc().copy(0.08f)).padding(12.dp)) {
+                    Text("Board fills the screen. Drag controls and info to any position.", color = dim(), fontSize = 12.sp)
                     Spacer(Modifier.height(8.dp))
-                    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(ACC.copy(0.15f)).clickable { onEditFreeform() }.padding(12.dp),
+                    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(acc().copy(0.15f)).clickable { onEditFreeform() }.padding(12.dp),
                         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
-                        Text("✎ Edit Element Positions", color = ACC, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                        Text("✎ Edit Element Positions", color = acc(), fontSize = 14.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -342,7 +350,7 @@ fun SettingsScreen(
     LazyColumn(Modifier.fillMaxSize().padding(20.dp)) {
         item { Header("Experience", onBack) }
         item { Lbl("Animation") }; items(AnimationStyle.entries.size) { i -> val x = AnimationStyle.entries[i]; Sel("${x.displayName} — ${x.description}", x == aS) { onAS(x) } }
-        item { Card { Text("Speed", color = TX, fontSize = 14.sp); Slider(aD, onAD, valueRange = 0.1f..2f, colors = sliderColors()); Text("${(aD*1000).toInt()}ms", color = DIM, fontSize = 12.sp) } }
+        item { Card { Text("Speed", color = tx(), fontSize = 14.sp); Slider(aD, onAD, valueRange = 0.1f..2f, colors = sliderColors()); Text("${(aD*1000).toInt()}ms", color = dim(), fontSize = 12.sp) } }
         item { Lbl("Sound & Vibration") }; item { Card { Toggle("Sound", s, onS); Spacer(Modifier.height(8.dp)); Toggle("Vibration", v, onV) } }
     }
 }
@@ -356,30 +364,30 @@ fun SettingsScreen(
         item { Card {
             Toggle("Controller Enabled", enabled, onEnable)
             Spacer(Modifier.height(4.dp))
-            Text("Use a connected gamepad or Bluetooth controller", color = DIM, fontSize = 11.sp)
+            Text("Use a connected gamepad or Bluetooth controller", color = dim(), fontSize = 11.sp)
         } }
         item { Card {
-            Text("Stick Deadzone", color = TX, fontSize = 14.sp)
+            Text("Stick Deadzone", color = tx(), fontSize = 14.sp)
             Slider(deadzone, onDeadzone, valueRange = 0.05f..0.8f, colors = sliderColors())
-            Text("${(deadzone * 100).toInt()}%", color = DIM, fontSize = 12.sp)
-            Text("Higher = less sensitive to small stick movements", color = DIM, fontSize = 11.sp)
+            Text("${(deadzone * 100).toInt()}%", color = dim(), fontSize = 12.sp)
+            Text("Higher = less sensitive to small stick movements", color = dim(), fontSize = 11.sp)
         } }
         item { Lbl("Connected Controllers") }
         if (controllers.isEmpty()) {
-            item { Card { Text("No controllers detected", color = DIM, fontSize = 14.sp); Spacer(Modifier.height(4.dp)); Text("Connect a Bluetooth or USB gamepad to get started", color = DIM, fontSize = 11.sp) } }
+            item { Card { Text("No controllers detected", color = dim(), fontSize = 14.sp); Spacer(Modifier.height(4.dp)); Text("Connect a Bluetooth or USB gamepad to get started", color = dim(), fontSize = 11.sp) } }
         } else {
             items(controllers.size) { i ->
                 val c = controllers[i]
                 Card {
-                    Text(c.name, color = TX, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                    Text("Vendor: ${c.vendorId}  Product: ${c.productId}", color = DIM, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+                    Text(c.name, color = tx(), fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    Text("Vendor: ${c.vendorId}  Product: ${c.productId}", color = dim(), fontSize = 11.sp, fontFamily = FontFamily.Monospace)
                     Text("✓ Connected", color = Color(0xFF22C55E), fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 }
             }
         }
         item { Lbl("Button Mapping") }
         item { Card {
-            Text("Default Layout", color = TX, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+            Text("Default Layout", color = tx(), fontSize = 14.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(8.dp))
             MapRow("D-Pad / L-Stick", "Move piece")
             MapRow("A / Cross", "Rotate (Spin)")
@@ -398,8 +406,8 @@ fun SettingsScreen(
 
 @Composable private fun MapRow(button: String, action: String) {
     Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), Arrangement.SpaceBetween) {
-        Text(button, color = ACC, fontSize = 12.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, modifier = Modifier.width(120.dp))
-        Text(action, color = TX, fontSize = 12.sp)
+        Text(button, color = acc(), fontSize = 12.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, modifier = Modifier.width(120.dp))
+        Text(action, color = tx(), fontSize = 12.sp)
     }
 }
 
@@ -407,36 +415,36 @@ fun SettingsScreen(
 @Composable private fun AboutPage(onBack: () -> Unit) {
     LazyColumn(Modifier.fillMaxSize().padding(20.dp)) {
         item { Header("About", onBack); Spacer(Modifier.height(24.dp)) }
-        item { Card { Text("BRICK GAME", color = ACC, fontSize = 24.sp, fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace); Text("Kotlin Edition", color = TX, fontSize = 14.sp) } }
+        item { Card { Text("BRICK GAME", color = acc(), fontSize = 24.sp, fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace); Text("Kotlin Edition", color = tx(), fontSize = 14.sp) } }
         item { Card { Info("Version", "3.6.0"); Info("Build", "16"); Info("Platform", "Android 8.0+"); Info("Engine", "Compose + OpenGL ES") } }
-        item { Card { Text("Developer", color = DIM, fontSize = 12.sp); Text("Andrei Anton", color = TX, fontSize = 16.sp, fontWeight = FontWeight.Bold) } }
+        item { Card { Text("Developer", color = dim(), fontSize = 12.sp); Text("Andrei Anton", color = tx(), fontSize = 16.sp, fontWeight = FontWeight.Bold) } }
         item { Lbl("Features") }
         item { Card {
-            Text("3D Tetris mode with OpenGL ES rendering", color = TX, fontSize = 12.sp)
-            Text("Free camera rotation, zoom, and pan", color = TX, fontSize = 12.sp)
-            Text("Realistic piece materials (Stone, Granite, Marble, Diamond)", color = TX, fontSize = 12.sp)
-            Text("6 layouts (Classic, Modern, Fullscreen, Compact, Freeform, 3D)", color = TX, fontSize = 12.sp)
-            Text("Freeform editor: drag, resize, snap grid, transparency", color = TX, fontSize = 12.sp)
-            Text("5 built-in themes + custom theme editor", color = TX, fontSize = 12.sp)
-            Text("General app settings with Auto/Dark/Light mode", color = TX, fontSize = 12.sp)
-            Text("Hold piece, Next queue (1-3), Ghost piece", color = TX, fontSize = 12.sp)
-            Text("D-Pad and Swipe control styles + Gamepad support", color = TX, fontSize = 12.sp)
-            Text("Score history with sort and filter", color = TX, fontSize = 12.sp)
-            Text("SRS rotation + wall kicks", color = TX, fontSize = 12.sp)
+            Text("3D Tetris mode with OpenGL ES rendering", color = tx(), fontSize = 12.sp)
+            Text("Free camera rotation, zoom, and pan", color = tx(), fontSize = 12.sp)
+            Text("Realistic piece materials (Stone, Granite, Marble, Diamond)", color = tx(), fontSize = 12.sp)
+            Text("6 layouts (Classic, Modern, Fullscreen, Compact, Freeform, 3D)", color = tx(), fontSize = 12.sp)
+            Text("Freeform editor: drag, resize, snap grid, transparency", color = tx(), fontSize = 12.sp)
+            Text("5 built-in themes + custom theme editor", color = tx(), fontSize = 12.sp)
+            Text("General app settings with Auto/Dark/Light mode", color = tx(), fontSize = 12.sp)
+            Text("Hold piece, Next queue (1-3), Ghost piece", color = tx(), fontSize = 12.sp)
+            Text("D-Pad and Swipe control styles + Gamepad support", color = tx(), fontSize = 12.sp)
+            Text("Score history with sort and filter", color = tx(), fontSize = 12.sp)
+            Text("SRS rotation + wall kicks", color = tx(), fontSize = 12.sp)
         } }
         item { Spacer(Modifier.height(20.dp)) }
     }
 }
 
 // ===== REUSABLE =====
-@Composable private fun Header(t: String, onBack: () -> Unit) { Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { Text("←", color = ACC, fontSize = 24.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { onBack() }.padding(8.dp)); Spacer(Modifier.width(12.dp)); Text(t, color = TX, fontSize = 22.sp, fontWeight = FontWeight.Bold) } }
-@Composable private fun MenuItem(t: String, sub: String, onClick: () -> Unit) { Row(Modifier.fillMaxWidth().padding(vertical = 4.dp).clip(RoundedCornerShape(12.dp)).background(CARD).clickable { onClick() }.padding(16.dp), verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text(t, color = TX, fontWeight = FontWeight.Bold, fontSize = 16.sp); Text(sub, color = DIM, fontSize = 12.sp) }; Text("›", color = DIM, fontSize = 20.sp) } }
-@Composable private fun Card(content: @Composable ColumnScope.() -> Unit) { Column(Modifier.fillMaxWidth().padding(vertical = 4.dp).clip(RoundedCornerShape(12.dp)).background(CARD).padding(16.dp), content = content) }
-@Composable private fun Lbl(t: String) { Text(t, color = ACC, fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)) }
-@Composable private fun Sel(text: String, sel: Boolean, onClick: () -> Unit) { Row(Modifier.fillMaxWidth().padding(vertical = 2.dp).clip(RoundedCornerShape(8.dp)).background(if (sel) ACC.copy(0.15f) else CARD).clickable { onClick() }.padding(12.dp), verticalAlignment = Alignment.CenterVertically) { Text(text, color = TX, fontSize = 14.sp, modifier = Modifier.weight(1f)); if (sel) Text("✓", color = ACC, fontWeight = FontWeight.Bold) } }
-@Composable private fun Toggle(label: String, v: Boolean, on: (Boolean) -> Unit) { Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) { Text(label, color = TX, fontSize = 14.sp); Switch(v, on, colors = SwitchDefaults.colors(checkedTrackColor = ACC)) } }
-@Composable private fun Info(l: String, v: String) { Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), Arrangement.SpaceBetween) { Text(l, color = DIM, fontSize = 14.sp); Text(v, color = TX, fontSize = 14.sp, fontFamily = FontFamily.Monospace) } }
-@Composable private fun ActionCard(text: String, onClick: () -> Unit) { Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(ACC.copy(0.15f)).clickable { onClick() }.padding(16.dp), Arrangement.Center) { Text(text, color = ACC, fontWeight = FontWeight.Bold, fontSize = 16.sp) } }
-@Composable private fun Chip(text: String, sel: Boolean, onClick: () -> Unit) { Box(Modifier.clip(RoundedCornerShape(8.dp)).background(if (sel) ACC.copy(0.2f) else CARD).border(1.dp, if (sel) ACC else DIM.copy(0.3f), RoundedCornerShape(8.dp)).clickable { onClick() }.padding(horizontal = 14.dp, vertical = 8.dp)) { Text(text, color = if (sel) ACC else TX, fontSize = 13.sp, fontWeight = if (sel) FontWeight.Bold else FontWeight.Normal) } }
-@Composable private fun EditField(value: String, onChange: (String) -> Unit) { BasicTextField(value, onChange, textStyle = TextStyle(color = TX, fontSize = 18.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace), cursorBrush = SolidColor(ACC), singleLine = true, modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(Color(0xFF252525)).padding(12.dp)) }
-@Composable private fun sliderColors() = SliderDefaults.colors(thumbColor = ACC, activeTrackColor = ACC, inactiveTrackColor = ACC.copy(0.15f))
+@Composable private fun Header(t: String, onBack: () -> Unit) { val a = acc(); val t2 = tx(); Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { Text("←", color = a, fontSize = 24.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { onBack() }.padding(8.dp)); Spacer(Modifier.width(12.dp)); Text(t, color = t2, fontSize = 22.sp, fontWeight = FontWeight.Bold) } }
+@Composable private fun MenuItem(t: String, sub: String, onClick: () -> Unit) { val c = card(); val t2 = tx(); val d = dim(); Row(Modifier.fillMaxWidth().padding(vertical = 4.dp).clip(RoundedCornerShape(12.dp)).background(c).clickable { onClick() }.padding(16.dp), verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text(t, color = t2, fontWeight = FontWeight.Bold, fontSize = 16.sp); Text(sub, color = d, fontSize = 12.sp) }; Text("›", color = d, fontSize = 20.sp) } }
+@Composable private fun Card(content: @Composable ColumnScope.() -> Unit) { val c = card(); val bd = cardBorder(); Column(Modifier.fillMaxWidth().padding(vertical = 4.dp).clip(RoundedCornerShape(12.dp)).background(c).then(if (bd != Color.Transparent) Modifier.border(1.dp, bd, RoundedCornerShape(12.dp)) else Modifier).padding(16.dp), content = content) }
+@Composable private fun Lbl(t: String) { Text(t, color = acc(), fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)) }
+@Composable private fun Sel(text: String, sel: Boolean, onClick: () -> Unit) { val a = acc(); val c = card(); val t2 = tx(); val sb = selBg(); Row(Modifier.fillMaxWidth().padding(vertical = 2.dp).clip(RoundedCornerShape(8.dp)).background(if (sel) sb else c).clickable { onClick() }.padding(12.dp), verticalAlignment = Alignment.CenterVertically) { Text(text, color = t2, fontSize = 14.sp, modifier = Modifier.weight(1f)); if (sel) Text("✓", color = a, fontWeight = FontWeight.Bold) } }
+@Composable private fun Toggle(label: String, v: Boolean, on: (Boolean) -> Unit) { val a = acc(); val t2 = tx(); Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) { Text(label, color = t2, fontSize = 14.sp); Switch(v, on, colors = SwitchDefaults.colors(checkedTrackColor = a)) } }
+@Composable private fun Info(l: String, v: String) { val d = dim(); val t2 = tx(); Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), Arrangement.SpaceBetween) { Text(l, color = d, fontSize = 14.sp); Text(v, color = t2, fontSize = 14.sp, fontFamily = FontFamily.Monospace) } }
+@Composable private fun ActionCard(text: String, onClick: () -> Unit) { val a = acc(); Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(a.copy(0.15f)).clickable { onClick() }.padding(16.dp), Arrangement.Center) { Text(text, color = a, fontWeight = FontWeight.Bold, fontSize = 16.sp) } }
+@Composable private fun Chip(text: String, sel: Boolean, onClick: () -> Unit) { val a = acc(); val c = card(); val d = dim(); val t2 = tx(); Box(Modifier.clip(RoundedCornerShape(8.dp)).background(if (sel) a.copy(0.2f) else c).border(1.dp, if (sel) a else d.copy(0.3f), RoundedCornerShape(8.dp)).clickable { onClick() }.padding(horizontal = 14.dp, vertical = 8.dp)) { Text(text, color = if (sel) a else t2, fontSize = 13.sp, fontWeight = if (sel) FontWeight.Bold else FontWeight.Normal) } }
+@Composable private fun EditField(value: String, onChange: (String) -> Unit) { val a = acc(); val t2 = tx(); val fb = if (LocalIsDarkMode.current) Color(0xFF252525) else Color(0xFFF0F0F0); BasicTextField(value, onChange, textStyle = TextStyle(color = t2, fontSize = 18.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace), cursorBrush = SolidColor(a), singleLine = true, modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(fb).padding(12.dp)) }
+@Composable private fun sliderColors() = SliderDefaults.colors(thumbColor = acc(), activeTrackColor = acc(), inactiveTrackColor = acc().copy(0.15f))

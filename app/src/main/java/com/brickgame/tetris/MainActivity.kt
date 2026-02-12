@@ -224,7 +224,7 @@ class MainActivity : ComponentActivity() {
             val activeLayout = if (isLandscape) landscapeLayout else portraitLayout
             val is3D = activeLayout == LayoutPreset.PORTRAIT_3D
 
-            BrickGameTheme(gameTheme = theme) {
+            BrickGameTheme(gameTheme = theme, appThemeMode = appThemeMode) {
                 Box(Modifier.fillMaxSize()) {
                     // Layer 1: Splash — rotating cube + falling pieces (visible during loading)
                     if (splashAlpha > 0.01f) {

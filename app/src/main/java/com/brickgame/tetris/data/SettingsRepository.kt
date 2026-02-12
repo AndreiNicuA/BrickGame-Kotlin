@@ -120,7 +120,7 @@ class SettingsRepository(private val context: Context) {
     val immersiveMode get() = pref(IMMERSIVE_MODE, false)
     suspend fun setImmersiveMode(v: Boolean) = set(IMMERSIVE_MODE, v)
 
-    val frameRateTarget get() = pref(FRAME_RATE_TARGET, 60)
+    val frameRateTarget get() = pref(FRAME_RATE_TARGET, 0)
     suspend fun setFrameRateTarget(v: Int) = set(FRAME_RATE_TARGET, v)
 
     val batterySaver get() = pref(BATTERY_SAVER, false)
