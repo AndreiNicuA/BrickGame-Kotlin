@@ -796,23 +796,32 @@ private fun ActionPopup(label: String, linesCleared: Int) {
 
     if (showPopup && popupText.isNotEmpty()) {
         // Escalating style based on lines cleared
-        data class PopupStyle(val bg: Color, val text: Color, val fontSize: Int, val shake: Boolean, val glow: Boolean)
-        val style = remember(popupText, popupLines) {
-            when {
-                popupText.contains("Tetris", ignoreCase = true) && popupText.contains("B2B", ignoreCase = true) ->
-                    PopupStyle(Color(0xFFFF2200).copy(0.7f), Color.White, 42, shake = true, glow = true)
-                popupText.contains("Tetris", ignoreCase = true) ->
-                    PopupStyle(Color(0xFFFF4400).copy(0.65f), Color.White, 40, shake = true, glow = true)
-                popupText.contains("T-Spin", ignoreCase = true) ->
-                    PopupStyle(Color(0xFF9B59B6).copy(0.6f), Color.White, 34, shake = true, glow = false)
-                popupText.contains("B2B", ignoreCase = true) ->
-                    PopupStyle(Color(0xFFFF8800).copy(0.6f), Color.White, 34, shake = false, glow = true)
-                popupLines >= 3 ->
-                    PopupStyle(Color(0xFFFF6600).copy(0.55f), Color.White, 34, shake = true, glow = false)
-                popupLines == 2 ->
-                    PopupStyle(Color(0xFFF4D03F).copy(0.55f), Color.Black, 30, shake = false, glow = false)
-                else -> // Combo or other
-                    PopupStyle(Color(0xFF3498DB).copy(0.5f), Color.White, 28, shake = false, glow = false)
+        val popupBg: Color
+        val popupTextColor: Color
+        val popupFontSize: Int
+        val popupShake: Boolean
+        val popupGlow: Boolean
+        when {
+            popupText.contains("Tetris", ignoreCase = true) && popupText.contains("B2B", ignoreCase = true) -> {
+                popupBg = Color(0xFFFF2200).copy(0.7f); popupTextColor = Color.White; popupFontSize = 42; popupShake = true; popupGlow = true
+            }
+            popupText.contains("Tetris", ignoreCase = true) -> {
+                popupBg = Color(0xFFFF4400).copy(0.65f); popupTextColor = Color.White; popupFontSize = 40; popupShake = true; popupGlow = true
+            }
+            popupText.contains("T-Spin", ignoreCase = true) -> {
+                popupBg = Color(0xFF9B59B6).copy(0.6f); popupTextColor = Color.White; popupFontSize = 34; popupShake = true; popupGlow = false
+            }
+            popupText.contains("B2B", ignoreCase = true) -> {
+                popupBg = Color(0xFFFF8800).copy(0.6f); popupTextColor = Color.White; popupFontSize = 34; popupShake = false; popupGlow = true
+            }
+            popupLines >= 3 -> {
+                popupBg = Color(0xFFFF6600).copy(0.55f); popupTextColor = Color.White; popupFontSize = 34; popupShake = true; popupGlow = false
+            }
+            popupLines == 2 -> {
+                popupBg = Color(0xFFF4D03F).copy(0.55f); popupTextColor = Color.Black; popupFontSize = 30; popupShake = false; popupGlow = false
+            }
+            else -> {
+                popupBg = Color(0xFF3498DB).copy(0.5f); popupTextColor = Color.White; popupFontSize = 28; popupShake = false; popupGlow = false
             }
         }
 
@@ -827,7 +836,7 @@ private fun ActionPopup(label: String, linesCleared: Int) {
             animRotation.snapTo(0f)
 
             when {
-                popupLines >= 4 || style.shake -> {
+                popupLines >= 4 || popupShake -> {
                     // EPIC: Slam in with shake
                     launch { animAlpha.animateTo(1f, tween(60)) }
                     animScale.animateTo(1.3f, tween(80, easing = LinearOutSlowInEasing))
@@ -870,13 +879,13 @@ private fun ActionPopup(label: String, linesCleared: Int) {
 
         Box(Modifier.fillMaxSize(), Alignment.Center) {
             // Optional glow effect behind text for Tetris-level clears
-            if (style.glow && animAlpha.value > 0.1f) {
+            if (popupGlow && animAlpha.value > 0.1f) {
                 Box(
                     Modifier
                         .scale(animScale.value * 1.4f)
                         .alpha(animAlpha.value * 0.3f)
                         .clip(RoundedCornerShape(28.dp))
-                        .background(style.bg.copy(alpha = 0.4f))
+                        .background(popupBg.copy(alpha = 0.4f))
                         .padding(horizontal = 52.dp, vertical = 28.dp)
                 ) {}
             }
@@ -887,12 +896,12 @@ private fun ActionPopup(label: String, linesCleared: Int) {
                     .alpha(animAlpha.value)
                     .graphicsLayer { rotationZ = animRotation.value }
                     .clip(RoundedCornerShape(20.dp))
-                    .background(style.bg)
+                    .background(popupBg)
                     .padding(horizontal = 36.dp, vertical = 16.dp),
-                fontSize = style.fontSize.sp,
+                fontSize = popupFontSize.sp,
                 fontWeight = FontWeight.ExtraBold,
                 fontFamily = FontFamily.Monospace,
-                color = style.text,
+                color = popupTextColor,
                 textAlign = TextAlign.Center,
                 letterSpacing = 2.sp
             )
