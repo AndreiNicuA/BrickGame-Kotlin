@@ -145,44 +145,50 @@ fun GameBoard(
     }
 }
 
-/** Draw a single cell in authentic Brick Game LCD style — beveled 3D squares */
+/** Draw a single cell in authentic Brick Game LCD style.
+ *  Real hardware has 3 concentric layers:
+ *  ON cell:  thick black border → light/cream gap → solid black center square
+ *  OFF cell: faint border → light gap → subtle darker center indent */
 private fun DrawScope.drawLCDCell(offset: Offset, cellSize: Size, isOn: Boolean, offColor: Color, onColor: Color) {
     val w = cellSize.width; val h = cellSize.height
-    val bevel = w * 0.12f  // bevel thickness
+    // LCD background color (light sage green)
+    val lcdLight = Color(0xFFC2CCAE)
 
     if (isOn) {
-        // Filled cell: dark outer square with lighter inner square
-        // Outer square — dark
-        drawRect(onColor, offset, cellSize)
-        // Top-left highlight bevel
-        drawRect(onColor.copy(alpha = 0.4f), offset, Size(w, bevel))
-        drawRect(onColor.copy(alpha = 0.4f), offset, Size(bevel, h))
-        // Bottom-right shadow bevel
-        drawRect(Color.Black.copy(alpha = 0.3f), Offset(offset.x, offset.y + h - bevel), Size(w, bevel))
-        drawRect(Color.Black.copy(alpha = 0.3f), Offset(offset.x + w - bevel, offset.y), Size(bevel, h))
-        // Inner lighter square
-        val inset = w * 0.22f
-        val innerOff = Offset(offset.x + inset, offset.y + inset)
-        val innerSize = Size(w - inset * 2, h - inset * 2)
-        drawRect(Color.White.copy(alpha = 0.15f), innerOff, innerSize)
+        // Layer 1: Black outer border (fills entire cell)
+        drawRect(Color(0xFF2A2E22), offset, cellSize)
+        // Layer 2: Light gap ring — inset from border
+        val borderW = w * 0.14f
+        val gapOff = Offset(offset.x + borderW, offset.y + borderW)
+        val gapSize = Size(w - borderW * 2, h - borderW * 2)
+        drawRect(lcdLight, gapOff, gapSize)
+        // Layer 3: Black center square
+        val centerInset = w * 0.28f
+        val centerOff = Offset(offset.x + centerInset, offset.y + centerInset)
+        val centerSize = Size(w - centerInset * 2, h - centerInset * 2)
+        drawRect(Color(0xFF2A2E22), centerOff, centerSize)
     } else {
-        // Empty cell: subtle recessed indent
-        // Background
+        // Layer 1: Faint outer border
         drawRect(offColor, offset, cellSize)
-        // Outer edge — slightly darker (recessed shadow)
-        drawRect(offColor.copy(alpha = 0.7f), offset, Size(w, 1f))
-        drawRect(offColor.copy(alpha = 0.7f), offset, Size(1f, h))
-        // Inner highlight edge (bottom-right light = recessed effect)
-        drawRect(Color.White.copy(alpha = 0.08f), Offset(offset.x + w - 1f, offset.y), Size(1f, h))
-        drawRect(Color.White.copy(alpha = 0.08f), Offset(offset.x, offset.y + h - 1f), Size(w, 1f))
-        // Center tiny indent square
-        val inset = w * 0.25f
-        val innerOff = Offset(offset.x + inset, offset.y + inset)
-        val innerSize = Size(w - inset * 2, h - inset * 2)
-        drawRect(offColor.darken(0.06f), innerOff, innerSize)
-        // Inner square shadow edges
-        drawRect(Color.Black.copy(alpha = 0.04f), innerOff, Size(innerSize.width, 1f))
-        drawRect(Color.Black.copy(alpha = 0.04f), innerOff, Size(1f, innerSize.height))
+        val borderW = w * 0.08f
+        // Top and left edges — slightly darker (shadow)
+        drawRect(Color.Black.copy(alpha = 0.07f), offset, Size(w, borderW))
+        drawRect(Color.Black.copy(alpha = 0.07f), offset, Size(borderW, h))
+        // Bottom and right edges — slightly lighter (highlight)
+        drawRect(Color.White.copy(alpha = 0.06f), Offset(offset.x, offset.y + h - borderW), Size(w, borderW))
+        drawRect(Color.White.copy(alpha = 0.06f), Offset(offset.x + w - borderW, offset.y), Size(borderW, h))
+        // Layer 2: Light gap (background shows through)
+        val gapOff = Offset(offset.x + borderW, offset.y + borderW)
+        val gapSize = Size(w - borderW * 2, h - borderW * 2)
+        drawRect(offColor.lighten(0.03f), gapOff, gapSize)
+        // Layer 3: Subtle center indent
+        val centerInset = w * 0.28f
+        val centerOff = Offset(offset.x + centerInset, offset.y + centerInset)
+        val centerSize = Size(w - centerInset * 2, h - centerInset * 2)
+        drawRect(offColor.darken(0.04f), centerOff, centerSize)
+        // Inner indent shadow edges
+        drawRect(Color.Black.copy(alpha = 0.04f), centerOff, Size(centerSize.width, 1f))
+        drawRect(Color.Black.copy(alpha = 0.04f), centerOff, Size(1f, centerSize.height))
     }
 }
 
@@ -191,6 +197,14 @@ private fun Color.darken(f: Float) = Color(
     (red * (1 - f)).coerceIn(0f, 1f),
     (green * (1 - f)).coerceIn(0f, 1f),
     (blue * (1 - f)).coerceIn(0f, 1f),
+    alpha
+)
+
+/** Lighten a color by a factor */
+private fun Color.lighten(f: Float) = Color(
+    (red + (1f - red) * f).coerceIn(0f, 1f),
+    (green + (1f - green) * f).coerceIn(0f, 1f),
+    (blue + (1f - blue) * f).coerceIn(0f, 1f),
     alpha
 )
 

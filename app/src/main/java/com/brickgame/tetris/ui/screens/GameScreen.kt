@@ -248,68 +248,73 @@ fun GameScreen(
     onDP: () -> Unit, onDR: () -> Unit, onPause: () -> Unit, onSet: () -> Unit, onStart: () -> Unit,
     boardDimAlpha: Float = 1f, nextCount: Int = 3
 ) {
-    // Authentic LCD colors matching real Brick Game hardware
-    val lcdBg = Color(0xFFB8C4A0)       // olive-green LCD background
-    val lcdDark = Color(0xFF3A4530)      // dark LCD pixel color
-    val lcdGhost = Color(0xFFA4B094)     // faded "ghost segment" color
-    val lcdLabel = Color(0xFF505A42)     // label text color
-    val bezelColor = Color(0xFF9AA088)   // inner bezel
+    // Authentic LCD colors — lighter sage green matching real hardware
+    val lcdBg = Color(0xFFC8D0B4)       // lighter sage LCD background
+    val lcdDark = Color(0xFF2A2E22)      // very dark LCD pixel color
+    val lcdGhost = Color(0xFFB0B8A0)     // faded "ghost segment" color
+    val lcdLabel = Color(0xFF3A4030)     // bold label text
+    val bezelColor = Color(0xFFB0B89C)   // inner bezel
 
     Column(Modifier.fillMaxSize().padding(6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        // Device frame — thick olive bezel like real hardware
+        // Device frame — olive bezel like real hardware
         Row(Modifier.fillMaxWidth().weight(1f).clip(RoundedCornerShape(8.dp)).background(lcdBg)
             .border(3.dp, bezelColor, RoundedCornerShape(8.dp)).padding(4.dp)) {
 
-            // Board — classic LCD cell style
+            // Board — classic LCD 3-layer cell style
             Box(Modifier.weight(1f).fillMaxHeight()) {
                 GameBoard(gs.board, Modifier.fillMaxSize().alpha(boardDimAlpha),
                     gs.currentPiece, gs.ghostY, ghost, gs.clearedLineRows, anim, ad,
                     multiColor = false, classicLCD = true)
             }
 
-            // Vertical separator line — thick dark line like the real hardware
-            Box(Modifier.fillMaxHeight().width(2.dp).background(lcdDark.copy(0.5f)))
+            // Vertical separator line
+            Box(Modifier.fillMaxHeight().width(2.dp).background(lcdDark.copy(0.4f)))
 
-            // Right info panel — SCORE > LEVELS > SPEED > NEXT
+            // Right info panel — labels LEFT-aligned, numbers RIGHT-aligned
             Column(
-                Modifier.width(80.dp).fillMaxHeight().padding(start = 6.dp, top = 8.dp, bottom = 8.dp, end = 2.dp),
-                verticalArrangement = Arrangement.SpaceBetween,
-                horizontalAlignment = Alignment.End
+                Modifier.width(82.dp).fillMaxHeight().padding(start = 8.dp, top = 8.dp, bottom = 8.dp, end = 4.dp),
+                verticalArrangement = Arrangement.SpaceBetween
             ) {
-                // SCORE — with ghost segment digits
-                Column(horizontalAlignment = Alignment.End) {
-                    Text("SCORE", fontSize = 11.sp, color = lcdLabel, fontWeight = FontWeight.ExtraBold,
+                // SCORE
+                Column {
+                    Text("SCORE", fontSize = 12.sp, color = lcdLabel, fontWeight = FontWeight.ExtraBold,
                         fontFamily = FontFamily.Monospace, letterSpacing = 1.sp)
                     Spacer(Modifier.height(2.dp))
-                    LCDNumber(gs.score, 6, lcdDark, lcdGhost, 15.sp)
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                        LCDNumber(gs.score, 6, lcdDark, lcdGhost, 14.sp)
+                    }
                 }
 
-                // LEVELS — with ghost segments
-                Column(horizontalAlignment = Alignment.End) {
-                    Text("LEVELS", fontSize = 11.sp, color = lcdLabel, fontWeight = FontWeight.ExtraBold,
+                // LEVELS
+                Column {
+                    Text("LEVELS", fontSize = 12.sp, color = lcdLabel, fontWeight = FontWeight.ExtraBold,
                         fontFamily = FontFamily.Monospace, letterSpacing = 1.sp)
                     Spacer(Modifier.height(2.dp))
-                    LCDNumber(gs.level, 6, lcdDark, lcdGhost, 15.sp)
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                        LCDNumber(gs.level, 6, lcdDark, lcdGhost, 14.sp)
+                    }
                 }
 
                 // SPEED
-                Column(horizontalAlignment = Alignment.End) {
-                    Text("SPEED", fontSize = 11.sp, color = lcdLabel, fontWeight = FontWeight.ExtraBold,
+                Column {
+                    Text("SPEED", fontSize = 12.sp, color = lcdLabel, fontWeight = FontWeight.ExtraBold,
                         fontFamily = FontFamily.Monospace, letterSpacing = 1.sp)
-                    Spacer(Modifier.height(4.dp))
+                    Spacer(Modifier.height(2.dp))
                     val speed = gs.level.coerceIn(1, 20)
-                    Text("$speed", fontSize = 24.sp, fontWeight = FontWeight.ExtraBold,
-                        fontFamily = FontFamily.Monospace, color = lcdDark)
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                        Text("$speed", fontSize = 26.sp, fontWeight = FontWeight.ExtraBold,
+                            fontFamily = FontFamily.Monospace, color = lcdDark)
+                    }
                 }
 
-                // NEXT — single piece preview with LCD cells
-                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
-                    Text("NEXT", fontSize = 11.sp, color = lcdLabel, fontWeight = FontWeight.ExtraBold,
+                // NEXT — piece preview with 3-layer LCD cells
+                Column {
+                    Text("NEXT", fontSize = 12.sp, color = lcdLabel, fontWeight = FontWeight.ExtraBold,
                         fontFamily = FontFamily.Monospace, letterSpacing = 1.sp)
                     Spacer(Modifier.height(4.dp))
-                    Box(Modifier.size(52.dp).background(lcdBg)) {
+                    Box(Modifier.fillMaxWidth().height(52.dp).background(lcdBg)) {
                         gs.nextPieces.firstOrNull()?.let { p ->
-                            LCDPiecePreview(p.shape, lcdDark, lcdGhost)
+                            LCDPiecePreview(p.shape, lcdDark, lcdBg)
                         }
                     }
                 }
@@ -838,7 +843,11 @@ fun GameScreen(
 }
 
 /** LCD piece preview — draws piece with classic beveled cell style */
-@Composable private fun LCDPiecePreview(shape: List<List<Int>>, onColor: Color, offColor: Color) {
+/** LCD piece preview — draws piece with same 3-layer cell style as the board:
+ *  ON: black border → light gap → black center
+ *  OFF: subtle border → light gap → faint indent */
+@Composable private fun LCDPiecePreview(shape: List<List<Int>>, onColor: Color, bgColor: Color) {
+    val lcdLight = Color(0xFFC2CCAE)
     Canvas(Modifier.fillMaxSize()) {
         val rows = shape.size; val cols = shape.maxOfOrNull { it.size } ?: 0
         if (rows == 0 || cols == 0) return@Canvas
@@ -846,19 +855,27 @@ fun GameScreen(
         val ox = (size.width - cellSz * cols) / 2f; val oy = (size.height - cellSz * rows) / 2f
         val gap = cellSz * 0.06f
         for (r in shape.indices) for (c in shape[r].indices) {
-            val offset = Offset(ox + c * cellSz + gap, oy + r * cellSz + gap)
+            val off = Offset(ox + c * cellSz + gap, oy + r * cellSz + gap)
             val cs = Size(cellSz - gap * 2, cellSz - gap * 2)
-            val isOn = shape[r][c] > 0
-            // Draw LCD-style beveled cell
             val w = cs.width; val h = cs.height
+            val isOn = shape[r][c] > 0
             if (isOn) {
-                drawRect(onColor, offset, cs)
-                val inset = w * 0.22f
-                drawRect(Color.White.copy(0.15f), Offset(offset.x + inset, offset.y + inset), Size(w - inset * 2, h - inset * 2))
+                // Layer 1: Black outer border
+                drawRect(onColor, off, cs)
+                // Layer 2: Light gap
+                val borderW = w * 0.14f
+                drawRect(lcdLight, Offset(off.x + borderW, off.y + borderW), Size(w - borderW * 2, h - borderW * 2))
+                // Layer 3: Black center
+                val centerInset = w * 0.28f
+                drawRect(onColor, Offset(off.x + centerInset, off.y + centerInset), Size(w - centerInset * 2, h - centerInset * 2))
             } else {
-                drawRect(offColor, offset, cs)
-                val inset = w * 0.25f
-                drawRect(offColor.copy(alpha = 0.85f), Offset(offset.x + inset, offset.y + inset), Size(w - inset * 2, h - inset * 2))
+                // Faint empty cell
+                drawRect(bgColor, off, cs)
+                val borderW = w * 0.08f
+                drawRect(Color.Black.copy(0.05f), off, Size(w, borderW))
+                drawRect(Color.Black.copy(0.05f), off, Size(borderW, h))
+                val centerInset = w * 0.28f
+                drawRect(bgColor.copy(alpha = 0.9f), Offset(off.x + centerInset, off.y + centerInset), Size(w - centerInset * 2, h - centerInset * 2))
             }
         }
     }
