@@ -88,7 +88,16 @@ fun SettingsScreen(
     onDeleteLayout: (String) -> Unit,
     onEditFreeform: () -> Unit = {},
     on3DMode: () -> Unit = {},
-    onClearHistory: () -> Unit = {}
+    onClearHistory: () -> Unit = {},
+    // New features
+    levelEventsEnabled: Boolean = true,
+    onSetLevelEventsEnabled: (Boolean) -> Unit = {},
+    buttonStyle: String = "ROUND",
+    onSetButtonStyle: (String) -> Unit = {},
+    controllerLayoutMode: String = "auto",
+    onSetControllerLayout: (String) -> Unit = {},
+    infinityTimer: Int = 0,
+    onSetInfinityTimer: (Int) -> Unit = {}
 ) {
     Box(Modifier.fillMaxSize().background(bg()).systemBarsPadding()) {
         when (page) {
@@ -97,11 +106,11 @@ fun SettingsScreen(
             GameViewModel.SettingsPage.PROFILE -> ProfilePage(playerName, highScore, scoreHistory, onSetPlayerName, onClearHistory) { onNavigate(GameViewModel.SettingsPage.MAIN) }
             GameViewModel.SettingsPage.THEME -> ThemePage(currentTheme, customThemes, multiColorEnabled, pieceMaterial, onSetTheme, onSetMultiColorEnabled, onSetPieceMaterial, onNewTheme, onEditTheme, onDeleteTheme) { onNavigate(GameViewModel.SettingsPage.MAIN) }
             GameViewModel.SettingsPage.THEME_EDITOR -> if (editingTheme != null) ThemeEditorScreen(editingTheme, onUpdateEditingTheme, onSaveTheme) { onNavigate(GameViewModel.SettingsPage.THEME) }
-            GameViewModel.SettingsPage.LAYOUT -> LayoutPage(portraitLayout, landscapeLayout, dpadStyle, customLayouts, activeCustomLayout, onSetPortraitLayout, onSetLandscapeLayout, onSetDPadStyle, onNewLayout, onEditLayout, onSelectCustomLayout, onClearCustomLayout, onDeleteLayout, onEditFreeform = { onEditFreeform() }) { onNavigate(GameViewModel.SettingsPage.MAIN) }
+            GameViewModel.SettingsPage.LAYOUT -> LayoutPage(portraitLayout, landscapeLayout, dpadStyle, buttonStyle, customLayouts, activeCustomLayout, onSetPortraitLayout, onSetLandscapeLayout, onSetDPadStyle, onSetButtonStyle, onNewLayout, onEditLayout, onSelectCustomLayout, onClearCustomLayout, onDeleteLayout, onEditFreeform = { onEditFreeform() }) { onNavigate(GameViewModel.SettingsPage.MAIN) }
             GameViewModel.SettingsPage.LAYOUT_EDITOR -> if (editingLayout != null) LayoutEditorScreen(editingLayout, currentTheme, portraitLayout, dpadStyle, onUpdateEditingLayout, onSaveLayout) { onNavigate(GameViewModel.SettingsPage.LAYOUT) }
-            GameViewModel.SettingsPage.GAMEPLAY -> GameplayPage(difficulty, gameMode, ghostEnabled, onSetDifficulty, onSetGameMode, onSetGhostEnabled) { onNavigate(GameViewModel.SettingsPage.MAIN) }
+            GameViewModel.SettingsPage.GAMEPLAY -> GameplayPage(difficulty, gameMode, ghostEnabled, levelEventsEnabled, infinityTimer, onSetDifficulty, onSetGameMode, onSetGhostEnabled, onSetLevelEventsEnabled, onSetInfinityTimer) { onNavigate(GameViewModel.SettingsPage.MAIN) }
             GameViewModel.SettingsPage.EXPERIENCE -> ExperiencePage(animationStyle, animationDuration, soundEnabled, vibrationEnabled, onSetAnimationStyle, onSetAnimationDuration, onSetSoundEnabled, onSetVibrationEnabled) { onNavigate(GameViewModel.SettingsPage.MAIN) }
-            GameViewModel.SettingsPage.CONTROLLER -> ControllerPage(controllerEnabled, controllerDeadzone, onSetControllerEnabled, onSetControllerDeadzone) { onNavigate(GameViewModel.SettingsPage.MAIN) }
+            GameViewModel.SettingsPage.CONTROLLER -> ControllerPage(controllerEnabled, controllerDeadzone, controllerLayoutMode, onSetControllerEnabled, onSetControllerDeadzone, onSetControllerLayout) { onNavigate(GameViewModel.SettingsPage.MAIN) }
             GameViewModel.SettingsPage.ABOUT -> AboutPage { onNavigate(GameViewModel.SettingsPage.MAIN) }
             GameViewModel.SettingsPage.HOW_TO_PLAY -> HowToPlayPage { onNavigate(GameViewModel.SettingsPage.MAIN) }
         }
@@ -335,7 +344,7 @@ fun SettingsScreen(
 }
 
 // ===== LAYOUT =====
-@Composable private fun LayoutPage(p: LayoutPreset, l: LayoutPreset, d: DPadStyle, custom: List<CustomLayoutData>, active: CustomLayoutData?,
+@Composable private fun LayoutPage(p: LayoutPreset, l: LayoutPreset, d: DPadStyle, buttonStyle: String, custom: List<CustomLayoutData>, active: CustomLayoutData?,
                                     onP: (LayoutPreset) -> Unit, onL: (LayoutPreset) -> Unit, onD: (DPadStyle) -> Unit,
                                     onNew: () -> Unit, onEdit: (CustomLayoutData) -> Unit, onSelect: (CustomLayoutData) -> Unit, onClear: () -> Unit, onDelete: (String) -> Unit,
                                     onEditFreeform: () -> Unit = {}, onBack: () -> Unit) {
@@ -361,12 +370,30 @@ fun SettingsScreen(
 }
 
 // ===== GAMEPLAY =====
-@Composable private fun GameplayPage(diff: Difficulty, mode: GameMode, ghost: Boolean, onD: (Difficulty) -> Unit, onM: (GameMode) -> Unit, onG: (Boolean) -> Unit, onBack: () -> Unit) {
+@Composable private fun GameplayPage(diff: Difficulty, mode: GameMode, ghost: Boolean, levelEvents: Boolean, infinityTimer: Int, onD: (Difficulty) -> Unit, onM: (GameMode) -> Unit, onG: (Boolean) -> Unit, onLE: (Boolean) -> Unit, onIT: (Int) -> Unit, onBack: () -> Unit) {
     LazyColumn(Modifier.fillMaxSize().padding(20.dp)) {
         item { Header("Gameplay", onBack) }
         item { Lbl("Difficulty") }; items(Difficulty.entries.size) { i -> val d = Difficulty.entries[i]; Sel("${d.displayName} — ${d.description}", d == diff) { onD(d) } }
         item { Lbl("Game Mode") }; items(GameMode.entries.size) { i -> val m = GameMode.entries[i]; Sel("${m.displayName} — ${m.description}", m == mode) { onM(m) } }
-        item { Lbl("Options") }; item { Card { Toggle("Ghost Piece", ghost, onG) } }
+        if (mode == GameMode.INFINITY) {
+            item { Card {
+                Text("Play Timer", color = tx(), fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                Text("Set a reminder to take a break (0 = no timer)", color = dim(), fontSize = 11.sp)
+                Spacer(Modifier.height(6.dp))
+                Row(Modifier.fillMaxWidth(), Arrangement.spacedBy(6.dp)) {
+                    listOf(0 to "Off", 30 to "30m", 60 to "1h", 120 to "2h", 300 to "5h", 600 to "10h").forEach { (mins, label) ->
+                        Chip(label, infinityTimer == mins) { onIT(mins) }
+                    }
+                }
+            } }
+        }
+        item { Lbl("Options") }
+        item { Card { Toggle("Ghost Piece", ghost, onG) } }
+        item { Card {
+            Toggle("Level Events", levelEvents, onLE)
+            Spacer(Modifier.height(4.dp))
+            Text("Progressive gameplay changes at each level milestone (Marathon only). Ghost fades, previews reduce, hold locks.", color = dim(), fontSize = 11.sp)
+        } }
     }
 }
 
@@ -381,7 +408,7 @@ fun SettingsScreen(
 }
 
 // ===== CONTROLLER =====
-@Composable private fun ControllerPage(enabled: Boolean, deadzone: Float, onEnable: (Boolean) -> Unit, onDeadzone: (Float) -> Unit, onBack: () -> Unit) {
+@Composable private fun ControllerPage(enabled: Boolean, deadzone: Float, controllerLayout: String, onEnable: (Boolean) -> Unit, onDeadzone: (Float) -> Unit, onLayout: (String) -> Unit, onBack: () -> Unit) {
     val controllers = remember { com.brickgame.tetris.input.GamepadController.getConnectedControllers() }
     LazyColumn(Modifier.fillMaxSize().padding(20.dp)) {
         item { Header("Controller", onBack) }
@@ -396,6 +423,14 @@ fun SettingsScreen(
             Slider(deadzone, onDeadzone, valueRange = 0.05f..0.8f, colors = sliderColors())
             Text("${(deadzone * 100).toInt()}%", color = dim(), fontSize = 12.sp)
             Text("Higher = less sensitive to small stick movements", color = dim(), fontSize = 11.sp)
+        } }
+        item { Lbl("Controller Layout") }
+        item { Card {
+            Text("When a gamepad is connected, the screen layout adjusts:", color = dim(), fontSize = 11.sp)
+            Spacer(Modifier.height(8.dp))
+            listOf("auto" to "Auto — full-screen board when gamepad detected", "minimal" to "Minimal — always use full-screen board", "normal" to "Normal — keep selected layout with gamepad").forEach { (id, label) ->
+                Sel(label, controllerLayout == id) { onLayout(id) }
+            }
         } }
         item { Lbl("Connected Controllers") }
         if (controllers.isEmpty()) {

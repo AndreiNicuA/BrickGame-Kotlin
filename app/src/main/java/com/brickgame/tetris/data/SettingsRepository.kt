@@ -42,6 +42,12 @@ class SettingsRepository(private val context: Context) {
         private val BATTERY_SAVER = booleanPreferencesKey("battery_saver")
         private val HIGH_CONTRAST = booleanPreferencesKey("high_contrast")
         private val UI_SCALE = floatPreferencesKey("ui_scale")
+        // New features
+        private val LEVEL_EVENTS = booleanPreferencesKey("level_events_enabled")
+        private val BUTTON_STYLE = stringPreferencesKey("button_style")
+        private val CONTROLLER_LAYOUT = stringPreferencesKey("controller_layout")
+        private val GAME_MODE = stringPreferencesKey("game_mode")
+        private val INFINITY_TIMER = intPreferencesKey("infinity_timer_minutes")
     }
     
     private fun <T> pref(key: Preferences.Key<T>, default: T): Flow<T> =
@@ -131,4 +137,24 @@ class SettingsRepository(private val context: Context) {
 
     val uiScale get() = pref(UI_SCALE, 1.0f)
     suspend fun setUiScale(v: Float) = set(UI_SCALE, v.coerceIn(0.8f, 1.5f))
+
+    // Level events
+    val levelEventsEnabled get() = pref(LEVEL_EVENTS, true)
+    suspend fun setLevelEventsEnabled(v: Boolean) = set(LEVEL_EVENTS, v)
+
+    // Button style (Freeform)
+    val buttonStyle get() = pref(BUTTON_STYLE, "ROUND")
+    suspend fun setButtonStyle(v: String) = set(BUTTON_STYLE, v)
+
+    // Controller layout mode
+    val controllerLayout get() = pref(CONTROLLER_LAYOUT, "auto")
+    suspend fun setControllerLayout(v: String) = set(CONTROLLER_LAYOUT, v)
+
+    // Game mode persistence
+    val gameMode get() = pref(GAME_MODE, "MARATHON")
+    suspend fun setGameMode(v: String) = set(GAME_MODE, v)
+
+    // Infinity timer (0 = disabled)
+    val infinityTimer get() = pref(INFINITY_TIMER, 0)
+    suspend fun setInfinityTimer(v: Int) = set(INFINITY_TIMER, v.coerceIn(0, 600))
 }

@@ -561,30 +561,36 @@ private fun SideMenu(
 // ======================================================================
 // THEME EDITOR (unchanged from previous)
 // ======================================================================
-private data class ThemeColorTarget(val label: String, val getColor: (GameTheme) -> Color, val setColor: (GameTheme, Color) -> GameTheme)
+private data class ThemeColorTarget(val label: String, val group: String, val getColor: (GameTheme) -> Color, val setColor: (GameTheme, Color) -> GameTheme)
 private val themeTargets = listOf(
-    ThemeColorTarget("Background", { it.backgroundColor }, { t, c -> t.copy(backgroundColor = c) }),
-    ThemeColorTarget("Device Frame", { it.deviceColor }, { t, c -> t.copy(deviceColor = c) }),
-    ThemeColorTarget("Screen / LCD", { it.screenBackground }, { t, c -> t.copy(screenBackground = c) }),
-    ThemeColorTarget("Blocks (ON)", { it.pixelOn }, { t, c -> t.copy(pixelOn = c) }),
-    ThemeColorTarget("Empty Cells", { it.pixelOff }, { t, c -> t.copy(pixelOff = c) }),
-    ThemeColorTarget("Text Primary", { it.textPrimary }, { t, c -> t.copy(textPrimary = c) }),
-    ThemeColorTarget("Text Secondary", { it.textSecondary }, { t, c -> t.copy(textSecondary = c) }),
-    ThemeColorTarget("Button Color", { it.buttonPrimary }, { t, c -> t.copy(buttonPrimary = c, buttonPrimaryPressed = c.copy(alpha = 0.7f)) }),
-    ThemeColorTarget("Button Text", { it.buttonSecondary }, { t, c -> t.copy(buttonSecondary = c, buttonSecondaryPressed = c.copy(alpha = 0.7f)) }),
-    ThemeColorTarget("Accent / Score", { it.accentColor }, { t, c -> t.copy(accentColor = c) })
+    ThemeColorTarget("Background", "Background", { it.backgroundColor }, { t, c -> t.copy(backgroundColor = c) }),
+    ThemeColorTarget("Device Frame", "Background", { it.deviceColor }, { t, c -> t.copy(deviceColor = c) }),
+    ThemeColorTarget("Screen / LCD", "Background", { it.screenBackground }, { t, c -> t.copy(screenBackground = c) }),
+    ThemeColorTarget("Blocks (ON)", "Board", { it.pixelOn }, { t, c -> t.copy(pixelOn = c) }),
+    ThemeColorTarget("Empty Cells", "Board", { it.pixelOff }, { t, c -> t.copy(pixelOff = c) }),
+    ThemeColorTarget("Text Primary", "Text", { it.textPrimary }, { t, c -> t.copy(textPrimary = c) }),
+    ThemeColorTarget("Text Secondary", "Text", { it.textSecondary }, { t, c -> t.copy(textSecondary = c) }),
+    ThemeColorTarget("Accent / Score", "Text", { it.accentColor }, { t, c -> t.copy(accentColor = c) }),
+    ThemeColorTarget("Button Color", "Buttons", { it.buttonPrimary }, { t, c -> t.copy(buttonPrimary = c, buttonPrimaryPressed = c.copy(alpha = 0.7f)) }),
+    ThemeColorTarget("Button Text", "Buttons", { it.buttonSecondary }, { t, c -> t.copy(buttonSecondary = c, buttonSecondaryPressed = c.copy(alpha = 0.7f)) })
 )
+private val themeGroups = listOf("Background", "Board", "Text", "Buttons")
 
 @Composable fun ThemeEditorScreen(theme: GameTheme, onUpdateTheme: (GameTheme) -> Unit, onSave: () -> Unit, onBack: () -> Unit) {
     var selectedTarget by remember { mutableStateOf<ThemeColorTarget?>(null) }
     var themeName by remember(theme.id) { mutableStateOf(theme.name) }
+    // Track the base theme for reset functionality
+    val baseTheme = remember(theme.id) { com.brickgame.tetris.ui.theme.GameThemes.ClassicGreen }
+    var showResetConfirm by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxSize().background(PBG).systemBarsPadding()) {
+        // Header: back, name, save
         Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
             Text("←", color = ACC, fontSize = 22.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { onBack() }.padding(8.dp))
             BasicTextField(themeName, { themeName = it; onUpdateTheme(theme.copy(name = it)) }, textStyle = TextStyle(color = TX, fontSize = 16.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace), cursorBrush = SolidColor(ACC), singleLine = true, modifier = Modifier.weight(1f).padding(horizontal = 8.dp))
             Text("SAVE", color = Color.Black, fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(ACC).clickable { onSave() }.padding(horizontal = 16.dp, vertical = 8.dp))
         }
-        Box(Modifier.fillMaxWidth().weight(0.45f).padding(horizontal = 12.dp).clip(RoundedCornerShape(12.dp)).background(theme.backgroundColor).border(2.dp, if (selectedTarget?.label == "Background") GRN else Color.Transparent, RoundedCornerShape(12.dp)).clickable { selectedTarget = themeTargets[0] }) {
+        // Live preview — interactive mini-board
+        Box(Modifier.fillMaxWidth().weight(0.38f).padding(horizontal = 12.dp).clip(RoundedCornerShape(12.dp)).background(theme.backgroundColor).border(2.dp, if (selectedTarget?.label == "Background") GRN else Color.Transparent, RoundedCornerShape(12.dp)).clickable { selectedTarget = themeTargets[0] }) {
             Box(Modifier.fillMaxSize().padding(8.dp).clip(RoundedCornerShape(8.dp)).background(theme.deviceColor).border(2.dp, if (selectedTarget?.label == "Device Frame") GRN else Color.Transparent, RoundedCornerShape(8.dp)).clickable { selectedTarget = themeTargets[1] }) {
                 Row(Modifier.fillMaxSize().padding(4.dp)) {
                     Box(Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(6.dp)).background(theme.screenBackground).border(2.dp, if (selectedTarget?.label == "Screen / LCD") GRN else Color.Transparent, RoundedCornerShape(6.dp)).clickable { selectedTarget = themeTargets[2] }) {
@@ -592,19 +598,68 @@ private val themeTargets = listOf(
                     }
                     Spacer(Modifier.width(6.dp))
                     Column(Modifier.width(50.dp).fillMaxHeight(), Arrangement.SpaceEvenly, Alignment.CenterHorizontally) {
-                        Text("00123", color = theme.accentColor, fontSize = 10.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, modifier = Modifier.border(1.dp, if (selectedTarget?.label == "Accent / Score") GRN else Color.Transparent, RoundedCornerShape(2.dp)).clickable { selectedTarget = themeTargets[9] }.padding(2.dp))
+                        Text("00123", color = theme.accentColor, fontSize = 10.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, modifier = Modifier.border(1.dp, if (selectedTarget?.label == "Accent / Score") GRN else Color.Transparent, RoundedCornerShape(2.dp)).clickable { selectedTarget = themeTargets[7] }.padding(2.dp))
                         Text("LV 3", color = theme.textPrimary, fontSize = 9.sp, fontFamily = FontFamily.Monospace, modifier = Modifier.border(1.dp, if (selectedTarget?.label == "Text Primary") GRN else Color.Transparent, RoundedCornerShape(2.dp)).clickable { selectedTarget = themeTargets[5] }.padding(2.dp))
                         Text("Info", color = theme.textSecondary, fontSize = 9.sp, modifier = Modifier.border(1.dp, if (selectedTarget?.label == "Text Secondary") GRN else Color.Transparent, RoundedCornerShape(2.dp)).clickable { selectedTarget = themeTargets[6] }.padding(2.dp))
                     }
                 }
             }
             Row(Modifier.align(Alignment.BottomCenter).padding(bottom = 4.dp), Arrangement.spacedBy(8.dp)) {
-                Box(Modifier.size(32.dp).clip(CircleShape).background(theme.buttonPrimary).border(2.dp, if (selectedTarget?.label == "Button Color") GRN else Color.Transparent, CircleShape).clickable { selectedTarget = themeTargets[7] })
-                Box(Modifier.size(24.dp).clip(RoundedCornerShape(12.dp)).background(theme.buttonSecondary).border(2.dp, if (selectedTarget?.label == "Button Text") GRN else Color.Transparent, RoundedCornerShape(12.dp)).clickable { selectedTarget = themeTargets[8] })
+                Box(Modifier.size(32.dp).clip(CircleShape).background(theme.buttonPrimary).border(2.dp, if (selectedTarget?.label == "Button Color") GRN else Color.Transparent, CircleShape).clickable { selectedTarget = themeTargets[8] })
+                Box(Modifier.size(24.dp).clip(RoundedCornerShape(12.dp)).background(theme.buttonSecondary).border(2.dp, if (selectedTarget?.label == "Button Text") GRN else Color.Transparent, RoundedCornerShape(12.dp)).clickable { selectedTarget = themeTargets[9] })
             }
         }
-        Text("Tap element above or select:", color = DIM, fontSize = 11.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
-        LazyRow(Modifier.fillMaxWidth().padding(horizontal = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) { items(themeTargets.size) { i -> val t = themeTargets[i]; val sel = selectedTarget == t; Row(Modifier.clip(RoundedCornerShape(8.dp)).background(if (sel) ACC.copy(0.2f) else CARD).border(1.dp, if (sel) ACC else DIM.copy(0.2f), RoundedCornerShape(8.dp)).clickable { selectedTarget = t }.padding(horizontal = 10.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) { Box(Modifier.size(16.dp).clip(CircleShape).background(t.getColor(theme)).border(1.dp, DIM.copy(0.3f), CircleShape)); Text(t.label, color = if (sel) ACC else TX, fontSize = 11.sp, fontWeight = if (sel) FontWeight.Bold else FontWeight.Normal) } } }
+        // Grouped color targets with section headers
+        Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)) {
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                items(themeGroups.size) { gi ->
+                    val group = themeGroups[gi]
+                    val targets = themeTargets.filter { it.group == group }
+                    val anySelected = targets.any { it == selectedTarget }
+                    // Group chip
+                    Row(Modifier.clip(RoundedCornerShape(8.dp))
+                        .background(if (anySelected) ACC.copy(0.15f) else CARD)
+                        .border(1.dp, if (anySelected) ACC.copy(0.5f) else DIM.copy(0.15f), RoundedCornerShape(8.dp))
+                        .padding(horizontal = 6.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(group, color = if (anySelected) ACC else DIM, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                        targets.forEach { t ->
+                            val sel = selectedTarget == t
+                            Box(Modifier.size(22.dp).clip(CircleShape)
+                                .background(t.getColor(theme))
+                                .border(if (sel) 2.dp else 1.dp, if (sel) GRN else DIM.copy(0.3f), CircleShape)
+                                .clickable { selectedTarget = t })
+                        }
+                    }
+                }
+            }
+        }
+        // Reset buttons
+        Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 2.dp), Arrangement.spacedBy(8.dp)) {
+            if (selectedTarget != null) {
+                val group = selectedTarget!!.group
+                Text("Reset $group", color = DIM, fontSize = 11.sp, fontWeight = FontWeight.Bold,
+                    modifier = Modifier.clip(RoundedCornerShape(6.dp)).background(CARD).clickable {
+                        val targets = themeTargets.filter { it.group == group }
+                        var updated = theme
+                        targets.forEach { t -> updated = t.setColor(updated, t.getColor(baseTheme)) }
+                        onUpdateTheme(updated)
+                    }.padding(horizontal = 10.dp, vertical = 4.dp))
+            }
+            Spacer(Modifier.weight(1f))
+            if (showResetConfirm) {
+                Text("Reset All?", color = Color(0xFFF44336), fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(end = 8.dp, top = 4.dp))
+                Text("Yes", color = Color(0xFFF44336), fontSize = 11.sp, fontWeight = FontWeight.Bold,
+                    modifier = Modifier.clip(RoundedCornerShape(6.dp)).background(CARD).clickable {
+                        showResetConfirm = false
+                        onUpdateTheme(baseTheme.copy(id = theme.id, name = theme.name, isBuiltIn = false))
+                    }.padding(horizontal = 10.dp, vertical = 4.dp))
+                Text("No", color = DIM, fontSize = 11.sp, modifier = Modifier.clickable { showResetConfirm = false }.padding(horizontal = 6.dp, vertical = 4.dp))
+            } else {
+                Text("Reset All", color = DIM, fontSize = 11.sp,
+                    modifier = Modifier.clip(RoundedCornerShape(6.dp)).background(CARD).clickable { showResetConfirm = true }.padding(horizontal = 10.dp, vertical = 4.dp))
+            }
+        }
         if (selectedTarget != null) { ColorPickerPanel(selectedTarget!!.getColor(theme)) { onUpdateTheme(selectedTarget!!.setColor(theme, it)) } }
         else { Box(Modifier.fillMaxWidth().weight(0.35f), Alignment.Center) { Text("Tap an element to edit its color", color = DIM, fontSize = 13.sp) } }
     }

@@ -169,6 +169,11 @@ class MainActivity : ComponentActivity() {
             val batterySaver by vm.batterySaver.collectAsState()
             val highContrast by vm.highContrast.collectAsState()
             val uiScale by vm.uiScale.collectAsState()
+            // New features
+            val levelEvents by vm.levelEventsEnabled.collectAsState()
+            val buttonStyle by vm.buttonStyle.collectAsState()
+            val controllerLayoutMode by vm.controllerLayout.collectAsState()
+            val infinityTimer by vm.infinityTimer.collectAsState()
 
             // Sync controller settings to gamepad handler
             LaunchedEffect(controllerEnabled, controllerDeadzone) {
@@ -365,7 +370,15 @@ class MainActivity : ComponentActivity() {
                             onDeleteLayout = vm::deleteCustomLayout,
                             onEditFreeform = { vm.closeSettings(); vm.enterFreeformEditMode() },
                             on3DMode = { vm.setPortraitLayout(LayoutPreset.PORTRAIT_3D); vm.closeSettings() },
-                            onClearHistory = vm::clearHistory
+                            onClearHistory = vm::clearHistory,
+                            levelEventsEnabled = levelEvents,
+                            onSetLevelEventsEnabled = vm::setLevelEventsEnabled,
+                            buttonStyle = buttonStyle,
+                            onSetButtonStyle = vm::setButtonStyle,
+                            controllerLayoutMode = controllerLayoutMode,
+                            onSetControllerLayout = vm::setControllerLayout,
+                            infinityTimer = infinityTimer,
+                            onSetInfinityTimer = vm::setInfinityTimer
                         )
                     }
 
@@ -394,6 +407,10 @@ class MainActivity : ComponentActivity() {
                                 multiColor = multiColor,
                                 customLayout = activeCustomLayout, scoreHistory = history,
                                 freeformElements = profile.freeformElements,
+                                levelEventsEnabled = levelEvents,
+                                buttonStyle = buttonStyle,
+                                controllerLayoutMode = controllerLayoutMode,
+                                controllerConnected = gamepad.isConnected(),
                                 onStartGame = if (is3D) vm::start3DGame else vm::startGame,
                                 onPause = vm::pauseGame, onResume = vm::resumeGame,
                                 onRotate = vm::rotate, onRotateCCW = vm::rotateCounterClockwise,

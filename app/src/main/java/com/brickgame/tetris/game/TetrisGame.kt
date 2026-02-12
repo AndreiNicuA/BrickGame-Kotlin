@@ -344,6 +344,10 @@ class TetrisGame {
     }
 
     fun getDropSpeed(): Long {
+        // Infinity mode: fixed Level 1 speed regardless of level
+        if (gameMode == GameMode.INFINITY) {
+            return (1000L * difficulty.speedMultiplier).toLong().coerceAtLeast(16L)
+        }
         val level = _state.value.level
         // Guideline-inspired speed curve (NES-like)
         val baseSpeed = when {
@@ -657,7 +661,8 @@ enum class MoveResult { MOVED, LOCKED, BLOCKED }
 enum class GameMode(val displayName: String, val description: String) {
     MARATHON("Marathon", "Classic endless mode"),
     SPRINT("Sprint 40L", "Clear 40 lines as fast as possible"),
-    ULTRA("Ultra 2min", "Highest score in 2 minutes")
+    ULTRA("Ultra 2min", "Highest score in 2 minutes"),
+    INFINITY("Infinity", "Relaxing endless play at constant speed")
 }
 
 // ===== Data Classes =====

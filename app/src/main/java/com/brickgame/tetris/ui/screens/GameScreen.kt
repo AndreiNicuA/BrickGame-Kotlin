@@ -1,8 +1,10 @@
 package com.brickgame.tetris.ui.screens
 
 import androidx.compose.animation.core.*
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
@@ -11,6 +13,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -25,13 +28,19 @@ import com.brickgame.tetris.game.*
 import com.brickgame.tetris.data.CustomLayoutData
 import com.brickgame.tetris.data.ElementPosition
 import com.brickgame.tetris.data.FreeformElement
+import com.brickgame.tetris.game.GameMode
 import com.brickgame.tetris.data.LayoutElements
 import com.brickgame.tetris.ui.components.*
+import com.brickgame.tetris.ui.components.LocalButtonShape
+import com.brickgame.tetris.ui.layout.ButtonShape
 import com.brickgame.tetris.ui.layout.DPadStyle
 import com.brickgame.tetris.ui.layout.FreeformGameLayout
 import com.brickgame.tetris.ui.layout.LayoutPreset
 import com.brickgame.tetris.ui.styles.AnimationStyle
 import com.brickgame.tetris.ui.theme.LocalGameTheme
+
+// Color helper
+private fun Color.darken(f: Float) = Color((red * (1 - f)).coerceIn(0f, 1f), (green * (1 - f)).coerceIn(0f, 1f), (blue * (1 - f)).coerceIn(0f, 1f), alpha)
 
 // CompositionLocal for multicolor mode — avoids threading through every layout function
 val LocalMultiColor = compositionLocalOf { false }
@@ -49,6 +58,11 @@ fun GameScreen(
     scoreHistory: List<com.brickgame.tetris.data.ScoreEntry> = emptyList(),
     // Freeform layout
     freeformElements: Map<String, FreeformElement> = emptyMap(),
+    // New features
+    levelEventsEnabled: Boolean = false,
+    buttonStyle: String = "ROUND",
+    controllerLayoutMode: String = "normal",
+    controllerConnected: Boolean = false,
     onStartGame: () -> Unit, onPause: () -> Unit, onResume: () -> Unit,
     onRotate: () -> Unit, onRotateCCW: () -> Unit,
     onHardDrop: () -> Unit, onHold: () -> Unit,
@@ -60,32 +74,92 @@ fun GameScreen(
 ) {
     val theme = LocalGameTheme.current
 
-    CompositionLocalProvider(LocalMultiColor provides multiColor) {
+    // Level events: compute effective ghost/hold based on level milestones
+    val lvl = gameState.level
+    val isMarathon = gameState.gameMode == GameMode.MARATHON
+    val eventsActive = levelEventsEnabled && isMarathon
+    val effectiveGhost = ghostEnabled && !(eventsActive && lvl >= 14)
+    val effectiveNextCount = when {
+        eventsActive && lvl >= 10 -> 1
+        eventsActive && lvl >= 6 -> 2
+        else -> 3
+    }
+    val boardDimAlpha = when {
+        eventsActive && lvl >= 18 -> 0.70f
+        eventsActive && lvl >= 12 -> 0.85f
+        else -> 1f
+    }
+    val holdDisabled = eventsActive && lvl >= 16
+    val effectiveHold: () -> Unit = if (holdDisabled) { {} } else onHold
+
+    val btnShape = ButtonShape.entries.find { it.name == buttonStyle } ?: ButtonShape.ROUND
+    val useControllerLayout = controllerConnected &&
+        (controllerLayoutMode == "minimal" || controllerLayoutMode == "auto")
+
+    CompositionLocalProvider(
+        LocalMultiColor provides multiColor,
+        LocalButtonShape provides btnShape
+    ) {
     val isMenu = gameState.status == GameStatus.MENU
     Box(Modifier.fillMaxSize()) {
         if (isMenu) {
-            // Menu overlay draws edge-to-edge (behind system bars) with its own background
             MenuOverlay(gameState.highScore, scoreHistory, onStartGame, onOpenSettings)
+        } else if (useControllerLayout) {
+            // Controller-optimized: full-screen board + floating HUD + pause only
+            Box(Modifier.fillMaxSize().background(theme.backgroundColor)) {
+                GameBoard(gameState.board, Modifier.fillMaxSize().alpha(boardDimAlpha),
+                    gameState.currentPiece, gameState.ghostY, effectiveGhost,
+                    gameState.clearedLineRows, animationStyle, animationDuration,
+                    multiColor = multiColor)
+                // Floating HUD
+                Box(Modifier.fillMaxSize().systemBarsPadding().padding(8.dp)) {
+                    // Top-left: Hold
+                    Column(Modifier.align(Alignment.TopStart).background(Color.Black.copy(0.5f), RoundedCornerShape(8.dp)).padding(6.dp)) {
+                        Tag("HOLD"); HoldPiecePreview(gameState.holdPiece?.shape, gameState.holdUsed, Modifier.size(32.dp))
+                    }
+                    // Top-center: Score + Level
+                    Column(Modifier.align(Alignment.TopCenter).background(Color.Black.copy(0.5f), RoundedCornerShape(8.dp)).padding(horizontal = 12.dp, vertical = 6.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(gameState.score.toString(), fontSize = 18.sp, fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace, color = theme.accentColor)
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Tag("LV ${gameState.level}"); Tag("${gameState.lines}L")
+                        }
+                    }
+                    // Top-right: Next + Pause
+                    Column(Modifier.align(Alignment.TopEnd).background(Color.Black.copy(0.5f), RoundedCornerShape(8.dp)).padding(6.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally) {
+                        Tag("NEXT")
+                        gameState.nextPieces.take(effectiveNextCount).forEachIndexed { i, p ->
+                            NextPiecePreview(p.shape, Modifier.size(if (i == 0) 32.dp else 24.dp))
+                        }
+                    }
+                    // Bottom-right: Pause button
+                    ActionButton("PAUSE", onPause, modifier = Modifier.align(Alignment.BottomEnd),
+                        width = 70.dp, height = 30.dp, backgroundColor = theme.buttonSecondary.copy(0.7f))
+                }
+                if (gameState.status == GameStatus.PAUSED) PauseOverlay(onResume, onOpenSettings, onQuit)
+                if (gameState.status == GameStatus.GAME_OVER) GameOverOverlay(gameState.score, gameState.level, gameState.lines, onStartGame, onOpenSettings)
+            }
         } else {
-            // Game content draws inside system bar padding with game theme background
+            // Normal game content
             Box(Modifier.fillMaxSize().background(theme.backgroundColor).systemBarsPadding()) {
                 if (customLayout != null) {
-                    CustomGameLayout(gameState, customLayout, ghostEnabled, animationStyle, animationDuration, onRotate, onHardDrop, onHold, onLeftPress, onLeftRelease, onRightPress, onRightRelease, onDownPress, onDownRelease, onPause, onOpenSettings, onStartGame)
+                    CustomGameLayout(gameState, customLayout, effectiveGhost, animationStyle, animationDuration, onRotate, onHardDrop, effectiveHold, onLeftPress, onLeftRelease, onRightPress, onRightRelease, onDownPress, onDownRelease, onPause, onOpenSettings, onStartGame)
                 } else when (layoutPreset) {
-                    LayoutPreset.PORTRAIT_CLASSIC -> ClassicLayout(gameState, dpadStyle, ghostEnabled, animationStyle, animationDuration, onRotate, onHardDrop, onHold, onLeftPress, onLeftRelease, onRightPress, onRightRelease, onDownPress, onDownRelease, onPause, onOpenSettings, onStartGame)
-                    LayoutPreset.PORTRAIT_MODERN -> ModernLayout(gameState, dpadStyle, ghostEnabled, animationStyle, animationDuration, onRotate, onHardDrop, onHold, onLeftPress, onLeftRelease, onRightPress, onRightRelease, onDownPress, onDownRelease, onPause, onOpenSettings, onStartGame)
-                    LayoutPreset.PORTRAIT_FULLSCREEN -> FullscreenLayout(gameState, dpadStyle, ghostEnabled, animationStyle, animationDuration, onRotate, onHardDrop, onHold, onLeftPress, onLeftRelease, onRightPress, onRightRelease, onDownPress, onDownRelease, onPause, onOpenSettings, onStartGame)
-                    LayoutPreset.PORTRAIT_ONEHAND -> OneHandLayout(gameState, ghostEnabled, animationStyle, animationDuration, onRotate, onHardDrop, onHold, onLeftPress, onLeftRelease, onRightPress, onRightRelease, onDownPress, onDownRelease, onPause, onOpenSettings, onStartGame)
-                    LayoutPreset.PORTRAIT_FREEFORM -> FreeformGameLayout(gameState, dpadStyle, ghostEnabled, animationStyle, animationDuration, freeformElements, onRotate, onHardDrop, onHold, onLeftPress, onLeftRelease, onRightPress, onRightRelease, onDownPress, onDownRelease, onPause, onOpenSettings, onStartGame)
-                    LayoutPreset.LANDSCAPE_DEFAULT -> LandscapeLayout(gameState, dpadStyle, ghostEnabled, animationStyle, animationDuration, onRotate, onHardDrop, onHold, onLeftPress, onLeftRelease, onRightPress, onRightRelease, onDownPress, onDownRelease, onPause, onOpenSettings, false)
-                    LayoutPreset.LANDSCAPE_LEFTY -> LandscapeLayout(gameState, dpadStyle, ghostEnabled, animationStyle, animationDuration, onRotate, onHardDrop, onHold, onLeftPress, onLeftRelease, onRightPress, onRightRelease, onDownPress, onDownRelease, onPause, onOpenSettings, true)
-                    LayoutPreset.PORTRAIT_3D -> {} // Handled by Game3DScreen in MainActivity
+                    LayoutPreset.PORTRAIT_CLASSIC -> ClassicLayout(gameState, dpadStyle, effectiveGhost, animationStyle, animationDuration, onRotate, onHardDrop, effectiveHold, onLeftPress, onLeftRelease, onRightPress, onRightRelease, onDownPress, onDownRelease, onPause, onOpenSettings, onStartGame, boardDimAlpha, effectiveNextCount)
+                    LayoutPreset.PORTRAIT_MODERN -> ModernLayout(gameState, dpadStyle, effectiveGhost, animationStyle, animationDuration, onRotate, onHardDrop, effectiveHold, onLeftPress, onLeftRelease, onRightPress, onRightRelease, onDownPress, onDownRelease, onPause, onOpenSettings, onStartGame, boardDimAlpha, effectiveNextCount)
+                    LayoutPreset.PORTRAIT_FULLSCREEN -> FullscreenLayout(gameState, dpadStyle, effectiveGhost, animationStyle, animationDuration, onRotate, onHardDrop, effectiveHold, onLeftPress, onLeftRelease, onRightPress, onRightRelease, onDownPress, onDownRelease, onPause, onOpenSettings, onStartGame, boardDimAlpha, effectiveNextCount)
+                    LayoutPreset.PORTRAIT_ONEHAND -> OneHandLayout(gameState, effectiveGhost, animationStyle, animationDuration, onRotate, onHardDrop, effectiveHold, onLeftPress, onLeftRelease, onRightPress, onRightRelease, onDownPress, onDownRelease, onPause, onOpenSettings, onStartGame)
+                    LayoutPreset.PORTRAIT_FREEFORM -> FreeformGameLayout(gameState, dpadStyle, effectiveGhost, animationStyle, animationDuration, freeformElements, onRotate, onHardDrop, effectiveHold, onLeftPress, onLeftRelease, onRightPress, onRightRelease, onDownPress, onDownRelease, onPause, onOpenSettings, onStartGame)
+                    LayoutPreset.LANDSCAPE_DEFAULT -> LandscapeLayout(gameState, dpadStyle, effectiveGhost, animationStyle, animationDuration, onRotate, onHardDrop, effectiveHold, onLeftPress, onLeftRelease, onRightPress, onRightRelease, onDownPress, onDownRelease, onPause, onOpenSettings, false)
+                    LayoutPreset.LANDSCAPE_LEFTY -> LandscapeLayout(gameState, dpadStyle, effectiveGhost, animationStyle, animationDuration, onRotate, onHardDrop, effectiveHold, onLeftPress, onLeftRelease, onRightPress, onRightRelease, onDownPress, onDownRelease, onPause, onOpenSettings, true)
+                    LayoutPreset.PORTRAIT_3D -> {}
                 }
                 if (gameState.status == GameStatus.PAUSED) PauseOverlay(onResume, onOpenSettings, onQuit)
                 if (gameState.status == GameStatus.GAME_OVER) GameOverOverlay(gameState.score, gameState.level, gameState.lines, onStartGame, onOpenSettings)
             }
         }
-        // Big centered action popup
         ActionPopup(gameState.lastActionLabel, gameState.linesCleared)
     }
     } // end CompositionLocalProvider
@@ -96,14 +170,15 @@ fun GameScreen(
     gs: GameState, dp: DPadStyle, ghost: Boolean, anim: AnimationStyle, ad: Float,
     onRotate: () -> Unit, onHD: () -> Unit, onHold: () -> Unit,
     onLP: () -> Unit, onLR: () -> Unit, onRP: () -> Unit, onRR: () -> Unit,
-    onDP: () -> Unit, onDR: () -> Unit, onPause: () -> Unit, onSet: () -> Unit, onStart: () -> Unit
+    onDP: () -> Unit, onDR: () -> Unit, onPause: () -> Unit, onSet: () -> Unit, onStart: () -> Unit,
+    boardDimAlpha: Float = 1f, nextCount: Int = 3
 ) {
     val theme = LocalGameTheme.current
     Column(Modifier.fillMaxSize().padding(6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        // Device frame
-        Row(Modifier.fillMaxWidth().weight(1f).clip(RoundedCornerShape(10.dp)).background(theme.deviceColor).padding(6.dp)) {
-            // Board — takes remaining space
-            GameBoard(gs.board, Modifier.weight(1f).fillMaxHeight().padding(end = 4.dp), gs.currentPiece, gs.ghostY, ghost, gs.clearedLineRows, anim, ad, multiColor = LocalMultiColor.current)
+        // Device frame — retro handheld style
+        Row(Modifier.fillMaxWidth().weight(1f).clip(RoundedCornerShape(10.dp)).background(theme.deviceColor)
+            .border(2.dp, theme.deviceColor.darken(0.2f), RoundedCornerShape(10.dp)).padding(6.dp)) {
+            GameBoard(gs.board, Modifier.weight(1f).fillMaxHeight().padding(end = 4.dp).alpha(boardDimAlpha), gs.currentPiece, gs.ghostY, ghost, gs.clearedLineRows, anim, ad, multiColor = LocalMultiColor.current)
             // Right info panel — Level > Lines > Score > Hold > Next
             Column(
                 Modifier.width(72.dp).fillMaxHeight().padding(vertical = 4.dp),
@@ -145,7 +220,7 @@ fun GameScreen(
                     Text("NEXT", fontSize = 8.sp, color = theme.textSecondary, fontWeight = FontWeight.Bold,
                         fontFamily = FontFamily.Monospace, letterSpacing = 1.sp)
                     Spacer(Modifier.height(2.dp))
-                    gs.nextPieces.take(3).forEachIndexed { i, p ->
+                    gs.nextPieces.take(nextCount).forEachIndexed { i, p ->
                         NextPiecePreview(p.shape, Modifier.size(when (i) { 0 -> 44.dp; 1 -> 34.dp; else -> 26.dp }).padding(1.dp), when (i) { 0 -> 1f; 1 -> 0.55f; else -> 0.3f })
                     }
                 }
@@ -161,23 +236,32 @@ fun GameScreen(
     gs: GameState, dp: DPadStyle, ghost: Boolean, anim: AnimationStyle, ad: Float,
     onRotate: () -> Unit, onHD: () -> Unit, onHold: () -> Unit,
     onLP: () -> Unit, onLR: () -> Unit, onRP: () -> Unit, onRR: () -> Unit,
-    onDP: () -> Unit, onDR: () -> Unit, onPause: () -> Unit, onSet: () -> Unit, onStart: () -> Unit
+    onDP: () -> Unit, onDR: () -> Unit, onPause: () -> Unit, onSet: () -> Unit, onStart: () -> Unit,
+    boardDimAlpha: Float = 1f, nextCount: Int = 3
 ) {
     val theme = LocalGameTheme.current
+    // Animated score counter
+    val animatedScore by animateIntAsState(gs.score, animationSpec = tween(300), label = "score")
     Column(Modifier.fillMaxSize().padding(horizontal = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        // Compact status bar
-        Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(theme.deviceColor).padding(horizontal = 10.dp, vertical = 6.dp),
+        // Modern status bar with rounded shadow
+        Row(Modifier.fillMaxWidth().shadow(6.dp, RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(14.dp)).background(theme.deviceColor)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
             Arrangement.SpaceBetween, Alignment.CenterVertically) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) { Tag("HOLD"); HoldPiecePreview(gs.holdPiece?.shape, gs.holdUsed, Modifier.size(34.dp)) }
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) { Tag("LV ${gs.level}"); Tag("${gs.lines} LINES") }
-                Text(gs.score.toString().padStart(7, '0'), fontSize = 20.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, color = theme.pixelOn, letterSpacing = 2.sp)
+                Text(animatedScore.toString().padStart(7, '0'), fontSize = 20.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, color = theme.pixelOn, letterSpacing = 2.sp)
             }
             Column(horizontalAlignment = Alignment.CenterHorizontally) { Tag("NEXT"); NextPiecePreview(gs.nextPieces.firstOrNull()?.shape, Modifier.size(34.dp)) }
         }
-        Spacer(Modifier.height(4.dp))
-        GameBoard(gs.board, Modifier.weight(1f).fillMaxWidth().padding(horizontal = 16.dp), gs.currentPiece, gs.ghostY, ghost, gs.clearedLineRows, anim, ad, multiColor = LocalMultiColor.current)
-        Spacer(Modifier.height(4.dp))
+        Spacer(Modifier.height(6.dp))
+        // Board with rounded corners and shadow
+        Box(Modifier.weight(1f).fillMaxWidth().padding(horizontal = 12.dp)
+            .shadow(4.dp, RoundedCornerShape(8.dp)).clip(RoundedCornerShape(8.dp))) {
+            GameBoard(gs.board, Modifier.fillMaxSize().alpha(boardDimAlpha), gs.currentPiece, gs.ghostY, ghost, gs.clearedLineRows, anim, ad, multiColor = LocalMultiColor.current)
+        }
+        Spacer(Modifier.height(6.dp))
         FullControls(dp, onHD, onHold, onLP, onLR, onRP, onRR, onDP, onDR, onRotate, onPause, onSet, onStart, gs.status)
     }
 }
@@ -187,20 +271,28 @@ fun GameScreen(
     gs: GameState, dp: DPadStyle, ghost: Boolean, anim: AnimationStyle, ad: Float,
     onRotate: () -> Unit, onHD: () -> Unit, onHold: () -> Unit,
     onLP: () -> Unit, onLR: () -> Unit, onRP: () -> Unit, onRR: () -> Unit,
-    onDP: () -> Unit, onDR: () -> Unit, onPause: () -> Unit, onSet: () -> Unit, onStart: () -> Unit
+    onDP: () -> Unit, onDR: () -> Unit, onPause: () -> Unit, onSet: () -> Unit, onStart: () -> Unit,
+    boardDimAlpha: Float = 1f, nextCount: Int = 3
 ) {
     val theme = LocalGameTheme.current
-    Column(Modifier.fillMaxSize().padding(horizontal = 4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        // Info strip above the board
-        Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 3.dp), Arrangement.SpaceBetween, Alignment.CenterVertically) {
-            HoldPiecePreview(gs.holdPiece?.shape, gs.holdUsed, Modifier.size(28.dp))
+    // Fullscreen: board fills maximum area, controls overlay with transparency
+    Box(Modifier.fillMaxSize()) {
+        // Board fills entire area
+        GameBoard(gs.board, Modifier.fillMaxSize().alpha(boardDimAlpha), gs.currentPiece, gs.ghostY, ghost, gs.clearedLineRows, anim, ad, multiColor = LocalMultiColor.current)
+        // Floating info strip
+        Row(Modifier.fillMaxWidth().align(Alignment.TopCenter).padding(horizontal = 8.dp, vertical = 4.dp)
+            .background(Color.Black.copy(0.4f), RoundedCornerShape(8.dp)).padding(horizontal = 8.dp, vertical = 4.dp),
+            Arrangement.SpaceBetween, Alignment.CenterVertically) {
+            HoldPiecePreview(gs.holdPiece?.shape, gs.holdUsed, Modifier.size(26.dp))
             Tag("LV${gs.level}")
             Text(gs.score.toString(), fontSize = 14.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, color = theme.accentColor)
             Tag("${gs.lines}L")
-            NextPiecePreview(gs.nextPieces.firstOrNull()?.shape, Modifier.size(28.dp))
+            NextPiecePreview(gs.nextPieces.firstOrNull()?.shape, Modifier.size(26.dp))
         }
-        GameBoard(gs.board, Modifier.weight(1f).fillMaxWidth(), gs.currentPiece, gs.ghostY, ghost, gs.clearedLineRows, anim, ad, multiColor = LocalMultiColor.current)
-        FullControls(dp, onHD, onHold, onLP, onLR, onRP, onRR, onDP, onDR, onRotate, onPause, onSet, onStart, gs.status)
+        // Controls at bottom with transparency
+        Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().alpha(0.6f)) {
+            FullControls(dp, onHD, onHold, onLP, onLR, onRP, onRR, onDP, onDR, onRotate, onPause, onSet, onStart, gs.status)
+        }
     }
 }
 

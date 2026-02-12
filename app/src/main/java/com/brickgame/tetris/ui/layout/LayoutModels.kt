@@ -33,3 +33,12 @@ enum class DPadStyle(val displayName: String) {
     STANDARD("Standard Cross"),
     ROTATE_CENTRE("Cross + Rotate Centre")
 }
+
+/**
+ * Button visual style for Freeform layout
+ */
+enum class ButtonShape(val displayName: String) {
+    ROUND("Round"),
+    SQUARE("Square"),
+    OUTLINE("Outline")
+}

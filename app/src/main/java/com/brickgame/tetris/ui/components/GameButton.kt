@@ -9,6 +9,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -30,9 +31,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.brickgame.tetris.ui.layout.ButtonShape
 import com.brickgame.tetris.ui.theme.LocalGameTheme
 
 enum class ButtonIcon { UP, DOWN, LEFT, RIGHT, ROTATE }
+
+val LocalButtonShape = androidx.compose.runtime.compositionLocalOf { ButtonShape.ROUND }
 
 // ===== Tap-only round button (for UP/hard drop) =====
 @Composable
@@ -42,30 +46,44 @@ fun TapButton(
     onClick: () -> Unit = {}
 ) {
     val theme = LocalGameTheme.current
+    val shape = LocalButtonShape.current
     var isPressed by remember { mutableStateOf(false) }
     val scale by animateFloatAsState(if (isPressed) 0.88f else 1f, spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessHigh), label = "s")
     val bg = theme.buttonPrimary
     val bgPressed = theme.buttonPrimaryPressed
+    val btnShape = when (shape) {
+        ButtonShape.ROUND -> CircleShape
+        ButtonShape.SQUARE -> RoundedCornerShape(12.dp)
+        ButtonShape.OUTLINE -> CircleShape
+    }
+    val isOutline = shape == ButtonShape.OUTLINE
 
     Box(
         modifier.size(size).scale(scale)
-            .shadow(if (isPressed) 2.dp else 8.dp, CircleShape)
-            .clip(CircleShape)
-            .background(Brush.verticalGradient(
-                if (isPressed) listOf(bgPressed, bgPressed.darken(0.15f))
-                else listOf(bg.lighten(0.1f), bg.darken(0.1f))
-            ))
-            .drawBehind {
-                // Inner highlight at top
-                drawCircle(Color.White.copy(alpha = if (isPressed) 0.05f else 0.15f),
-                    radius = this.size.width * 0.38f,
-                    center = Offset(this.size.width / 2, this.size.height * 0.35f))
-                // Bottom edge shadow
-                drawArc(Color.Black.copy(alpha = 0.15f), 20f, 140f, false,
-                    topLeft = Offset(this.size.width * 0.05f, this.size.height * 0.05f),
-                    size = Size(this.size.width * 0.9f, this.size.height * 0.9f),
-                    style = Stroke(this.size.width * 0.04f))
-            }
+            .shadow(if (isPressed || isOutline) 0.dp else 8.dp, btnShape)
+            .clip(btnShape)
+            .then(if (isOutline) {
+                Modifier
+                    .background(Color.Transparent)
+                    .drawBehind {
+                        drawRoundRect(
+                            color = if (isPressed) bgPressed else bg,
+                            style = Stroke(3.dp.toPx()),
+                            cornerRadius = if (shape == ButtonShape.SQUARE) CornerRadius(12.dp.toPx()) else CornerRadius(this.size.width / 2)
+                        )
+                    }
+            } else {
+                Modifier
+                    .background(Brush.verticalGradient(
+                        if (isPressed) listOf(bgPressed, bgPressed.darken(0.15f))
+                        else listOf(bg.lighten(0.1f), bg.darken(0.1f))
+                    ))
+                    .drawBehind {
+                        drawCircle(Color.White.copy(alpha = if (isPressed) 0.05f else 0.15f),
+                            radius = this.size.width * 0.38f,
+                            center = Offset(this.size.width / 2, this.size.height * 0.35f))
+                    }
+            })
             .pointerInput(Unit) {
                 detectTapGestures(
                     onPress = { isPressed = true; tryAwaitRelease(); isPressed = false },
@@ -73,7 +91,7 @@ fun TapButton(
                 )
             },
         Alignment.Center
-    ) { IconDraw(icon, size) }
+    ) { IconDraw(icon, size, if (isOutline) bg else Color(0xFF1A1A1A)) }
 }
 
 // ===== Hold button (for LEFT, RIGHT, DOWN — supports DAS) =====
@@ -85,28 +103,44 @@ fun HoldButton(
     onRelease: () -> Unit = {}
 ) {
     val theme = LocalGameTheme.current
+    val shape = LocalButtonShape.current
     var isPressed by remember { mutableStateOf(false) }
     val scale by animateFloatAsState(if (isPressed) 0.88f else 1f, spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessHigh), label = "s")
     val bg = theme.buttonPrimary
     val bgPressed = theme.buttonPrimaryPressed
+    val btnShape = when (shape) {
+        ButtonShape.ROUND -> CircleShape
+        ButtonShape.SQUARE -> RoundedCornerShape(12.dp)
+        ButtonShape.OUTLINE -> CircleShape
+    }
+    val isOutline = shape == ButtonShape.OUTLINE
 
     Box(
         modifier.size(size).scale(scale)
-            .shadow(if (isPressed) 2.dp else 8.dp, CircleShape)
-            .clip(CircleShape)
-            .background(Brush.verticalGradient(
-                if (isPressed) listOf(bgPressed, bgPressed.darken(0.15f))
-                else listOf(bg.lighten(0.1f), bg.darken(0.1f))
-            ))
-            .drawBehind {
-                drawCircle(Color.White.copy(alpha = if (isPressed) 0.05f else 0.15f),
-                    radius = this.size.width * 0.38f,
-                    center = Offset(this.size.width / 2, this.size.height * 0.35f))
-                drawArc(Color.Black.copy(alpha = 0.15f), 20f, 140f, false,
-                    topLeft = Offset(this.size.width * 0.05f, this.size.height * 0.05f),
-                    size = Size(this.size.width * 0.9f, this.size.height * 0.9f),
-                    style = Stroke(this.size.width * 0.04f))
-            }
+            .shadow(if (isPressed || isOutline) 0.dp else 8.dp, btnShape)
+            .clip(btnShape)
+            .then(if (isOutline) {
+                Modifier
+                    .background(Color.Transparent)
+                    .drawBehind {
+                        drawRoundRect(
+                            color = if (isPressed) bgPressed else bg,
+                            style = Stroke(3.dp.toPx()),
+                            cornerRadius = if (shape == ButtonShape.SQUARE) CornerRadius(12.dp.toPx()) else CornerRadius(this.size.width / 2)
+                        )
+                    }
+            } else {
+                Modifier
+                    .background(Brush.verticalGradient(
+                        if (isPressed) listOf(bgPressed, bgPressed.darken(0.15f))
+                        else listOf(bg.lighten(0.1f), bg.darken(0.1f))
+                    ))
+                    .drawBehind {
+                        drawCircle(Color.White.copy(alpha = if (isPressed) 0.05f else 0.15f),
+                            radius = this.size.width * 0.38f,
+                            center = Offset(this.size.width / 2, this.size.height * 0.35f))
+                    }
+            })
             .pointerInput(Unit) {
                 awaitPointerEventScope {
                     while (true) {
@@ -139,8 +173,7 @@ private fun Color.lighten(f: Float) = Color(
 
 // ===== Icon drawing =====
 @Composable
-private fun IconDraw(icon: ButtonIcon, size: Dp) {
-    val iconColor = Color(0xFF1A1A1A)
+private fun IconDraw(icon: ButtonIcon, size: Dp, iconColor: Color = Color(0xFF1A1A1A)) {
     Canvas(Modifier.size(size * 0.4f)) {
         val w = this.size.width; val h = this.size.height
         val sw = w * 0.18f
@@ -178,7 +211,7 @@ fun DPad(
         Row(horizontalArrangement = Arrangement.spacedBy(gap + horizontalSpread), verticalAlignment = Alignment.CenterVertically) {
             HoldButton(ButtonIcon.LEFT, buttonSize, onPress = onLeftPress, onRelease = onLeftRelease)
             if (rotateInCenter) TapButton(ButtonIcon.ROTATE, cs, onClick = onRotate)
-            else Box(Modifier.size(cs).clip(CircleShape).background(theme.buttonSecondaryPressed.copy(alpha = 0.4f)))
+            else { val btnShape = when (LocalButtonShape.current) { ButtonShape.ROUND -> CircleShape; ButtonShape.SQUARE -> RoundedCornerShape(8.dp); ButtonShape.OUTLINE -> CircleShape }; Box(Modifier.size(cs).clip(btnShape).background(theme.buttonSecondaryPressed.copy(alpha = 0.4f))) }
             HoldButton(ButtonIcon.RIGHT, buttonSize, onPress = onRightPress, onRelease = onRightRelease)
         }
         HoldButton(ButtonIcon.DOWN, buttonSize, onPress = onDownPress, onRelease = onDownRelease)
