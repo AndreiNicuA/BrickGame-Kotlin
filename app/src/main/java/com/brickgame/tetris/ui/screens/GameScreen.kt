@@ -179,60 +179,63 @@ fun GameScreen(
     boardDimAlpha: Float = 1f, nextCount: Int = 3
 ) {
     val theme = LocalGameTheme.current
+    // Classic: force mono-color (no colored pieces)
     Column(Modifier.fillMaxSize().padding(6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        // Device frame — retro handheld style
+        // Device frame — retro handheld LCD style
         Row(Modifier.fillMaxWidth().weight(1f).clip(RoundedCornerShape(10.dp)).background(theme.deviceColor)
             .border(2.dp, theme.deviceColor.darken(0.2f), RoundedCornerShape(10.dp)).padding(6.dp)) {
-            GameBoard(gs.board, Modifier.weight(1f).fillMaxHeight().padding(end = 4.dp).alpha(boardDimAlpha), gs.currentPiece, gs.ghostY, ghost, gs.clearedLineRows, anim, ad, multiColor = LocalMultiColor.current)
-            // Right info panel — Level > Lines > Score > Hold > Next
+            // Board — always mono-color in classic
+            GameBoard(gs.board, Modifier.weight(1f).fillMaxHeight().padding(end = 4.dp).alpha(boardDimAlpha),
+                gs.currentPiece, gs.ghostY, ghost, gs.clearedLineRows, anim, ad, multiColor = false)
+            // Right info panel — SCORE > LEVELS > SPEED > NEXT (like the real LCD)
             Column(
                 Modifier.width(72.dp).fillMaxHeight().padding(vertical = 4.dp),
                 verticalArrangement = Arrangement.SpaceBetween,
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // Top group: Level + Lines
+                // SCORE
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("LEVEL", fontSize = 8.sp, color = theme.textSecondary, fontWeight = FontWeight.Bold,
-                        fontFamily = FontFamily.Monospace, letterSpacing = 1.sp)
-                    Text("${gs.level}", fontSize = 16.sp, fontWeight = FontWeight.ExtraBold,
-                        fontFamily = FontFamily.Monospace, color = theme.accentColor)
-                    Spacer(Modifier.height(4.dp))
-                    Text("LINES", fontSize = 8.sp, color = theme.textSecondary, fontWeight = FontWeight.Bold,
-                        fontFamily = FontFamily.Monospace, letterSpacing = 1.sp)
-                    Text("${gs.lines}", fontSize = 16.sp, fontWeight = FontWeight.ExtraBold,
-                        fontFamily = FontFamily.Monospace, color = theme.accentColor)
-                }
-
-                // Score
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("SCORE", fontSize = 8.sp, color = theme.textSecondary, fontWeight = FontWeight.Bold,
+                    Text("SCORE", fontSize = 9.sp, color = theme.textSecondary, fontWeight = FontWeight.Bold,
                         fontFamily = FontFamily.Monospace, letterSpacing = 1.sp)
                     Spacer(Modifier.height(2.dp))
-                    Text(gs.score.toString().padStart(7, '0'), fontSize = 13.sp, fontWeight = FontWeight.Bold,
+                    Text(gs.score.toString().padStart(6, '0'), fontSize = 14.sp, fontWeight = FontWeight.ExtraBold,
                         fontFamily = FontFamily.Monospace, color = theme.pixelOn, letterSpacing = 1.sp)
                 }
 
-                // Hold piece
+                // LEVELS
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("HOLD", fontSize = 8.sp, color = theme.textSecondary, fontWeight = FontWeight.Bold,
+                    Text("LEVELS", fontSize = 9.sp, color = theme.textSecondary, fontWeight = FontWeight.Bold,
                         fontFamily = FontFamily.Monospace, letterSpacing = 1.sp)
                     Spacer(Modifier.height(2.dp))
-                    HoldPiecePreview(gs.holdPiece?.shape, gs.holdUsed, Modifier.size(44.dp))
+                    Text(gs.level.toString().padStart(6, '0'), fontSize = 14.sp, fontWeight = FontWeight.ExtraBold,
+                        fontFamily = FontFamily.Monospace, color = theme.pixelOn, letterSpacing = 1.sp)
                 }
 
-                // Next pieces
+                // SPEED
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("NEXT", fontSize = 8.sp, color = theme.textSecondary, fontWeight = FontWeight.Bold,
+                    Text("SPEED", fontSize = 9.sp, color = theme.textSecondary, fontWeight = FontWeight.Bold,
                         fontFamily = FontFamily.Monospace, letterSpacing = 1.sp)
                     Spacer(Modifier.height(2.dp))
-                    gs.nextPieces.take(nextCount).forEachIndexed { i, p ->
-                        NextPiecePreview(p.shape, Modifier.size(when (i) { 0 -> 44.dp; 1 -> 34.dp; else -> 26.dp }).padding(1.dp), when (i) { 0 -> 1f; 1 -> 0.55f; else -> 0.3f })
+                    // Speed derives from level — higher level = higher speed number
+                    val speed = gs.level.coerceIn(1, 20)
+                    Text("$speed", fontSize = 20.sp, fontWeight = FontWeight.ExtraBold,
+                        fontFamily = FontFamily.Monospace, color = theme.accentColor)
+                }
+
+                // NEXT — single piece preview only (classic shows just 1)
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("NEXT", fontSize = 9.sp, color = theme.textSecondary, fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace, letterSpacing = 1.sp)
+                    Spacer(Modifier.height(2.dp))
+                    gs.nextPieces.take(1).forEach { p ->
+                        NextPiecePreview(p.shape, Modifier.size(44.dp), 1f)
                     }
                 }
             }
         }
         Spacer(Modifier.height(2.dp))
-        FullControls(dp, onHD, onHold, onLP, onLR, onRP, onRR, onDP, onDR, onRotate, onPause, onSet, onStart, gs.status)
+        // Classic controls — no hold button
+        ClassicControls(dp, onHD, onLP, onLR, onRP, onRR, onDP, onDR, onRotate, onPause, onSet, onStart, gs.status)
     }
 }
 
@@ -264,7 +267,7 @@ fun GameScreen(
         // Board with rounded corners and shadow
         Box(Modifier.weight(1f).fillMaxWidth().padding(horizontal = 12.dp)
             .shadow(4.dp, RoundedCornerShape(8.dp)).clip(RoundedCornerShape(8.dp))) {
-            GameBoard(gs.board, Modifier.fillMaxSize().alpha(boardDimAlpha), gs.currentPiece, gs.ghostY, ghost, gs.clearedLineRows, anim, ad, multiColor = LocalMultiColor.current)
+            GameBoard(gs.board, Modifier.fillMaxSize().alpha(boardDimAlpha), gs.currentPiece, gs.ghostY, ghost, gs.clearedLineRows, anim, ad, multiColor = true)
         }
         Spacer(Modifier.height(6.dp))
         FullControls(dp, onHD, onHold, onLP, onLR, onRP, onRR, onDP, onDR, onRotate, onPause, onSet, onStart, gs.status)
@@ -576,6 +579,31 @@ fun GameScreen(
         // Centre: HOLD + PAUSE/START + SETTINGS
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
             ActionButton("HOLD", onHold, width = 72.dp, height = 30.dp)
+            ActionButton(
+                if (status == GameStatus.MENU) "START" else "PAUSE",
+                { if (status == GameStatus.MENU) onStart() else onPause() },
+                width = 72.dp, height = 30.dp
+            )
+            ActionButton("...", onSet, width = 42.dp, height = 22.dp, backgroundColor = LocalGameTheme.current.buttonSecondary)
+        }
+        // Rotate
+        if (dp == DPadStyle.STANDARD) RotateButton(onRotate, 60.dp) else Spacer(Modifier.size(60.dp))
+    }
+}
+
+// === CLASSIC CONTROLS: Same as FullControls but without HOLD button ===
+@Composable private fun ClassicControls(
+    dp: DPadStyle, onHD: () -> Unit,
+    onLP: () -> Unit, onLR: () -> Unit, onRP: () -> Unit, onRR: () -> Unit,
+    onDP: () -> Unit, onDR: () -> Unit, onRotate: () -> Unit,
+    onPause: () -> Unit, onSet: () -> Unit, onStart: () -> Unit, status: GameStatus
+) {
+    Row(Modifier.fillMaxWidth().padding(horizontal = 2.dp, vertical = 2.dp), Arrangement.SpaceBetween, Alignment.CenterVertically) {
+        DPad(50.dp, rotateInCenter = dp == DPadStyle.ROTATE_CENTRE,
+            onUpPress = onHD, onDownPress = onDP, onDownRelease = onDR,
+            onLeftPress = onLP, onLeftRelease = onLR, onRightPress = onRP, onRightRelease = onRR, onRotate = onRotate)
+        // Centre: PAUSE/START + SETTINGS only (no HOLD)
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
             ActionButton(
                 if (status == GameStatus.MENU) "START" else "PAUSE",
                 { if (status == GameStatus.MENU) onStart() else onPause() },
