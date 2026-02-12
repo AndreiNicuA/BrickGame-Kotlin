@@ -82,8 +82,14 @@ fun GameBoard(
                     val cs = Size(cellSize - gap * 2, cellSize - gap * 2)
 
                     if (classicLCD) {
-                        // Classic LCD: each cell is a recessed square with beveled inner square
-                        drawLCDCell(offset, cs, cellValue > 0, theme.pixelOff, theme.pixelOn)
+                        // Classic LCD mode with authentic blink for line clears
+                        if (isClearingRow && isClearing && animationStyle != AnimationStyle.NONE) {
+                            // Authentic Brick Game blink: cells toggle ON/OFF rapidly (3-4 blinks)
+                            val blinkOn = (progress * 8).toInt() % 2 == 0
+                            drawLCDCell(offset, cs, blinkOn, theme.pixelOff, theme.pixelOn)
+                        } else {
+                            drawLCDCell(offset, cs, cellValue > 0, theme.pixelOff, theme.pixelOn)
+                        }
                     } else {
                         drawRoundRect(theme.pixelOff, offset, cs, CornerRadius(corner))
 
