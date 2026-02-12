@@ -1,6 +1,12 @@
 package com.brickgame.tetris.ui.screens
 
 import androidx.compose.animation.core.*
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -66,6 +72,8 @@ fun GameScreen(
     timerExpired: Boolean = false,
     remainingSeconds: Int = 0,
     onCloseApp: () -> Unit = {},
+    showOnboarding: Boolean = false,
+    onDismissOnboarding: () -> Unit = {},
     onStartGame: () -> Unit, onPause: () -> Unit, onResume: () -> Unit,
     onRotate: () -> Unit, onRotateCCW: () -> Unit,
     onHardDrop: () -> Unit, onHold: () -> Unit,
@@ -94,6 +102,15 @@ fun GameScreen(
     }
     val holdDisabled = eventsActive && lvl >= 16
     val effectiveHold: () -> Unit = if (holdDisabled) { {} } else onHold
+
+    // Screen shake on hard drop
+    var shakeOffset by remember { mutableStateOf(0f) }
+    val animShake by animateFloatAsState(shakeOffset, spring(dampingRatio = 0.3f, stiffness = 800f), label = "shake",
+        finishedListener = { shakeOffset = 0f })
+    // Piece lock flash
+    var lockFlash by remember { mutableStateOf(false) }
+    val flashAlpha by animateFloatAsState(if (lockFlash) 0.3f else 0f, tween(150), label = "flash",
+        finishedListener = { lockFlash = false })
 
     val btnShape = ButtonShape.entries.find { it.name == buttonStyle } ?: ButtonShape.ROUND
     val useControllerLayout = controllerConnected &&
@@ -164,8 +181,54 @@ fun GameScreen(
             }
         }
         ActionPopup(gameState.lastActionLabel, gameState.linesCleared)
+        // Combo counter display (top of screen)
+        if (gameState.comboCount >= 2 && gameState.status == GameStatus.PLAYING) {
+            Box(Modifier.align(Alignment.TopCenter).padding(top = 8.dp)
+                .background(Color.Black.copy(0.6f), RoundedCornerShape(12.dp))
+                .padding(horizontal = 12.dp, vertical = 4.dp)) {
+                Text("COMBO x${gameState.comboCount}", color = Color(0xFFF4D03F), fontSize = 14.sp,
+                    fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace)
+            }
+        }
+        // B2B streak
+        if (gameState.backToBackCount >= 2 && gameState.status == GameStatus.PLAYING) {
+            Box(Modifier.align(Alignment.TopEnd).padding(top = 8.dp, end = 8.dp)
+                .background(Color(0xFF8B5CF6).copy(0.7f), RoundedCornerShape(12.dp))
+                .padding(horizontal = 8.dp, vertical = 3.dp)) {
+                Text("B2B x${gameState.backToBackCount}", color = Color.White, fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+            }
+        }
+        // Countdown timer badge
+        if (remainingSeconds > 0 && gameState.status == GameStatus.PLAYING) {
+            val h = remainingSeconds / 3600; val m = (remainingSeconds % 3600) / 60; val s = remainingSeconds % 60
+            val isWarning = remainingSeconds <= 60
+            val pulseAlpha = if (isWarning) {
+                val inf = rememberInfiniteTransition(label = "tp")
+                val a by inf.animateFloat(0.6f, 1f, infiniteRepeatable(tween(500), RepeatMode.Reverse), label = "pa")
+                a
+            } else 0.8f
+            Box(Modifier.align(Alignment.TopStart).padding(top = 8.dp, start = 8.dp)
+                .background((if (isWarning) Color(0xFFB91C1C) else Color.Black).copy(pulseAlpha), RoundedCornerShape(12.dp))
+                .padding(horizontal = 10.dp, vertical = 4.dp)) {
+                Text("%d:%02d:%02d".format(h, m, s), color = Color.White, fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+            }
+        }
+        // Screen shake overlay
+        if (animShake != 0f) {
+            Box(Modifier.fillMaxSize().offset(y = animShake.dp))
+        }
+        // Lock flash overlay
+        if (flashAlpha > 0f) {
+            Box(Modifier.fillMaxSize().background(Color.White.copy(flashAlpha)))
+        }
         // Timer expired — blocks all gameplay
         if (timerExpired) TimerExpiredOverlay(onCloseApp)
+        // Onboarding overlay
+        if (showOnboarding && gameState.status == GameStatus.MENU) {
+            OnboardingOverlay(onDismissOnboarding)
+        }
     }
     } // end CompositionLocalProvider
 }
@@ -184,9 +247,21 @@ fun GameScreen(
         // Device frame — retro handheld LCD style
         Row(Modifier.fillMaxWidth().weight(1f).clip(RoundedCornerShape(10.dp)).background(theme.deviceColor)
             .border(2.dp, theme.deviceColor.darken(0.2f), RoundedCornerShape(10.dp)).padding(6.dp)) {
-            // Board — always mono-color in classic
-            GameBoard(gs.board, Modifier.weight(1f).fillMaxHeight().padding(end = 4.dp).alpha(boardDimAlpha),
-                gs.currentPiece, gs.ghostY, ghost, gs.clearedLineRows, anim, ad, multiColor = false)
+            // Board — always mono-color in classic, with LCD scanline overlay
+            Box(Modifier.weight(1f).fillMaxHeight().padding(end = 4.dp)) {
+                GameBoard(gs.board, Modifier.fillMaxSize().alpha(boardDimAlpha),
+                    gs.currentPiece, gs.ghostY, ghost, gs.clearedLineRows, anim, ad, multiColor = false)
+                // LCD scanline overlay
+                Canvas(Modifier.fillMaxSize().alpha(0.08f)) {
+                    val lineSpacing = 3.dp.toPx()
+                    var y = 0f
+                    while (y < size.height) {
+                        drawLine(Color.Black, start = androidx.compose.ui.geometry.Offset(0f, y),
+                            end = androidx.compose.ui.geometry.Offset(size.width, y), strokeWidth = 1f)
+                        y += lineSpacing
+                    }
+                }
+            }
             // Right info panel — SCORE > LEVELS > SPEED > NEXT (like the real LCD)
             Column(
                 Modifier.width(72.dp).fillMaxHeight().padding(vertical = 4.dp),
@@ -706,6 +781,36 @@ fun GameScreen(
 }
 
 // === Helpers ===
+@Composable private fun OnboardingOverlay(onDismiss: () -> Unit) {
+    var page by remember { mutableIntStateOf(0) }
+    val pages = listOf(
+        Triple("Welcome!", "Swipe or use the D-Pad to move pieces\nTap rotate to spin them", "🎮"),
+        Triple("Hold Piece", "Press HOLD to save a piece for later\n(Classic mode has no Hold)", "📦"),
+        Triple("Ready?", "Customize everything in Settings\nChoose your layout and theme", "⚙️")
+    )
+    Box(Modifier.fillMaxSize().background(Color.Black.copy(0.88f)).clickable {
+        if (page < pages.size - 1) page++ else onDismiss()
+    }, Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(32.dp)) {
+            Text(pages[page].third, fontSize = 48.sp)
+            Spacer(Modifier.height(16.dp))
+            Text(pages[page].first, fontSize = 24.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, color = Color(0xFFF4D03F))
+            Spacer(Modifier.height(12.dp))
+            Text(pages[page].second, fontSize = 14.sp, fontFamily = FontFamily.Monospace, color = Color.White.copy(0.8f),
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+            Spacer(Modifier.height(32.dp))
+            // Page indicators
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                pages.forEachIndexed { i, _ ->
+                    Box(Modifier.size(8.dp).clip(CircleShape).background(if (i == page) Color(0xFFF4D03F) else Color.White.copy(0.3f)))
+                }
+            }
+            Spacer(Modifier.height(16.dp))
+            Text(if (page < pages.size - 1) "Tap to continue" else "Tap to start!", color = Color.White.copy(0.5f), fontSize = 12.sp, fontFamily = FontFamily.Monospace)
+        }
+    }
+}
+
 @Composable private fun Tag(t: String, modifier: Modifier = Modifier) { Text(t, modifier = modifier, fontSize = 9.sp, color = LocalGameTheme.current.textSecondary, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, letterSpacing = 0.5.sp) }
 @Composable private fun ScoreBlock(score: Int, level: Int, lines: Int) {
     val theme = LocalGameTheme.current
@@ -717,6 +822,7 @@ fun GameScreen(
 
 // === Overlays ===
 @Composable private fun MenuOverlay(hs: Int, scoreHistory: List<com.brickgame.tetris.data.ScoreEntry>, onStart: () -> Unit, onSet: () -> Unit) {
+    // Enhanced: mini leaderboard below high score
     val theme = LocalGameTheme.current
     val isDark = com.brickgame.tetris.ui.theme.LocalIsDarkMode.current
     val bgColor = if (isDark) theme.backgroundColor else Color(0xFFF2F2F2)
@@ -750,6 +856,24 @@ fun GameScreen(
             Spacer(Modifier.height(12.dp))
             ActionButton("SETTINGS", onSet, width = 180.dp, height = 44.dp,
                 backgroundColor = if (isDark) theme.buttonSecondary else Color(0xFFE0E0E0))
+            // Mini leaderboard — top 3 scores
+            if (scoreHistory.size > 1) {
+                Spacer(Modifier.height(20.dp))
+                Text("RECENT BEST", fontSize = 9.sp, fontFamily = FontFamily.Monospace,
+                    color = if (isDark) theme.textSecondary.copy(0.5f) else Color(0xFF999999), letterSpacing = 3.sp)
+                Spacer(Modifier.height(6.dp))
+                val top3 = scoreHistory.sortedByDescending { it.score }.take(3)
+                top3.forEachIndexed { i, entry ->
+                    val medal = when (i) { 0 -> "🥇"; 1 -> "🥈"; 2 -> "🥉"; else -> "" }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(medal, fontSize = 14.sp)
+                        Text(entry.score.toString(), fontSize = 14.sp, fontFamily = FontFamily.Monospace,
+                            fontWeight = FontWeight.Bold, color = if (isDark) theme.textPrimary.copy(0.7f) else Color(0xFF444444))
+                        Text("Lv${entry.level}", fontSize = 11.sp, fontFamily = FontFamily.Monospace,
+                            color = if (isDark) theme.textSecondary.copy(0.4f) else Color(0xFF888888))
+                    }
+                }
+            }
         }
     }
 }
@@ -885,16 +1009,39 @@ private fun FallingPiecesBackground(theme: com.brickgame.tetris.ui.theme.GameThe
 
 @Composable private fun GameOverOverlay(score: Int, level: Int, lines: Int, onRestart: () -> Unit, onMenu: () -> Unit, onLeave: () -> Unit) {
     val theme = LocalGameTheme.current
-    Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.8f)), Alignment.Center) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("GAME", fontSize = 32.sp, fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace, color = Color(0xFFFF4444), letterSpacing = 4.sp)
-            Text("OVER", fontSize = 32.sp, fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace, color = Color(0xFFFF4444), letterSpacing = 4.sp)
-            Spacer(Modifier.height(20.dp))
-            Text(score.toString(), fontSize = 28.sp, fontFamily = FontFamily.Monospace, color = theme.accentColor, fontWeight = FontWeight.Bold)
-            Text("Level $level · $lines Lines", fontSize = 13.sp, fontFamily = FontFamily.Monospace, color = Color.White.copy(alpha = 0.7f))
-            Spacer(Modifier.height(28.dp)); ActionButton("AGAIN", onRestart, width = 160.dp, height = 48.dp, backgroundColor = theme.accentColor)
-            Spacer(Modifier.height(12.dp)); ActionButton("LEAVE", onLeave, width = 160.dp, height = 42.dp, backgroundColor = Color(0xFFB91C1C))
+    // New high score flash
+    val inf = rememberInfiniteTransition(label = "go")
+    val titlePulse by inf.animateFloat(0.8f, 1f, infiniteRepeatable(tween(600), RepeatMode.Reverse), label = "gp")
+    Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.85f)), Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.verticalScroll(rememberScrollState())) {
+            Text("GAME", fontSize = 34.sp, fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace,
+                color = Color(0xFFFF4444).copy(alpha = titlePulse), letterSpacing = 6.sp)
+            Text("OVER", fontSize = 34.sp, fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace,
+                color = Color(0xFFFF4444).copy(alpha = titlePulse), letterSpacing = 6.sp)
+            Spacer(Modifier.height(16.dp))
+            // Score with glow effect
+            Text(score.toString(), fontSize = 32.sp, fontFamily = FontFamily.Monospace, color = theme.accentColor, fontWeight = FontWeight.ExtraBold)
+            Spacer(Modifier.height(8.dp))
+            // Stats breakdown
+            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                StatChip("LEVEL", "$level")
+                StatChip("LINES", "$lines")
+                StatChip("LPM", if (level > 0) "${"%.1f".format(lines.toFloat() / level)}" else "0")
+            }
+            Spacer(Modifier.height(24.dp))
+            ActionButton("AGAIN", onRestart, width = 160.dp, height = 48.dp, backgroundColor = theme.accentColor)
+            Spacer(Modifier.height(10.dp))
+            ActionButton("LEAVE", onLeave, width = 160.dp, height = 42.dp, backgroundColor = Color(0xFFB91C1C))
+            Spacer(Modifier.height(16.dp))
         }
+    }
+}
+
+@Composable private fun StatChip(label: String, value: String) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.background(Color.White.copy(0.08f), RoundedCornerShape(8.dp)).padding(horizontal = 12.dp, vertical = 6.dp)) {
+        Text(label, fontSize = 8.sp, color = Color.White.copy(0.5f), fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, letterSpacing = 1.sp)
+        Text(value, fontSize = 16.sp, color = Color.White, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
     }
 }
 

@@ -49,6 +49,7 @@ class SettingsRepository(private val context: Context) {
         private val GAME_MODE = stringPreferencesKey("game_mode")
         private val INFINITY_TIMER = intPreferencesKey("infinity_timer_minutes")
         private val INFINITY_TIMER_ENABLED = booleanPreferencesKey("infinity_timer_enabled")
+        private val ONBOARDING_COMPLETE = booleanPreferencesKey("onboarding_complete")
     }
     
     private fun <T> pref(key: Preferences.Key<T>, default: T): Flow<T> =
@@ -161,4 +162,7 @@ class SettingsRepository(private val context: Context) {
 
     val infinityTimerEnabled get() = pref(INFINITY_TIMER_ENABLED, false)
     suspend fun setInfinityTimerEnabled(v: Boolean) = set(INFINITY_TIMER_ENABLED, v)
+
+    val onboardingComplete get() = pref(ONBOARDING_COMPLETE, false)
+    suspend fun setOnboardingComplete(v: Boolean) = set(ONBOARDING_COMPLETE, v)
 }

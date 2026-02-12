@@ -98,6 +98,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private val _timerExpired = MutableStateFlow(false)
     val timerExpired: StateFlow<Boolean> = _timerExpired.asStateFlow()
     private var countdownJob: Job? = null
+    private val _showOnboarding = MutableStateFlow(false)
+    val showOnboarding: StateFlow<Boolean> = _showOnboarding.asStateFlow()
     private val _dataLoaded = MutableStateFlow(false)
     val dataLoaded: StateFlow<Boolean> = _dataLoaded.asStateFlow()
     val playerName = playerRepo.playerName.stateIn(viewModelScope, SharingStarted.Eagerly, "Player")
@@ -176,6 +178,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch { settingsRepo.gameMode.collect { name -> _gameMode.value = GameMode.entries.find { it.name == name } ?: GameMode.MARATHON; game.setGameMode(_gameMode.value) } }
         viewModelScope.launch { settingsRepo.infinityTimer.collect { _infinityTimer.value = it } }
         viewModelScope.launch { settingsRepo.infinityTimerEnabled.collect { _infinityTimerEnabled.value = it } }
+        viewModelScope.launch { settingsRepo.onboardingComplete.collect { _showOnboarding.value = !it } }
         // Signal that data is loaded after critical settings have their first emission
         viewModelScope.launch {
             kotlinx.coroutines.flow.combine(
@@ -287,6 +290,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     fun setButtonStyle(v: String) { _buttonStyle.value = v; viewModelScope.launch { settingsRepo.setButtonStyle(v) } }
     fun setControllerLayout(v: String) { _controllerLayout.value = v; viewModelScope.launch { settingsRepo.setControllerLayout(v) } }
     fun setInfinityTimer(v: Int) { _infinityTimer.value = v; viewModelScope.launch { settingsRepo.setInfinityTimer(v) } }
+    fun dismissOnboarding() { _showOnboarding.value = false; viewModelScope.launch { settingsRepo.setOnboardingComplete(true) } }
+
     fun setInfinityTimerEnabled(v: Boolean) { _infinityTimerEnabled.value = v; viewModelScope.launch { settingsRepo.setInfinityTimerEnabled(v) } }
     fun setAnimationStyle(s: AnimationStyle) { _animationStyle.value = s; viewModelScope.launch { settingsRepo.setAnimationStyle(s.name) } }
     fun setAnimationDuration(d: Float) { _animationDuration.value = d; viewModelScope.launch { settingsRepo.setAnimationDuration(d) } }

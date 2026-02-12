@@ -177,6 +177,7 @@ class MainActivity : ComponentActivity() {
             val infinityTimerEnabled by vm.infinityTimerEnabled.collectAsState()
             val timerExpired by vm.timerExpired.collectAsState()
             val remainingSeconds by vm.remainingSeconds.collectAsState()
+            val showOnboarding by vm.showOnboarding.collectAsState()
 
             // Sync controller settings to gamepad handler
             LaunchedEffect(controllerEnabled, controllerDeadzone) {
@@ -419,6 +420,8 @@ class MainActivity : ComponentActivity() {
                                 timerExpired = timerExpired,
                                 remainingSeconds = remainingSeconds,
                                 onCloseApp = { this@MainActivity.finishAndRemoveTask() },
+                                showOnboarding = showOnboarding,
+                                onDismissOnboarding = vm::dismissOnboarding,
                                 onStartGame = if (is3D) vm::start3DGame else vm::startGame,
                                 onPause = vm::pauseGame, onResume = vm::resumeGame,
                                 onRotate = vm::rotate, onRotateCCW = vm::rotateCounterClockwise,

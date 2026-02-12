@@ -1,6 +1,7 @@
 package com.brickgame.tetris.ui.screens
 
 import androidx.compose.foundation.*
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -218,6 +219,28 @@ fun SettingsScreen(
         item { Header("Profile", onBack); Spacer(Modifier.height(16.dp)) }
         item { Card { Text("Player Name", color = dim(), fontSize = 12.sp); Spacer(Modifier.height(4.dp)); EditField(editName) { editName = it; onName(it) } } }
         item { Card { Text("High Score", color = dim(), fontSize = 12.sp); Text(hs.toString(), color = acc(), fontSize = 24.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace) } }
+        // Stats dashboard
+        if (history.isNotEmpty()) {
+            item { Lbl("Stats Dashboard") }
+            item { Card {
+                val totalGames = history.size
+                val totalLines = history.sumOf { it.lines }
+                val avgScore = history.sumOf { it.score } / totalGames
+                val bestLevel = history.maxOf { it.level }
+                val bestLines = history.maxOf { it.lines }
+                Row(Modifier.fillMaxWidth(), Arrangement.SpaceEvenly) {
+                    DashStat("Games", "$totalGames")
+                    DashStat("Total Lines", "$totalLines")
+                    DashStat("Avg Score", "$avgScore")
+                }
+                Spacer(Modifier.height(8.dp))
+                Row(Modifier.fillMaxWidth(), Arrangement.SpaceEvenly) {
+                    DashStat("Best Level", "$bestLevel")
+                    DashStat("Best Lines", "$bestLines")
+                    DashStat("High Score", "$hs")
+                }
+            } }
+        }
         item {
             Row(Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 8.dp), Arrangement.SpaceBetween, Alignment.CenterVertically) {
                 Text("Score History", color = acc(), fontSize = 14.sp, fontWeight = FontWeight.Bold)
@@ -320,9 +343,36 @@ fun SettingsScreen(
 }
 
 @Composable private fun ThemeRow(t: GameTheme, sel: Boolean, onClick: () -> Unit) {
-    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp).clip(RoundedCornerShape(12.dp)).background(if (sel) selBg() else card()).clickable { onClick() }.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-        ThemeSwatches(t); Spacer(Modifier.width(12.dp)); Text(t.name, color = tx(), fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp).clip(RoundedCornerShape(12.dp)).background(if (sel) selBg() else card()).clickable { onClick() }.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+        // Mini board preview
+        ThemeMiniPreview(t)
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text(t.name, color = tx(), fontWeight = FontWeight.Bold, fontSize = 14.sp)
+            Spacer(Modifier.height(2.dp))
+            ThemeSwatches(t)
+        }
         if (sel) Text("✓", color = acc(), fontSize = 18.sp, fontWeight = FontWeight.Bold)
+    }
+}
+
+@Composable private fun ThemeMiniPreview(t: GameTheme) {
+    // Tiny 5x4 board preview showing how the theme looks
+    Box(Modifier.size(42.dp, 36.dp).clip(RoundedCornerShape(4.dp)).background(t.screenBackground).border(1.dp, t.deviceColor, RoundedCornerShape(4.dp)).padding(2.dp)) {
+        Canvas(Modifier.fillMaxSize()) {
+            val cellW = size.width / 5f; val cellH = size.height / 4f
+            // Draw empty cells
+            for (r in 0..3) for (c in 0..4) {
+                drawRect(t.pixelOff, topLeft = androidx.compose.ui.geometry.Offset(c * cellW + 0.5f, r * cellH + 0.5f),
+                    size = androidx.compose.ui.geometry.Size(cellW - 1f, cellH - 1f))
+            }
+            // Draw some "on" cells to simulate pieces
+            val onCells = listOf(1 to 3, 2 to 3, 3 to 3, 4 to 3, 0 to 2, 1 to 2, 2 to 2, 3 to 1, 3 to 2, 4 to 2)
+            onCells.forEach { (c, r) ->
+                drawRect(t.pixelOn, topLeft = androidx.compose.ui.geometry.Offset(c * cellW + 0.5f, r * cellH + 0.5f),
+                    size = androidx.compose.ui.geometry.Size(cellW - 1f, cellH - 1f))
+            }
+        }
     }
 }
 
@@ -619,6 +669,13 @@ fun SettingsScreen(
 @Composable private fun Chip(text: String, sel: Boolean, onClick: () -> Unit) { val a = acc(); val c = card(); val d = dim(); val t2 = tx(); Box(Modifier.clip(RoundedCornerShape(8.dp)).background(if (sel) a.copy(0.2f) else c).border(1.dp, if (sel) a else d.copy(0.3f), RoundedCornerShape(8.dp)).clickable { onClick() }.padding(horizontal = 14.dp, vertical = 8.dp)) { Text(text, color = if (sel) a else t2, fontSize = 13.sp, fontWeight = if (sel) FontWeight.Bold else FontWeight.Normal) } }
 @Composable private fun EditField(value: String, onChange: (String) -> Unit) { val a = acc(); val t2 = tx(); val fb = if (LocalIsDarkMode.current) Color(0xFF252525) else Color(0xFFF0F0F0); BasicTextField(value, onChange, textStyle = TextStyle(color = t2, fontSize = 18.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace), cursorBrush = SolidColor(a), singleLine = true, modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(fb).padding(12.dp)) }
 @Composable private fun sliderColors() = SliderDefaults.colors(thumbColor = acc(), activeTrackColor = acc(), inactiveTrackColor = acc().copy(0.15f))
+
+@Composable private fun DashStat(label: String, value: String) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(4.dp)) {
+        Text(value, color = acc(), fontSize = 18.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+        Text(label, color = dim(), fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp)
+    }
+}
 
 // ===== TIMER PICKER DIALOG — fullscreen overlay with h:m:s scroll wheels =====
 @Composable private fun TimerPickerDialog(initialSeconds: Int, onConfirm: (Int) -> Unit, onDismiss: () -> Unit) {

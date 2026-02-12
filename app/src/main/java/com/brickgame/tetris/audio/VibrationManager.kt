@@ -151,6 +151,38 @@ class VibrationManager(context: Context) {
             VibrationStyle.NONE -> {}
         }
     }
+
+    /** Quick double-tap for hold piece */
+    fun vibrateHold() {
+        if (!enabled) return
+        vibratePattern(longArrayOf(0, 20, 40, 20), false)
+    }
+
+    /** Rising pattern for combo chains */
+    fun vibrateCombo(comboCount: Int) {
+        if (!enabled) return
+        val intensity = (0.4f + (comboCount * 0.1f)).coerceAtMost(1.0f)
+        vibrateSingle((30 + comboCount * 10).coerceAtMost(100), intensity)
+    }
+
+    /** Satisfying thump for piece lock */
+    fun vibrateLock() {
+        if (!enabled) return
+        vibrateSingle(25, 0.3f)
+    }
+
+    /** Strong pulse for timer warning */
+    fun vibrateTimerWarning() {
+        if (!enabled) return
+        vibratePattern(longArrayOf(0, 100, 80, 100, 80, 150), false)
+    }
+
+    /** Celebration burst for new high score */
+    fun vibrateHighScore() {
+        if (!enabled) return
+        vibratePattern(longArrayOf(0, 50, 30, 50, 30, 50, 30, 100), false)
+    }
+
     
     private fun vibrateSingle(durationMs: Int, amplitudeMultiplier: Float) {
         val actualDuration = (durationMs * intensity).toLong().coerceAtLeast(1)

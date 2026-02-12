@@ -127,6 +127,39 @@ class SoundManager(@Suppress("unused") private val context: Context) {
         }
     }
     
+
+    fun playHold() {
+        if (!enabled || soundStyle == SoundStyle.NONE) return
+        playTone(ToneGenerator.TONE_DTMF_4, 35)
+    }
+
+    fun playCombo(count: Int) {
+        if (!enabled || soundStyle == SoundStyle.NONE) return
+        // Higher pitched tone for longer combos
+        val tone = when {
+            count >= 8 -> ToneGenerator.TONE_DTMF_A
+            count >= 5 -> ToneGenerator.TONE_DTMF_9
+            count >= 3 -> ToneGenerator.TONE_DTMF_7
+            else -> ToneGenerator.TONE_DTMF_5
+        }
+        playTone(tone, 60 + count * 10)
+    }
+
+    fun playPieceLock() {
+        if (!enabled || soundStyle == SoundStyle.NONE) return
+        playTone(ToneGenerator.TONE_PROP_BEEP, 15)
+    }
+
+    fun playTimerWarning() {
+        if (!enabled || soundStyle == SoundStyle.NONE) return
+        playTone(ToneGenerator.TONE_CDMA_ABBR_ALERT, 200)
+    }
+
+    fun playNewHighScore() {
+        if (!enabled || soundStyle == SoundStyle.NONE) return
+        playTone(ToneGenerator.TONE_CDMA_ALERT_INCALL_LITE, 400)
+    }
+
     private fun playTone(tone: Int, durationMs: Int) {
         try {
             toneGenerator?.startTone(tone, durationMs)
