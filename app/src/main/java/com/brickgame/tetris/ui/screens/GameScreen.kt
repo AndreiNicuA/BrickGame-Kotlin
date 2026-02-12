@@ -567,9 +567,9 @@ fun GameScreen(
             }
 
             // === Score flyup animation ===
-            if (flyupVisible) {
-                val flyupAlpha by animateFloatAsState(if (flyupVisible) 1f else 0f, tween(400), label = "fua")
-                val flyupOffset by animateFloatAsState(if (flyupVisible) 0f else 20f, tween(300), label = "fuo")
+            val flyupAlpha by animateFloatAsState(if (flyupVisible) 1f else 0f, tween(400), label = "fua")
+            val flyupOffset by animateFloatAsState(if (flyupVisible) 0f else 20f, tween(300), label = "fuo")
+            if (flyupAlpha > 0.01f) {
                 Text(
                     flyupText,
                     fontSize = 28.sp, fontWeight = FontWeight.ExtraBold,
