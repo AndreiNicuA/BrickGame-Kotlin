@@ -43,6 +43,7 @@ import com.brickgame.tetris.ui.screens.GameScreen
 import com.brickgame.tetris.ui.screens.GameViewModel
 import com.brickgame.tetris.ui.screens.SettingsScreen
 import com.brickgame.tetris.ui.theme.BrickGameTheme
+import com.brickgame.tetris.ui.theme.LocalIsDarkMode
 import kotlinx.coroutines.delay
 import kotlin.math.*
 
@@ -225,6 +226,14 @@ class MainActivity : ComponentActivity() {
             val is3D = activeLayout == LayoutPreset.PORTRAIT_3D
 
             BrickGameTheme(gameTheme = theme, appThemeMode = appThemeMode) {
+                // Control status bar icon appearance based on theme mode
+                val isDarkMode = LocalIsDarkMode.current
+                LaunchedEffect(isDarkMode) {
+                    val insetsController = WindowCompat.getInsetsController(window, window.decorView)
+                    // Light status bar = dark icons (for light backgrounds)
+                    insetsController.isAppearanceLightStatusBars = !isDarkMode
+                    insetsController.isAppearanceLightNavigationBars = !isDarkMode
+                }
                 Box(Modifier.fillMaxSize()) {
                     // Layer 1: Splash — rotating cube + falling pieces (visible during loading)
                     if (splashAlpha > 0.01f) {

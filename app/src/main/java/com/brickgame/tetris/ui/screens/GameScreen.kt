@@ -587,36 +587,45 @@ fun GameScreen(
 // === Overlays ===
 @Composable private fun MenuOverlay(hs: Int, scoreHistory: List<com.brickgame.tetris.data.ScoreEntry>, onStart: () -> Unit, onSet: () -> Unit) {
     val theme = LocalGameTheme.current
-    Box(Modifier.fillMaxSize().background(theme.backgroundColor)) {
+    val isDark = com.brickgame.tetris.ui.theme.LocalIsDarkMode.current
+    val bgColor = if (isDark) theme.backgroundColor else Color(0xFFF2F2F2)
+    Box(Modifier.fillMaxSize().background(bgColor)) {
         // Falling tetris pieces background
-        FallingPiecesBackground(theme)
+        FallingPiecesBackground(theme, isDark)
         // Content
         Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-            Text("BRICK", fontSize = 38.sp, fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace, color = theme.textPrimary.copy(alpha = 0.9f), letterSpacing = 8.sp)
-            Text("GAME", fontSize = 38.sp, fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace, color = theme.accentColor, letterSpacing = 8.sp)
+            Text("BRICK", fontSize = 38.sp, fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace,
+                color = if (isDark) theme.textPrimary.copy(alpha = 0.9f) else Color(0xFF2A2A2A), letterSpacing = 8.sp)
+            Text("GAME", fontSize = 38.sp, fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace,
+                color = if (isDark) theme.accentColor else Color(0xFFB8860B), letterSpacing = 8.sp)
             Spacer(Modifier.height(32.dp))
             if (hs > 0) {
                 val bestEntry = scoreHistory.maxByOrNull { it.score }
-                Text("$hs", fontSize = 28.sp, fontFamily = FontFamily.Monospace, color = theme.accentColor, fontWeight = FontWeight.Bold)
+                Text("$hs", fontSize = 28.sp, fontFamily = FontFamily.Monospace,
+                    color = if (isDark) theme.accentColor else Color(0xFFB8860B), fontWeight = FontWeight.Bold)
                 if (bestEntry != null) {
                     val sdf = java.text.SimpleDateFormat("dd.MM.yyyy", java.util.Locale.getDefault())
                     val dateStr = sdf.format(java.util.Date(bestEntry.timestamp))
-                    Text("${bestEntry.playerName} · $dateStr", fontSize = 11.sp, fontFamily = FontFamily.Monospace, color = theme.textSecondary)
+                    Text("${bestEntry.playerName} · $dateStr", fontSize = 11.sp, fontFamily = FontFamily.Monospace,
+                        color = if (isDark) theme.textSecondary else Color(0xFF666666))
                 }
                 Spacer(Modifier.height(4.dp))
-                Text("HIGH SCORE", fontSize = 10.sp, fontFamily = FontFamily.Monospace, color = theme.textSecondary.copy(alpha = 0.6f), letterSpacing = 4.sp)
+                Text("HIGH SCORE", fontSize = 10.sp, fontFamily = FontFamily.Monospace,
+                    color = if (isDark) theme.textSecondary.copy(alpha = 0.6f) else Color(0xFF999999), letterSpacing = 4.sp)
                 Spacer(Modifier.height(32.dp))
             }
-            ActionButton("PLAY", onStart, width = 180.dp, height = 52.dp, backgroundColor = theme.accentColor)
+            ActionButton("PLAY", onStart, width = 180.dp, height = 52.dp,
+                backgroundColor = if (isDark) theme.accentColor else Color(0xFFB8860B))
             Spacer(Modifier.height(12.dp))
-            ActionButton("SETTINGS", onSet, width = 180.dp, height = 44.dp, backgroundColor = LocalGameTheme.current.buttonSecondary)
+            ActionButton("SETTINGS", onSet, width = 180.dp, height = 44.dp,
+                backgroundColor = if (isDark) theme.buttonSecondary else Color(0xFFE0E0E0))
         }
     }
 }
 
 // Falling transparent tetris pieces — matrix rain style with colored pieces, long green trails, and sparkle
 @Composable
-private fun FallingPiecesBackground(theme: com.brickgame.tetris.ui.theme.GameTheme) {
+private fun FallingPiecesBackground(theme: com.brickgame.tetris.ui.theme.GameTheme, isDark: Boolean = true) {
     data class FP(val col: Float, val speed: Float, val sz: Float, val shape: Int,
                   val alpha: Float, val startY: Float, val colorIdx: Int, val trailLen: Int,
                   val sparkle: Boolean, val sparklePhase: Float)
@@ -658,6 +667,9 @@ private fun FallingPiecesBackground(theme: com.brickgame.tetris.ui.theme.GameThe
     Canvas(Modifier.fillMaxSize()) {
         val w = size.width; val h = size.height
         val wrapH = h + 600f  // total travel distance before wrapping
+        // In light mode, use higher alpha for visibility on light background
+        val alphaBoost = if (isDark) 1f else 2.2f
+        val actualTrailColor = if (isDark) trailColor else Color(0xFF22A050)
         pieces.forEach { p ->
             // Each piece wraps independently based on its own startY offset
             val rawY = p.startY + anim * p.speed
@@ -666,15 +678,16 @@ private fun FallingPiecesBackground(theme: com.brickgame.tetris.ui.theme.GameThe
             val s = p.sz
             val shape = shapes[p.shape % shapes.size]
             val pColor = pieceColors[p.colorIdx]
+            val pa = (p.alpha * alphaBoost).coerceAtMost(0.55f)
 
             // Draw long green trail (fading upward) — bigger trail
             for (ti in 1..p.trailLen) {
                 val trailY = baseY - ti * (s + 2) * 1.2f
-                val trailAlpha = p.alpha * 0.5f * (1f - ti.toFloat() / (p.trailLen + 1))
+                val trailAlpha = pa * 0.5f * (1f - ti.toFloat() / (p.trailLen + 1))
                 val trailSz = s * (1f - ti * 0.04f).coerceAtLeast(0.3f)
                 shape.forEach { (dx, dy) ->
                     drawRoundRect(
-                        color = trailColor.copy(alpha = trailAlpha.coerceIn(0f, 1f)),
+                        color = actualTrailColor.copy(alpha = trailAlpha.coerceIn(0f, 1f)),
                         topLeft = androidx.compose.ui.geometry.Offset(x + dx * (s + 2), trailY + dy * (s + 2)),
                         size = androidx.compose.ui.geometry.Size(trailSz, trailSz),
                         cornerRadius = androidx.compose.ui.geometry.CornerRadius(2f, 2f)
@@ -685,7 +698,7 @@ private fun FallingPiecesBackground(theme: com.brickgame.tetris.ui.theme.GameThe
             // Draw colored piece
             shape.forEach { (dx, dy) ->
                 drawRoundRect(
-                    color = pColor.copy(alpha = p.alpha),
+                    color = pColor.copy(alpha = pa),
                     topLeft = androidx.compose.ui.geometry.Offset(x + dx * (s + 2), baseY + dy * (s + 2)),
                     size = androidx.compose.ui.geometry.Size(s, s),
                     cornerRadius = androidx.compose.ui.geometry.CornerRadius(2f, 2f)
@@ -698,7 +711,7 @@ private fun FallingPiecesBackground(theme: com.brickgame.tetris.ui.theme.GameThe
                 val sparkX = x + (s + 2) * 0.5f
                 val sparkY = baseY - s * 0.5f
                 drawCircle(
-                    color = Color.White.copy(alpha = sparkleAlpha * p.alpha * 3f),
+                    color = Color.White.copy(alpha = sparkleAlpha * pa * 3f),
                     radius = s * 0.35f,
                     center = androidx.compose.ui.geometry.Offset(sparkX, sparkY)
                 )
