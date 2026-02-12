@@ -154,7 +154,7 @@ class SettingsRepository(private val context: Context) {
     val gameMode get() = pref(GAME_MODE, "MARATHON")
     suspend fun setGameMode(v: String) = set(GAME_MODE, v)
 
-    // Infinity timer (0 = disabled)
+    // Infinity timer in seconds (0 = disabled, max 36000 = 10h)
     val infinityTimer get() = pref(INFINITY_TIMER, 0)
-    suspend fun setInfinityTimer(v: Int) = set(INFINITY_TIMER, v.coerceIn(0, 600))
+    suspend fun setInfinityTimer(v: Int) = set(INFINITY_TIMER, v.coerceIn(0, 36000))
 }

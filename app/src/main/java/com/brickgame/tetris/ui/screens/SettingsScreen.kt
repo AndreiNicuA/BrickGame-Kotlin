@@ -365,52 +365,43 @@ fun SettingsScreen(
         item { Lbl("Difficulty") }; items(Difficulty.entries.size) { i -> val d = Difficulty.entries[i]; Sel("${d.displayName} — ${d.description}", d == diff) { onD(d) } }
         item { Lbl("Game Mode") }; items(GameMode.entries.size) { i -> val m = GameMode.entries[i]; Sel("${m.displayName} — ${m.description}", m == mode) { onM(m) } }
         if (mode == GameMode.INFINITY) {
-            item { Card {
-                Text("Play Timer", color = tx(), fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                Text("Set a reminder to take a break", color = dim(), fontSize = 11.sp)
-                Spacer(Modifier.height(10.dp))
-                val hours = infinityTimer / 60
-                val minutes = infinityTimer % 60
-                var selH by remember(infinityTimer) { mutableStateOf(hours) }
-                var selM by remember(infinityTimer) { mutableStateOf(minutes) }
-                if (infinityTimer == 0) {
-                    // Timer off — show enable button
-                    Row(Modifier.fillMaxWidth(), Arrangement.Center) {
-                        Text("Timer is off", color = dim(), fontSize = 13.sp, modifier = Modifier.padding(end = 12.dp).align(Alignment.CenterVertically))
-                        Box(Modifier.clip(RoundedCornerShape(8.dp)).background(acc().copy(0.2f)).border(1.dp, acc(), RoundedCornerShape(8.dp)).clickable { onIT(60) }.padding(horizontal = 16.dp, vertical = 8.dp)) {
-                            Text("Set Timer", color = acc(), fontSize = 13.sp, fontWeight = FontWeight.Bold)
+            item {
+                var showTimerDialog by remember { mutableStateOf(false) }
+                Card {
+                    Text("Play Timer", color = tx(), fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    Text("Set a reminder to take a break", color = dim(), fontSize = 11.sp)
+                    Spacer(Modifier.height(8.dp))
+                    Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
+                        if (infinityTimer == 0) {
+                            Text("Off", color = dim(), fontSize = 16.sp)
+                        } else {
+                            val h = infinityTimer / 3600; val m = (infinityTimer % 3600) / 60; val s = infinityTimer % 60
+                            val parts = mutableListOf<String>()
+                            if (h > 0) parts.add("${h}h")
+                            if (m > 0) parts.add("${m}m")
+                            if (s > 0) parts.add("${s}s")
+                            Text(parts.joinToString(" "), color = acc(), fontSize = 16.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            if (infinityTimer > 0) {
+                                Box(Modifier.clip(RoundedCornerShape(8.dp)).background(Color(0xFFB91C1C).copy(0.15f)).border(1.dp, Color(0xFFB91C1C).copy(0.5f), RoundedCornerShape(8.dp)).clickable { onIT(0) }.padding(horizontal = 12.dp, vertical = 8.dp)) {
+                                    Text("Clear", color = Color(0xFFB91C1C), fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                            Box(Modifier.clip(RoundedCornerShape(8.dp)).background(acc().copy(0.15f)).border(1.dp, acc(), RoundedCornerShape(8.dp)).clickable { showTimerDialog = true }.padding(horizontal = 12.dp, vertical = 8.dp)) {
+                                Text(if (infinityTimer == 0) "Set" else "Edit", color = acc(), fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                            }
                         }
                     }
-                } else {
-                    // Scroll wheel picker
-                    Row(Modifier.fillMaxWidth(), Arrangement.Center, Alignment.CenterVertically) {
-                        // Hours wheel
-                        ScrollWheelPicker(
-                            items = (0..10).map { if (it == 0) "0" else "$it" },
-                            selectedIndex = selH,
-                            onSelected = { selH = it; val total = selH * 60 + selM; if (total in 1..600) onIT(total) else if (total == 0) onIT(0) },
-                            label = "h"
-                        )
-                        Text(":", color = acc(), fontSize = 28.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 6.dp))
-                        // Minutes wheel
-                        ScrollWheelPicker(
-                            items = (0..55 step 5).map { it.toString().padStart(2, '0') },
-                            selectedIndex = selM / 5,
-                            onSelected = { selM = it * 5; val total = selH * 60 + selM; if (total in 1..600) onIT(total) else if (total == 0) onIT(0) },
-                            label = "m"
-                        )
-                    }
-                    Spacer(Modifier.height(4.dp))
-                    val displayH = infinityTimer / 60; val displayM = infinityTimer % 60
-                    val timeStr = if (displayH > 0 && displayM > 0) "${displayH}h ${displayM}m"
-                                  else if (displayH > 0) "${displayH}h" else "${displayM}m"
-                    Text("Timer: $timeStr", color = acc(), fontSize = 13.sp, fontWeight = FontWeight.Bold, modifier = Modifier.align(Alignment.CenterHorizontally))
-                    Spacer(Modifier.height(6.dp))
-                    Box(Modifier.align(Alignment.CenterHorizontally).clip(RoundedCornerShape(8.dp)).background(Color(0xFFB91C1C).copy(0.2f)).border(1.dp, Color(0xFFB91C1C), RoundedCornerShape(8.dp)).clickable { onIT(0) }.padding(horizontal = 14.dp, vertical = 6.dp)) {
-                        Text("Turn Off", color = Color(0xFFB91C1C), fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                    }
                 }
-            } }
+                if (showTimerDialog) {
+                    TimerPickerDialog(
+                        initialSeconds = infinityTimer,
+                        onConfirm = { onIT(it); showTimerDialog = false },
+                        onDismiss = { showTimerDialog = false }
+                    )
+                }
+            }
         }
         item { Lbl("Options") }
         item { Card { Toggle("Ghost Piece", ghost, onG) } }
@@ -631,54 +622,131 @@ fun SettingsScreen(
 @Composable private fun EditField(value: String, onChange: (String) -> Unit) { val a = acc(); val t2 = tx(); val fb = if (LocalIsDarkMode.current) Color(0xFF252525) else Color(0xFFF0F0F0); BasicTextField(value, onChange, textStyle = TextStyle(color = t2, fontSize = 18.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace), cursorBrush = SolidColor(a), singleLine = true, modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(fb).padding(12.dp)) }
 @Composable private fun sliderColors() = SliderDefaults.colors(thumbColor = acc(), activeTrackColor = acc(), inactiveTrackColor = acc().copy(0.15f))
 
-// ===== SCROLL WHEEL PICKER — alarm clock style number selector =====
-@Composable private fun ScrollWheelPicker(
-    items: List<String>, selectedIndex: Int, onSelected: (Int) -> Unit, label: String
-) {
-    val a = acc(); val d = dim(); val t2 = tx(); val c = card()
-    val visibleCount = 3 // show 3 items (prev, current, next)
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        // Up arrow
-        Box(Modifier.size(36.dp).clip(RoundedCornerShape(6.dp)).clickable {
-            if (selectedIndex > 0) onSelected(selectedIndex - 1)
-        }, Alignment.Center) {
-            Text("▲", color = if (selectedIndex > 0) a else d.copy(0.3f), fontSize = 16.sp)
-        }
-        // Display window: prev / current / next
+// ===== TIMER PICKER DIALOG — fullscreen overlay with h:m:s scroll wheels =====
+@Composable private fun TimerPickerDialog(initialSeconds: Int, onConfirm: (Int) -> Unit, onDismiss: () -> Unit) {
+    val a = acc(); val d = dim(); val t2 = tx()
+    val bg = if (LocalIsDarkMode.current) Color(0xFF121212) else Color(0xFFF5F5F5)
+    val cardBg = if (LocalIsDarkMode.current) Color(0xFF1E1E1E) else Color(0xFFFFFFFF)
+
+    var hours by remember { mutableStateOf(initialSeconds / 3600) }
+    var minutes by remember { mutableStateOf((initialSeconds % 3600) / 60) }
+    var seconds by remember { mutableStateOf(initialSeconds % 60) }
+
+    // Fullscreen overlay
+    Box(Modifier.fillMaxSize().background(Color.Black.copy(0.7f)).clickable(indication = null, interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }) { onDismiss() }, Alignment.Center) {
+        // Dialog card
         Column(
-            Modifier.width(56.dp).clip(RoundedCornerShape(10.dp)).background(c).padding(vertical = 2.dp),
+            Modifier.padding(32.dp).clip(RoundedCornerShape(20.dp)).background(cardBg)
+                .clickable(indication = null, interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }) {}
+                .padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Previous item (dimmed)
-            val prevIdx = selectedIndex - 1
+            Text("Set Play Timer", color = t2, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(4.dp))
+            Text("Max 10 hours", color = d, fontSize = 12.sp)
+            Spacer(Modifier.height(20.dp))
+
+            // Three scroll wheels: H : M : S
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
+                ScrollWheelColumn(
+                    range = 0..10, value = hours, onValue = { hours = it; if (hours == 10) { minutes = 0; seconds = 0 } },
+                    label = "h", padDigits = 1
+                )
+                Text(":", color = a, fontSize = 32.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 4.dp))
+                ScrollWheelColumn(
+                    range = 0..59, value = minutes, onValue = { if (hours < 10) minutes = it },
+                    label = "m", padDigits = 2, enabled = hours < 10
+                )
+                Text(":", color = a, fontSize = 32.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 4.dp))
+                ScrollWheelColumn(
+                    range = 0..59, value = seconds, onValue = { if (hours < 10) seconds = it },
+                    label = "s", padDigits = 2, enabled = hours < 10
+                )
+            }
+
+            Spacer(Modifier.height(8.dp))
+            // Preview
+            val total = hours * 3600 + minutes * 60 + seconds
+            val preview = buildString {
+                if (hours > 0) append("${hours}h ")
+                if (minutes > 0) append("${minutes}m ")
+                if (seconds > 0) append("${seconds}s")
+                if (isEmpty()) append("0s")
+            }.trim()
+            Text(preview, color = a, fontSize = 15.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+
+            Spacer(Modifier.height(20.dp))
+            // Buttons
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Box(Modifier.clip(RoundedCornerShape(10.dp)).background(d.copy(0.15f)).clickable { onDismiss() }.padding(horizontal = 24.dp, vertical = 12.dp)) {
+                    Text("Cancel", color = d, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                }
+                Box(Modifier.clip(RoundedCornerShape(10.dp)).background(a).clickable {
+                    val t = (hours * 3600 + minutes * 60 + seconds).coerceIn(0, 36000)
+                    onConfirm(t)
+                }.padding(horizontal = 24.dp, vertical = 12.dp)) {
+                    Text("Set", color = Color.Black, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+    }
+}
+
+// ===== SCROLL WHEEL COLUMN — single value picker with up/down + fling scrolling =====
+@Composable private fun ScrollWheelColumn(
+    range: IntRange, value: Int, onValue: (Int) -> Unit,
+    label: String, padDigits: Int = 1, enabled: Boolean = true
+) {
+    val a = if (enabled) acc() else dim().copy(0.4f)
+    val d = dim()
+    val t2 = if (enabled) tx() else dim().copy(0.5f)
+    val cardBg = if (LocalIsDarkMode.current) Color(0xFF2A2A2A) else Color(0xFFEEEEEE)
+
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        // Up arrow
+        Box(Modifier.size(40.dp).clip(RoundedCornerShape(8.dp)).clickable(enabled = enabled) {
+            if (value > range.first) onValue(value - 1)
+        }, Alignment.Center) {
+            Text("▲", color = if (enabled && value > range.first) a else d.copy(0.2f), fontSize = 18.sp)
+        }
+        // Value display with prev/next context
+        Column(
+            Modifier.width(62.dp).clip(RoundedCornerShape(12.dp)).background(cardBg).padding(vertical = 4.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            // Prev value
             Text(
-                if (prevIdx >= 0) items[prevIdx] else "",
-                color = d.copy(0.4f), fontSize = 14.sp, fontFamily = FontFamily.Monospace,
-                modifier = Modifier.padding(vertical = 2.dp).height(20.dp)
+                if (value - 1 >= range.first) (value - 1).toString().padStart(padDigits, '0') else "",
+                color = d.copy(0.35f), fontSize = 14.sp, fontFamily = FontFamily.Monospace,
+                modifier = Modifier.height(20.dp).padding(top = 2.dp)
             )
-            // Current item (highlighted)
+            // Current value — highlighted
             Box(
-                Modifier.fillMaxWidth().background(a.copy(0.15f), RoundedCornerShape(6.dp))
-                    .border(1.dp, a.copy(0.5f), RoundedCornerShape(6.dp)).padding(vertical = 6.dp),
+                Modifier.fillMaxWidth().padding(horizontal = 4.dp)
+                    .background(a.copy(0.15f), RoundedCornerShape(8.dp))
+                    .border(1.5.dp, a.copy(0.5f), RoundedCornerShape(8.dp))
+                    .padding(vertical = 8.dp),
                 Alignment.Center
             ) {
-                Text(items[selectedIndex], color = a, fontSize = 22.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                Text(
+                    value.toString().padStart(padDigits, '0'),
+                    color = a, fontSize = 26.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace
+                )
             }
-            // Next item (dimmed)
-            val nextIdx = selectedIndex + 1
+            // Next value
             Text(
-                if (nextIdx < items.size) items[nextIdx] else "",
-                color = d.copy(0.4f), fontSize = 14.sp, fontFamily = FontFamily.Monospace,
-                modifier = Modifier.padding(vertical = 2.dp).height(20.dp)
+                if (value + 1 <= range.last) (value + 1).toString().padStart(padDigits, '0') else "",
+                color = d.copy(0.35f), fontSize = 14.sp, fontFamily = FontFamily.Monospace,
+                modifier = Modifier.height(20.dp).padding(bottom = 2.dp)
             )
         }
         // Down arrow
-        Box(Modifier.size(36.dp).clip(RoundedCornerShape(6.dp)).clickable {
-            if (selectedIndex < items.size - 1) onSelected(selectedIndex + 1)
+        Box(Modifier.size(40.dp).clip(RoundedCornerShape(8.dp)).clickable(enabled = enabled) {
+            if (value < range.last) onValue(value + 1)
         }, Alignment.Center) {
-            Text("▼", color = if (selectedIndex < items.size - 1) a else d.copy(0.3f), fontSize = 16.sp)
+            Text("▼", color = if (enabled && value < range.last) a else d.copy(0.2f), fontSize = 18.sp)
         }
-        // Label (h / m)
-        Text(label, color = d, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+        // Label
+        Text(label, color = d, fontSize = 12.sp, fontWeight = FontWeight.Bold)
     }
 }
