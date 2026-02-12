@@ -139,7 +139,7 @@ fun GameScreen(
                         width = 70.dp, height = 30.dp, backgroundColor = theme.buttonSecondary.copy(0.7f))
                 }
                 if (gameState.status == GameStatus.PAUSED) PauseOverlay(onResume, onOpenSettings, onQuit)
-                if (gameState.status == GameStatus.GAME_OVER) GameOverOverlay(gameState.score, gameState.level, gameState.lines, onStartGame, onOpenSettings)
+                if (gameState.status == GameStatus.GAME_OVER) GameOverOverlay(gameState.score, gameState.level, gameState.lines, onStartGame, onOpenSettings, onQuit)
             }
         } else {
             // Normal game content
@@ -157,7 +157,7 @@ fun GameScreen(
                     LayoutPreset.PORTRAIT_3D -> {}
                 }
                 if (gameState.status == GameStatus.PAUSED) PauseOverlay(onResume, onOpenSettings, onQuit)
-                if (gameState.status == GameStatus.GAME_OVER) GameOverOverlay(gameState.score, gameState.level, gameState.lines, onStartGame, onOpenSettings)
+                if (gameState.status == GameStatus.GAME_OVER) GameOverOverlay(gameState.score, gameState.level, gameState.lines, onStartGame, onOpenSettings, onQuit)
             }
         }
         ActionPopup(gameState.lastActionLabel, gameState.linesCleared)
@@ -835,7 +835,7 @@ private fun FallingPiecesBackground(theme: com.brickgame.tetris.ui.theme.GameThe
     }
 }
 
-@Composable private fun GameOverOverlay(score: Int, level: Int, lines: Int, onRestart: () -> Unit, onMenu: () -> Unit) {
+@Composable private fun GameOverOverlay(score: Int, level: Int, lines: Int, onRestart: () -> Unit, onMenu: () -> Unit, onLeave: () -> Unit) {
     val theme = LocalGameTheme.current
     Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.8f)), Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -845,7 +845,7 @@ private fun FallingPiecesBackground(theme: com.brickgame.tetris.ui.theme.GameThe
             Text(score.toString(), fontSize = 28.sp, fontFamily = FontFamily.Monospace, color = theme.accentColor, fontWeight = FontWeight.Bold)
             Text("Level $level · $lines Lines", fontSize = 13.sp, fontFamily = FontFamily.Monospace, color = Color.White.copy(alpha = 0.7f))
             Spacer(Modifier.height(28.dp)); ActionButton("AGAIN", onRestart, width = 160.dp, height = 48.dp, backgroundColor = theme.accentColor)
-            Spacer(Modifier.height(12.dp)); ActionButton("MENU", onMenu, width = 160.dp, height = 42.dp)
+            Spacer(Modifier.height(12.dp)); ActionButton("LEAVE", onLeave, width = 160.dp, height = 42.dp, backgroundColor = Color(0xFFB91C1C))
         }
     }
 }

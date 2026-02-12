@@ -102,7 +102,7 @@ fun SettingsScreen(
     Box(Modifier.fillMaxSize().background(bg()).systemBarsPadding()) {
         when (page) {
             GameViewModel.SettingsPage.MAIN -> MainPage(onNavigate, onBack, on3DMode)
-            GameViewModel.SettingsPage.GENERAL -> GeneralPage(appThemeMode, keepScreenOn, orientationLock, immersiveMode, frameRateTarget, batterySaver, highContrast, uiScale, onSetAppThemeMode, onSetKeepScreenOn, onSetOrientationLock, onSetImmersiveMode, onSetFrameRateTarget, onSetBatterySaver, onSetHighContrast, onSetUiScale) { onNavigate(GameViewModel.SettingsPage.MAIN) }
+            GameViewModel.SettingsPage.GENERAL -> GeneralPage(appThemeMode, keepScreenOn, orientationLock, immersiveMode, frameRateTarget, batterySaver, onSetAppThemeMode, onSetKeepScreenOn, onSetOrientationLock, onSetImmersiveMode, onSetFrameRateTarget, onSetBatterySaver) { onNavigate(GameViewModel.SettingsPage.MAIN) }
             GameViewModel.SettingsPage.PROFILE -> ProfilePage(playerName, highScore, scoreHistory, onSetPlayerName, onClearHistory) { onNavigate(GameViewModel.SettingsPage.MAIN) }
             GameViewModel.SettingsPage.THEME -> ThemePage(currentTheme, customThemes, multiColorEnabled, pieceMaterial, onSetTheme, onSetMultiColorEnabled, onSetPieceMaterial, onNewTheme, onEditTheme, onDeleteTheme) { onNavigate(GameViewModel.SettingsPage.MAIN) }
             GameViewModel.SettingsPage.THEME_EDITOR -> if (editingTheme != null) ThemeEditorScreen(editingTheme, onUpdateEditingTheme, onSaveTheme) { onNavigate(GameViewModel.SettingsPage.THEME) }
@@ -119,7 +119,7 @@ fun SettingsScreen(
 
 // ===== MAIN =====
 @Composable private fun MainPage(onNav: (GameViewModel.SettingsPage) -> Unit, onBack: () -> Unit, on3D: () -> Unit = {}) {
-    Column(Modifier.fillMaxSize().padding(20.dp)) {
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp)) {
         Header("Settings", onBack); Spacer(Modifier.height(16.dp))
         MenuItem("General", "Theme mode, screen, performance") { onNav(GameViewModel.SettingsPage.GENERAL) }
         MenuItem("Profile", "Name, scores") { onNav(GameViewModel.SettingsPage.PROFILE) }
@@ -136,10 +136,10 @@ fun SettingsScreen(
 // ===== GENERAL APP SETTINGS =====
 @Composable private fun GeneralPage(
     appThemeMode: String, keepScreenOn: Boolean, orientationLock: String, immersiveMode: Boolean,
-    frameRateTarget: Int, batterySaver: Boolean, highContrast: Boolean, uiScale: Float,
+    frameRateTarget: Int, batterySaver: Boolean,
     onThemeMode: (String) -> Unit, onKeepScreen: (Boolean) -> Unit, onOrientation: (String) -> Unit,
     onImmersive: (Boolean) -> Unit, onFrameRate: (Int) -> Unit, onBatterySaver: (Boolean) -> Unit,
-    onHighContrast: (Boolean) -> Unit, onUiScale: (Float) -> Unit, onBack: () -> Unit
+    onBack: () -> Unit
 ) {
     LazyColumn(Modifier.fillMaxSize().padding(20.dp)) {
         item { Header("General", onBack) }
@@ -192,17 +192,6 @@ fun SettingsScreen(
             Toggle("Battery Saver", batterySaver, onBatterySaver)
             Spacer(Modifier.height(4.dp))
             Text("Reduces animations and lowers frame rate to save battery", color = dim(), fontSize = 11.sp)
-        } }
-        item { Lbl("Accessibility") }
-        item { Card {
-            Toggle("High Contrast", highContrast, onHighContrast)
-            Spacer(Modifier.height(4.dp))
-            Text("Increases colour contrast for better visibility", color = dim(), fontSize = 11.sp)
-        } }
-        item { Card {
-            Text("UI Scale", color = tx(), fontSize = 14.sp)
-            Slider(uiScale, onUiScale, valueRange = 0.8f..1.5f, colors = sliderColors())
-            Text("${(uiScale * 100).toInt()}%", color = dim(), fontSize = 12.sp)
         } }
         item { Spacer(Modifier.height(16.dp)) }
     }
