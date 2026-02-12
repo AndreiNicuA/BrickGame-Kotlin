@@ -8,7 +8,6 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
@@ -16,6 +15,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
@@ -361,8 +361,9 @@ fun FreeformEditorScreen(
             val panelOnTop = selectedElement.y > 0.5f
             Surface(
                 modifier = Modifier
-                    .then(if (panelOnTop) Modifier.align(Alignment.TopCenter).statusBarsPadding()
-                          else Modifier.align(Alignment.BottomCenter).navigationBarsPadding()),
+                    .align(if (panelOnTop) Alignment.TopCenter else Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .then(if (panelOnTop) Modifier.statusBarsPadding() else Modifier.navigationBarsPadding()),
                 shape = if (panelOnTop) RoundedCornerShape(bottomStart = 16.dp, bottomEnd = 16.dp)
                         else RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
                 color = Color(0xFF1A1A1A).copy(0.75f),
