@@ -108,6 +108,13 @@ fun GameBoard(
                             } else {
                                 drawRoundRect(pieceColor, offset, cs, CornerRadius(corner))
                                 if (multiColor && cellValue in 1..7) {
+                                    // Subtle color bloom/glow around placed pieces
+                                    val glowSize = gap * 1.2f
+                                    drawRoundRect(pieceColor.copy(alpha = 0.08f),
+                                        Offset(offset.x - glowSize, offset.y - glowSize),
+                                        Size(cs.width + glowSize * 2, cs.height + glowSize * 2),
+                                        CornerRadius(corner + glowSize))
+                                    // 3D bevel: dark border, bottom shadow, top highlight
                                     drawRoundRect(Color.Black.copy(alpha = 0.35f), offset, cs, CornerRadius(corner), style = Stroke(gap * 1.2f))
                                     drawRoundRect(Color.Black.copy(alpha = 0.2f), Offset(offset.x, offset.y + cs.height * 0.65f), Size(cs.width, cs.height * 0.35f), CornerRadius(corner))
                                     drawRoundRect(Color.White.copy(alpha = 0.2f), offset, Size(cs.width, cs.height * 0.3f), CornerRadius(corner))
@@ -118,7 +125,7 @@ fun GameBoard(
                 }
             }
 
-            // Current piece
+            // Current piece — with glow bloom in multiColor mode
             if (currentPiece != null) {
                 val pColor = if (multiColor) PIECE_COLORS.getOrElse(currentPiece.type.ordinal + 1) { theme.pixelOn } else theme.pixelOn
                 for (py in currentPiece.shape.indices) for (px in currentPiece.shape[py].indices) {
@@ -130,11 +137,19 @@ fun GameBoard(
                             if (classicLCD) {
                                 drawLCDCell(offset, cs, true, theme.pixelOff, theme.pixelOn)
                             } else {
+                                // Glow bloom behind active piece
+                                if (multiColor) {
+                                    val glowSize = gap * 2f
+                                    drawRoundRect(pColor.copy(alpha = 0.15f),
+                                        Offset(offset.x - glowSize, offset.y - glowSize),
+                                        Size(cs.width + glowSize * 2, cs.height + glowSize * 2),
+                                        CornerRadius(corner + glowSize))
+                                }
                                 drawRoundRect(pColor, offset, cs, CornerRadius(corner))
                                 if (multiColor) {
                                     drawRoundRect(Color.Black.copy(alpha = 0.35f), offset, cs, CornerRadius(corner), style = Stroke(gap * 1.2f))
                                     drawRoundRect(Color.Black.copy(alpha = 0.2f), Offset(offset.x, offset.y + cs.height * 0.65f), Size(cs.width, cs.height * 0.35f), CornerRadius(corner))
-                                    drawRoundRect(Color.White.copy(alpha = 0.2f), offset, Size(cs.width, cs.height * 0.3f), CornerRadius(corner))
+                                    drawRoundRect(Color.White.copy(alpha = 0.25f), offset, Size(cs.width, cs.height * 0.3f), CornerRadius(corner))
                                 }
                             }
                         }
@@ -287,8 +302,17 @@ private fun clearingEffect(style: AnimationStyle, progress: Float, x: Int, y: In
         blink.copy(alpha = fade) to 1f
     }
     AnimationStyle.MODERN -> {
-        val c = Color(baseColor.red + (1f - baseColor.red) * progress, baseColor.green + (1f - baseColor.green) * progress, baseColor.blue + (1f - baseColor.blue) * progress, 1f - progress * 0.5f)
-        c to (1f - progress * 0.3f)
+        // Tetris Effect-inspired: white-hot flash → color bloom → dissolve outward
+        val flash = if (progress < 0.15f) (0.15f - progress) / 0.15f else 0f
+        val bloomPhase = (progress * 2f).coerceIn(0f, 1f)
+        val dissolve = (progress - 0.3f).coerceIn(0f, 1f) / 0.7f
+        // Start white-hot, bloom to saturated color, then dissolve
+        val r = baseColor.red + (1f - baseColor.red) * (flash + bloomPhase * 0.3f)
+        val g = baseColor.green + (1f - baseColor.green) * (flash + bloomPhase * 0.3f)
+        val b = baseColor.blue + (1f - baseColor.blue) * (flash + bloomPhase * 0.3f)
+        val alpha = 1f - dissolve * dissolve // quadratic fade feels smoother
+        val scale = 1f + flash * 0.2f - dissolve * 0.3f // slight pop then shrink
+        Color(r.coerceIn(0f,1f), g.coerceIn(0f,1f), b.coerceIn(0f,1f), alpha.coerceIn(0f,1f)) to scale.coerceAtLeast(0.1f)
     }
     AnimationStyle.FLASHY -> {
         val colors = listOf(Color(0xFFFF0000), Color(0xFFFF7F00), Color(0xFFFFFF00), Color(0xFF00FF00), Color(0xFF00FFFF), Color(0xFF0000FF), Color(0xFF8B00FF), Color(0xFFFF00FF))
@@ -299,13 +323,21 @@ private fun clearingEffect(style: AnimationStyle, progress: Float, x: Int, y: In
 }
 
 private fun DrawScope.drawGhost(piece: PieceState, ghostY: Int, cellSize: Float, gap: Float, corner: Float, baseColor: Color) {
-    val gc = baseColor.copy(alpha = 0.15f); val oc = baseColor.copy(alpha = 0.35f)
+    val gc = baseColor.copy(alpha = 0.12f)
+    val oc = baseColor.copy(alpha = 0.4f)
+    val glowColor = baseColor.copy(alpha = 0.06f)
     for (py in piece.shape.indices) for (px in piece.shape[py].indices) {
         if (piece.shape[py][px] > 0) {
             val bx = piece.position.x + px; val by = ghostY + py
             if (bx in 0 until TetrisGame.BOARD_WIDTH && by in 0 until TetrisGame.BOARD_HEIGHT) {
                 val o = Offset(bx * cellSize + gap, by * cellSize + gap); val s = Size(cellSize - gap * 2, cellSize - gap * 2)
-                drawRoundRect(gc, o, s, CornerRadius(corner)); drawRoundRect(oc, o, s, CornerRadius(corner), style = Stroke(gap * 0.8f))
+                // Outer glow
+                val glowGap = gap * 1.5f
+                drawRoundRect(glowColor, Offset(o.x - glowGap, o.y - glowGap),
+                    Size(s.width + glowGap * 2, s.height + glowGap * 2), CornerRadius(corner + glowGap))
+                // Fill + outline
+                drawRoundRect(gc, o, s, CornerRadius(corner))
+                drawRoundRect(oc, o, s, CornerRadius(corner), style = Stroke(gap * 0.8f))
             }
         }
     }

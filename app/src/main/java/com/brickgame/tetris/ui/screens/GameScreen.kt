@@ -426,27 +426,178 @@ fun GameScreen(
     boardDimAlpha: Float = 1f, nextCount: Int = 3
 ) {
     val theme = LocalGameTheme.current
-    // Animated score counter
     val animatedScore by animateIntAsState(gs.score, animationSpec = tween(300), label = "score")
-    Column(Modifier.fillMaxSize().padding(horizontal = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        // Modern status bar with rounded shadow
-        Row(Modifier.fillMaxWidth().shadow(6.dp, RoundedCornerShape(14.dp))
-            .clip(RoundedCornerShape(14.dp)).background(theme.deviceColor)
-            .padding(horizontal = 12.dp, vertical = 8.dp),
-            Arrangement.SpaceBetween, Alignment.CenterVertically) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) { Tag("HOLD"); HoldPiecePreview(gs.holdPiece?.shape, gs.holdUsed, Modifier.size(34.dp)) }
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) { Tag("LV ${gs.level}"); Tag("${gs.lines} LINES") }
-                Text(animatedScore.toString().padStart(7, '0'), fontSize = 20.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, color = theme.pixelOn, letterSpacing = 2.sp)
+
+    // === Danger zone detection: board stack getting high ===
+    val highestOccupiedRow = gs.board.indexOfFirst { row -> row.any { it > 0 } }
+    val dangerLevel = if (highestOccupiedRow in 0..4 && gs.status == GameStatus.PLAYING) {
+        ((5 - highestOccupiedRow) / 5f).coerceIn(0f, 1f)
+    } else 0f
+    val dangerPulse = rememberInfiniteTransition(label = "danger")
+    val dangerAlpha by dangerPulse.animateFloat(
+        0f, if (dangerLevel > 0) dangerLevel * 0.4f else 0f,
+        infiniteRepeatable(tween(600), RepeatMode.Reverse), label = "da"
+    )
+
+    // === Dynamic background gradient that shifts with level ===
+    val levelHue = (gs.level * 27f) % 360f
+    val bgGradientColor = Color.hsl(levelHue, 0.3f, 0.08f)
+    val bgGradientColor2 = Color.hsl((levelHue + 60f) % 360f, 0.2f, 0.05f)
+
+    // === Line clear flash ===
+    var clearFlashAlpha by remember { mutableFloatStateOf(0f) }
+    LaunchedEffect(gs.clearedLineRows) {
+        if (gs.clearedLineRows.isNotEmpty()) {
+            clearFlashAlpha = when (gs.clearedLineRows.size) {
+                4 -> 0.5f; 3 -> 0.3f; 2 -> 0.2f; else -> 0.12f
             }
-            Column(horizontalAlignment = Alignment.CenterHorizontally) { Tag("NEXT"); NextPiecePreview(gs.nextPieces.firstOrNull()?.shape, Modifier.size(34.dp)) }
+            delay(100)
+            // Fade out over several steps
+            repeat(8) { clearFlashAlpha *= 0.7f; delay(30) }
+            clearFlashAlpha = 0f
         }
+    }
+
+    // === Score flyup state ===
+    var flyupText by remember { mutableStateOf("") }
+    var flyupVisible by remember { mutableStateOf(false) }
+    var lastScore by remember { mutableIntStateOf(gs.score) }
+    LaunchedEffect(gs.score) {
+        val diff = gs.score - lastScore
+        if (diff > 50 && gs.status == GameStatus.PLAYING) {
+            flyupText = "+$diff"
+            flyupVisible = true
+            delay(800)
+            flyupVisible = false
+        }
+        lastScore = gs.score
+    }
+
+    // === Level up celebration ===
+    var levelUpFlash by remember { mutableFloatStateOf(0f) }
+    var prevLevel by remember { mutableIntStateOf(gs.level) }
+    LaunchedEffect(gs.level) {
+        if (gs.level > prevLevel && prevLevel > 0) {
+            levelUpFlash = 0.6f
+            repeat(12) { levelUpFlash *= 0.8f; delay(40) }
+            levelUpFlash = 0f
+        }
+        prevLevel = gs.level
+    }
+
+    // === Combo glow intensity ===
+    val comboGlow = (gs.comboCount.coerceAtLeast(0) / 8f).coerceIn(0f, 1f)
+
+    Column(Modifier.fillMaxSize().padding(horizontal = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        // === Enhanced status bar with gradient and glow ===
+        Box(Modifier.fillMaxWidth()) {
+            Row(Modifier.fillMaxWidth().shadow(8.dp, RoundedCornerShape(14.dp))
+                .clip(RoundedCornerShape(14.dp)).background(theme.deviceColor)
+                .then(if (comboGlow > 0) Modifier.border(1.dp, Color(0xFFF4D03F).copy(comboGlow * 0.6f), RoundedCornerShape(14.dp)) else Modifier)
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+                Arrangement.SpaceBetween, Alignment.CenterVertically) {
+
+                // HOLD piece
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Tag("HOLD")
+                    HoldPiecePreview(gs.holdPiece?.shape, gs.holdUsed, Modifier.size(34.dp))
+                }
+
+                // Center: Score + level/lines info
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Tag("LV ${gs.level}")
+                        Tag("${gs.lines} LINES")
+                    }
+                    Text(
+                        animatedScore.toString().padStart(7, '0'),
+                        fontSize = 20.sp, fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace, color = theme.pixelOn,
+                        letterSpacing = 2.sp
+                    )
+                }
+
+                // NEXT queue: show up to 3 pieces stacked vertically
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Tag("NEXT")
+                    gs.nextPieces.take(nextCount.coerceAtMost(3)).forEachIndexed { i, p ->
+                        NextPiecePreview(p.shape, Modifier.size(if (i == 0) 34.dp else 22.dp).padding(vertical = 1.dp),
+                            alpha = if (i == 0) 1f else 0.5f)
+                    }
+                }
+            }
+        }
+
         Spacer(Modifier.height(6.dp))
-        // Board with rounded corners and shadow
-        Box(Modifier.weight(1f).fillMaxWidth().padding(horizontal = 12.dp)
-            .shadow(4.dp, RoundedCornerShape(8.dp)).clip(RoundedCornerShape(8.dp))) {
-            GameBoard(gs.board, Modifier.fillMaxSize().alpha(boardDimAlpha), gs.currentPiece, gs.ghostY, ghost, gs.clearedLineRows, anim, ad, multiColor = true)
+
+        // === Board area with dynamic effects ===
+        Box(Modifier.weight(1f).fillMaxWidth().padding(horizontal = 12.dp)) {
+            // Dynamic background gradient
+            Box(Modifier.matchParentSize()
+                .shadow(4.dp, RoundedCornerShape(8.dp))
+                .clip(RoundedCornerShape(8.dp))
+                .background(bgGradientColor))
+
+            // The actual game board
+            GameBoard(gs.board, Modifier.fillMaxSize().alpha(boardDimAlpha),
+                gs.currentPiece, gs.ghostY, ghost, gs.clearedLineRows, anim, ad, multiColor = true)
+
+            // === Danger zone: red pulse overlay at top of board ===
+            if (dangerAlpha > 0.01f) {
+                Canvas(Modifier.matchParentSize()) {
+                    // Red gradient from top fading down
+                    for (i in 0..5) {
+                        val rowAlpha = dangerAlpha * (1f - i / 6f)
+                        val rowH = size.height / 20f
+                        drawRect(
+                            Color.Red.copy(alpha = rowAlpha),
+                            Offset(0f, i * rowH),
+                            Size(size.width, rowH)
+                        )
+                    }
+                }
+            }
+
+            // === Line clear flash overlay ===
+            if (clearFlashAlpha > 0.01f) {
+                Box(Modifier.matchParentSize()
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color.White.copy(alpha = clearFlashAlpha)))
+            }
+
+            // === Level up celebration flash ===
+            if (levelUpFlash > 0.01f) {
+                Box(Modifier.matchParentSize()
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color(0xFFF4D03F).copy(alpha = levelUpFlash)))
+            }
+
+            // === Score flyup animation ===
+            AnimatedVisibility(
+                flyupVisible,
+                modifier = Modifier.align(Alignment.Center),
+                enter = fadeIn(tween(100)) + slideInVertically { it / 2 },
+                exit = fadeOut(tween(400)) + slideOutVertically { -it }
+            ) {
+                Text(
+                    flyupText,
+                    fontSize = 28.sp, fontWeight = FontWeight.ExtraBold,
+                    fontFamily = FontFamily.Monospace,
+                    color = Color(0xFFF4D03F).copy(0.9f),
+                    modifier = Modifier.graphicsLayer {
+                        shadowElevation = 8f
+                    }
+                )
+            }
+
+            // === Combo indicator glow border ===
+            if (comboGlow > 0.05f) {
+                Box(Modifier.matchParentSize()
+                    .clip(RoundedCornerShape(8.dp))
+                    .border(2.dp, Color(0xFFF4D03F).copy(comboGlow * 0.5f), RoundedCornerShape(8.dp)))
+            }
         }
+
         Spacer(Modifier.height(6.dp))
         FullControls(dp, onHD, onHold, onLP, onLR, onRP, onRR, onDP, onDR, onRotate, onPause, onSet, onStart, gs.status)
     }
