@@ -30,7 +30,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     val gameState: StateFlow<GameState> = game.state
 
     data class UiState(val showSettings: Boolean = false, val settingsPage: SettingsPage = SettingsPage.MAIN)
-    enum class SettingsPage { MAIN, GENERAL, PROFILE, THEME, THEME_EDITOR, LAYOUT, LAYOUT_EDITOR, GAMEPLAY, EXPERIENCE, CONTROLLER, ABOUT }
+    enum class SettingsPage { MAIN, GENERAL, PROFILE, THEME, THEME_EDITOR, LAYOUT, LAYOUT_EDITOR, GAMEPLAY, EXPERIENCE, CONTROLLER, ABOUT, HOW_TO_PLAY }
     private val _uiState = MutableStateFlow(UiState())
     val uiState: StateFlow<UiState> = _uiState.asStateFlow()
 
@@ -288,6 +288,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     }
     fun selectCustomLayout(layout: CustomLayoutData) { _activeCustomLayout.value = layout }
     fun clearCustomLayout() { _activeCustomLayout.value = null }
+    fun clearHistory() { viewModelScope.launch { playerRepo.clearHistory() } }
     fun deleteCustomLayout(id: String) {
         viewModelScope.launch { customLayoutRepo.deleteLayout(id) }
         if (_activeCustomLayout.value?.id == id) _activeCustomLayout.value = null

@@ -364,7 +364,8 @@ class MainActivity : ComponentActivity() {
                             onSelectCustomLayout = vm::selectCustomLayout, onClearCustomLayout = vm::clearCustomLayout,
                             onDeleteLayout = vm::deleteCustomLayout,
                             onEditFreeform = { vm.closeSettings(); vm.enterFreeformEditMode() },
-                            on3DMode = { vm.setPortraitLayout(LayoutPreset.PORTRAIT_3D); vm.closeSettings() }
+                            on3DMode = { vm.setPortraitLayout(LayoutPreset.PORTRAIT_3D); vm.closeSettings() },
+                            onClearHistory = vm::clearHistory
                         )
                     }
 

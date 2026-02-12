@@ -87,13 +87,14 @@ fun SettingsScreen(
     onSelectCustomLayout: (CustomLayoutData) -> Unit, onClearCustomLayout: () -> Unit,
     onDeleteLayout: (String) -> Unit,
     onEditFreeform: () -> Unit = {},
-    on3DMode: () -> Unit = {}
+    on3DMode: () -> Unit = {},
+    onClearHistory: () -> Unit = {}
 ) {
     Box(Modifier.fillMaxSize().background(bg()).systemBarsPadding()) {
         when (page) {
             GameViewModel.SettingsPage.MAIN -> MainPage(onNavigate, onBack, on3DMode)
             GameViewModel.SettingsPage.GENERAL -> GeneralPage(appThemeMode, keepScreenOn, orientationLock, immersiveMode, frameRateTarget, batterySaver, highContrast, uiScale, onSetAppThemeMode, onSetKeepScreenOn, onSetOrientationLock, onSetImmersiveMode, onSetFrameRateTarget, onSetBatterySaver, onSetHighContrast, onSetUiScale) { onNavigate(GameViewModel.SettingsPage.MAIN) }
-            GameViewModel.SettingsPage.PROFILE -> ProfilePage(playerName, highScore, scoreHistory, onSetPlayerName) { onNavigate(GameViewModel.SettingsPage.MAIN) }
+            GameViewModel.SettingsPage.PROFILE -> ProfilePage(playerName, highScore, scoreHistory, onSetPlayerName, onClearHistory) { onNavigate(GameViewModel.SettingsPage.MAIN) }
             GameViewModel.SettingsPage.THEME -> ThemePage(currentTheme, customThemes, multiColorEnabled, pieceMaterial, onSetTheme, onSetMultiColorEnabled, onSetPieceMaterial, onNewTheme, onEditTheme, onDeleteTheme) { onNavigate(GameViewModel.SettingsPage.MAIN) }
             GameViewModel.SettingsPage.THEME_EDITOR -> if (editingTheme != null) ThemeEditorScreen(editingTheme, onUpdateEditingTheme, onSaveTheme) { onNavigate(GameViewModel.SettingsPage.THEME) }
             GameViewModel.SettingsPage.LAYOUT -> LayoutPage(portraitLayout, landscapeLayout, dpadStyle, customLayouts, activeCustomLayout, onSetPortraitLayout, onSetLandscapeLayout, onSetDPadStyle, onNewLayout, onEditLayout, onSelectCustomLayout, onClearCustomLayout, onDeleteLayout, onEditFreeform = { onEditFreeform() }) { onNavigate(GameViewModel.SettingsPage.MAIN) }
@@ -102,6 +103,7 @@ fun SettingsScreen(
             GameViewModel.SettingsPage.EXPERIENCE -> ExperiencePage(animationStyle, animationDuration, soundEnabled, vibrationEnabled, onSetAnimationStyle, onSetAnimationDuration, onSetSoundEnabled, onSetVibrationEnabled) { onNavigate(GameViewModel.SettingsPage.MAIN) }
             GameViewModel.SettingsPage.CONTROLLER -> ControllerPage(controllerEnabled, controllerDeadzone, onSetControllerEnabled, onSetControllerDeadzone) { onNavigate(GameViewModel.SettingsPage.MAIN) }
             GameViewModel.SettingsPage.ABOUT -> AboutPage { onNavigate(GameViewModel.SettingsPage.MAIN) }
+            GameViewModel.SettingsPage.HOW_TO_PLAY -> HowToPlayPage { onNavigate(GameViewModel.SettingsPage.MAIN) }
         }
     }
 }
@@ -117,6 +119,7 @@ fun SettingsScreen(
         MenuItem("Gameplay", "Difficulty, mode") { onNav(GameViewModel.SettingsPage.GAMEPLAY) }
         MenuItem("Experience", "Animation, sound") { onNav(GameViewModel.SettingsPage.EXPERIENCE) }
         MenuItem("Controller", "Gamepad settings") { onNav(GameViewModel.SettingsPage.CONTROLLER) }
+        MenuItem("How to Play", "Rules, scoring, tips") { onNav(GameViewModel.SettingsPage.HOW_TO_PLAY) }
         MenuItem("About", "Version, credits") { onNav(GameViewModel.SettingsPage.ABOUT) }
     }
 }
@@ -197,10 +200,12 @@ fun SettingsScreen(
 }
 
 // ===== PROFILE =====
-@Composable private fun ProfilePage(name: String, hs: Int, history: List<ScoreEntry>, onName: (String) -> Unit, onBack: () -> Unit) {
+@Composable private fun ProfilePage(name: String, hs: Int, history: List<ScoreEntry>, onName: (String) -> Unit, onClear: () -> Unit, onBack: () -> Unit) {
     var editName by remember { mutableStateOf(name) }
     var sortBy by remember { mutableStateOf("score") }
+    var showClearConfirm by remember { mutableStateOf(false) }
     LaunchedEffect(name) { editName = name }
+    val dateFormat = remember { java.text.SimpleDateFormat("dd MMM yyyy, HH:mm", java.util.Locale.getDefault()) }
     val sorted = remember(history, sortBy) {
         when (sortBy) {
             "score" -> history.sortedByDescending { it.score }
@@ -213,7 +218,26 @@ fun SettingsScreen(
         item { Header("Profile", onBack); Spacer(Modifier.height(16.dp)) }
         item { Card { Text("Player Name", color = dim(), fontSize = 12.sp); Spacer(Modifier.height(4.dp)); EditField(editName) { editName = it; onName(it) } } }
         item { Card { Text("High Score", color = dim(), fontSize = 12.sp); Text(hs.toString(), color = acc(), fontSize = 24.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace) } }
-        item { Lbl("Score History") }
+        item {
+            Row(Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 8.dp), Arrangement.SpaceBetween, Alignment.CenterVertically) {
+                Text("Score History", color = acc(), fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                if (history.isNotEmpty()) {
+                    if (showClearConfirm) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("Clear all?", color = dim(), fontSize = 12.sp)
+                            Spacer(Modifier.width(8.dp))
+                            Text("Yes", color = Color(0xFFFF4444), fontSize = 12.sp, fontWeight = FontWeight.Bold,
+                                modifier = Modifier.clickable { onClear(); showClearConfirm = false }.padding(horizontal = 8.dp, vertical = 4.dp))
+                            Text("No", color = dim(), fontSize = 12.sp,
+                                modifier = Modifier.clickable { showClearConfirm = false }.padding(horizontal = 8.dp, vertical = 4.dp))
+                        }
+                    } else {
+                        Text("Clear", color = Color(0xFFFF4444), fontSize = 12.sp, fontWeight = FontWeight.Bold,
+                            modifier = Modifier.clickable { showClearConfirm = true }.padding(horizontal = 8.dp, vertical = 4.dp))
+                    }
+                }
+            }
+        }
         item {
             Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), Arrangement.spacedBy(6.dp)) {
                 listOf("score" to "Score", "level" to "Level", "lines" to "Lines", "recent" to "Recent").forEach { (k, v) ->
@@ -222,7 +246,7 @@ fun SettingsScreen(
             }
         }
         if (sorted.isEmpty()) { item { Card { Text("No games yet", color = dim()) } } }
-        items(sorted.size.coerceAtMost(50)) { i ->
+        items(sorted.size.coerceAtMost(100)) { i ->
             val e = sorted[i]
             Card {
                 Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
@@ -234,6 +258,7 @@ fun SettingsScreen(
                     Column(horizontalAlignment = Alignment.End) {
                         Text("Lv${e.level}", color = dim(), fontSize = 12.sp)
                         Text("${e.lines}L", color = dim(), fontSize = 12.sp)
+                        Text(dateFormat.format(java.util.Date(e.timestamp)), color = dim(), fontSize = 10.sp)
                     }
                 }
             }
@@ -433,6 +458,103 @@ fun SettingsScreen(
             Text("SRS rotation + wall kicks", color = tx(), fontSize = 12.sp)
         } }
         item { Spacer(Modifier.height(20.dp)) }
+    }
+}
+
+// ===== HOW TO PLAY =====
+@Composable private fun HowToPlayPage(onBack: () -> Unit) {
+    LazyColumn(Modifier.fillMaxSize().padding(20.dp)) {
+        item { Header("How to Play", onBack); Spacer(Modifier.height(16.dp)) }
+
+        item { Lbl("The Basics") }
+        item { Card {
+            Text("Tetris is a puzzle game where you arrange falling pieces (tetrominoes) to complete horizontal lines. Completed lines are cleared from the board and award points.", color = tx(), fontSize = 13.sp, lineHeight = 20.sp)
+            Spacer(Modifier.height(8.dp))
+            Text("The game ends when the pieces stack up to the top of the board.", color = tx(), fontSize = 13.sp, lineHeight = 20.sp)
+        } }
+
+        item { Lbl("Controls") }
+        item { Card {
+            Text("Move Left / Right — slide the piece sideways", color = tx(), fontSize = 13.sp)
+            Spacer(Modifier.height(4.dp))
+            Text("Soft Drop (Down) — push the piece down faster (1 point per cell)", color = tx(), fontSize = 13.sp)
+            Spacer(Modifier.height(4.dp))
+            Text("Hard Drop (Up) — instantly drop the piece to the bottom (2 points per cell)", color = tx(), fontSize = 13.sp)
+            Spacer(Modifier.height(4.dp))
+            Text("Rotate — spin the piece 90° clockwise", color = tx(), fontSize = 13.sp)
+            Spacer(Modifier.height(4.dp))
+            Text("Hold — store the current piece for later (once per drop)", color = tx(), fontSize = 13.sp)
+        } }
+
+        item { Lbl("Scoring") }
+        item { Card {
+            Text("Points are awarded based on how many lines you clear at once, multiplied by your current level:", color = tx(), fontSize = 13.sp, lineHeight = 20.sp)
+            Spacer(Modifier.height(8.dp))
+            InfoLine("1 line (Single)", "100 × level")
+            InfoLine("2 lines (Double)", "300 × level")
+            InfoLine("3 lines (Triple)", "500 × level")
+            InfoLine("4 lines (Tetris!)", "800 × level")
+            Spacer(Modifier.height(8.dp))
+            Text("T-Spin — rotating a T-piece into a tight space awards bonus points (200–1600 × level).", color = tx(), fontSize = 13.sp, lineHeight = 20.sp)
+            Spacer(Modifier.height(8.dp))
+            Text("Back-to-Back — consecutive difficult clears (Tetris or T-Spin) earn a 1.5× bonus.", color = tx(), fontSize = 13.sp, lineHeight = 20.sp)
+            Spacer(Modifier.height(8.dp))
+            Text("Combo — clearing lines on consecutive piece drops adds 50 × combo × level bonus points.", color = tx(), fontSize = 13.sp, lineHeight = 20.sp)
+        } }
+
+        item { Lbl("Levels & Speed") }
+        item { Card {
+            Text("You advance one level for every 10 lines cleared. The maximum level is 20.", color = tx(), fontSize = 13.sp, lineHeight = 20.sp)
+            Spacer(Modifier.height(8.dp))
+            Text("Each level increases the speed at which pieces fall:", color = tx(), fontSize = 13.sp, lineHeight = 20.sp)
+            Spacer(Modifier.height(6.dp))
+            InfoLine("Level 1", "1.0 s per drop")
+            InfoLine("Level 5", "0.6 s per drop")
+            InfoLine("Level 10", "0.3 s per drop")
+            InfoLine("Level 15", "0.15 s per drop")
+            InfoLine("Level 20", "0.075 s per drop")
+        } }
+
+        item { Lbl("Difficulty") }
+        item { Card {
+            Text("Choose your difficulty before starting. It affects starting level, speed, and score multiplier:", color = tx(), fontSize = 13.sp, lineHeight = 20.sp)
+            Spacer(Modifier.height(8.dp))
+            InfoLine("Easy", "Starts Lv1, 50% slower, 0.5× score")
+            InfoLine("Normal", "Starts Lv1, standard speed and scoring")
+            InfoLine("Hard", "Starts Lv5, 20% faster, 1.5× score")
+            InfoLine("Expert", "Starts Lv10, 40% faster, 2× score")
+            InfoLine("Master", "Starts Lv15, 60% faster, 3× score")
+        } }
+
+        item { Lbl("Game Modes") }
+        item { Card {
+            Text("Marathon — classic endless mode. Play until you top out and aim for the highest score.", color = tx(), fontSize = 13.sp, lineHeight = 20.sp)
+            Spacer(Modifier.height(6.dp))
+            Text("Sprint 40L — clear 40 lines as fast as possible. A race against the clock.", color = tx(), fontSize = 13.sp, lineHeight = 20.sp)
+            Spacer(Modifier.height(6.dp))
+            Text("Ultra 2min — score as high as you can in 2 minutes. Every piece counts.", color = tx(), fontSize = 13.sp, lineHeight = 20.sp)
+        } }
+
+        item { Lbl("Tips") }
+        item { Card {
+            Text("Build flat — avoid creating holes and valleys. Keep the surface even.", color = tx(), fontSize = 13.sp, lineHeight = 20.sp)
+            Spacer(Modifier.height(6.dp))
+            Text("Save the I-piece — leave a column open on one side and use the long bar for Tetris (4-line) clears.", color = tx(), fontSize = 13.sp, lineHeight = 20.sp)
+            Spacer(Modifier.height(6.dp))
+            Text("Use Hold wisely — save awkward pieces for later when you have a better spot.", color = tx(), fontSize = 13.sp, lineHeight = 20.sp)
+            Spacer(Modifier.height(6.dp))
+            Text("Watch the Next queue — plan 2-3 pieces ahead for better placement.", color = tx(), fontSize = 13.sp, lineHeight = 20.sp)
+            Spacer(Modifier.height(6.dp))
+            Text("Use the Ghost piece — the translucent shadow shows exactly where the piece will land.", color = tx(), fontSize = 13.sp, lineHeight = 20.sp)
+        } }
+        item { Spacer(Modifier.height(20.dp)) }
+    }
+}
+
+@Composable private fun InfoLine(l: String, v: String) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), Arrangement.SpaceBetween) {
+        Text(l, color = tx(), fontSize = 13.sp, fontWeight = FontWeight.Bold)
+        Text(v, color = acc(), fontSize = 13.sp, fontFamily = FontFamily.Monospace)
     }
 }
 

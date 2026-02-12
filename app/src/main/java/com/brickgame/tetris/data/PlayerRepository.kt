@@ -64,8 +64,8 @@ class PlayerRepository(private val context: Context) {
                 timestamp = System.currentTimeMillis()
             ))
             
-            // Keep only last 50 scores
-            val trimmedList = currentList.take(50)
+            // Keep only last 100 scores
+            val trimmedList = currentList.take(100)
             prefs[SCORE_HISTORY] = json.encodeToString(trimmedList)
         }
     }

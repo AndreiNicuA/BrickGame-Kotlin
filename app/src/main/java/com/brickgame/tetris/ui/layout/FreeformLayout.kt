@@ -3,8 +3,8 @@ package com.brickgame.tetris.ui.layout
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -357,6 +357,11 @@ fun FreeformEditorScreen(
         // Bottom/Top panel for selected element properties
         // Flips position: if element is in lower half → show at top, else → show at bottom
         if (selectedElement != null && !showMenu) {
+            // Tap outside panel to deselect
+            Box(Modifier.fillMaxSize().clickable(
+                indication = null,
+                interactionSource = remember { MutableInteractionSource() }
+            ) { selectedKey = null })
             val selType = FreeformElementType.fromKey(selectedElement.key)
             val selKey = selectedElement.key
             val panelOnTop = selectedElement.y > 0.5f
@@ -535,10 +540,11 @@ private fun BoxWithConstraintsScope.DraggableRealElement(
                 translationX = if (isDragging) snap(dragDeltaX) else 0f
                 translationY = if (isDragging) snap(dragDeltaY) else 0f
             }
-            // 5A: Separate tap detection — fires immediately on touch, no drag threshold needed
-            .pointerInput(key) {
-                detectTapGestures { onTap() }
-            }
+            // Tap via clickable (always fires reliably, no gesture conflict)
+            .clickable(
+                indication = null,
+                interactionSource = remember { MutableInteractionSource() }
+            ) { onTap() }
             // Drag detection
             .pointerInput(key, elemWidthPx, elemHeightPx) {
                 detectDragGestures(
