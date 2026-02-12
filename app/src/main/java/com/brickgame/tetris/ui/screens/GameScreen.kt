@@ -2,11 +2,6 @@ package com.brickgame.tetris.ui.screens
 
 import androidx.compose.animation.core.*
 import androidx.compose.animation.Crossfade
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -442,7 +437,6 @@ fun GameScreen(
     // === Dynamic background gradient that shifts with level ===
     val levelHue = (gs.level * 27f) % 360f
     val bgGradientColor = Color.hsl(levelHue, 0.3f, 0.08f)
-    val bgGradientColor2 = Color.hsl((levelHue + 60f) % 360f, 0.2f, 0.05f)
 
     // === Line clear flash ===
     var clearFlashAlpha by remember { mutableFloatStateOf(0f) }
@@ -573,18 +567,16 @@ fun GameScreen(
             }
 
             // === Score flyup animation ===
-            AnimatedVisibility(
-                flyupVisible,
-                modifier = Modifier.align(Alignment.Center),
-                enter = fadeIn(tween(100)) + slideInVertically { it / 2 },
-                exit = fadeOut(tween(400)) + slideOutVertically { -it }
-            ) {
+            if (flyupVisible) {
+                val flyupAlpha by animateFloatAsState(if (flyupVisible) 1f else 0f, tween(400), label = "fua")
+                val flyupOffset by animateFloatAsState(if (flyupVisible) 0f else 20f, tween(300), label = "fuo")
                 Text(
                     flyupText,
                     fontSize = 28.sp, fontWeight = FontWeight.ExtraBold,
                     fontFamily = FontFamily.Monospace,
-                    color = Color(0xFFF4D03F).copy(0.9f),
-                    modifier = Modifier.graphicsLayer {
+                    color = Color(0xFFF4D03F).copy(flyupAlpha * 0.9f),
+                    modifier = Modifier.align(Alignment.Center).graphicsLayer {
+                        translationY = -flyupOffset * 3f
                         shadowElevation = 8f
                     }
                 )
