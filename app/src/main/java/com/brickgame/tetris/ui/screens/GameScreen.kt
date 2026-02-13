@@ -23,6 +23,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.geometry.Offset
@@ -435,7 +436,7 @@ fun GameScreen(
     }
 }
 
-// === MODERN: Clean info bar + edge-to-edge board + animated background ===
+// === MODERN: Clean info bar + edge-to-edge board + dramatic effects ===
 @Composable private fun ModernLayout(
     gs: GameState, dp: DPadStyle, ghost: Boolean, anim: AnimationStyle, ad: Float,
     onRotate: () -> Unit, onHD: () -> Unit, onHold: () -> Unit,
@@ -474,101 +475,166 @@ fun GameScreen(
         infiniteRepeatable(tween(600), RepeatMode.Reverse), label = "da"
     )
 
-    // === Dynamic background hue shift with level ===
+    // === Dynamic background — adapt to light/dark mode ===
     val levelHue = (gs.level * 27f) % 360f
-    val bgGradientColor = Color.hsl(levelHue, 0.3f, 0.08f)
+    val bgGradientColor = if (isDark) Color.hsl(levelHue, 0.3f, 0.08f) else Color.hsl(levelHue, 0.15f, 0.88f)
 
-    // === Line clear flash ===
+    // === Line clear EXPLOSION flash + screen shake ===
     var clearFlashAlpha by remember { mutableFloatStateOf(0f) }
+    var screenShakeX by remember { mutableFloatStateOf(0f) }
+    var screenShakeY by remember { mutableFloatStateOf(0f) }
+    val clearSize = remember { mutableIntStateOf(0) }
     LaunchedEffect(gs.clearedLineRows) {
         if (gs.clearedLineRows.isNotEmpty()) {
+            clearSize.intValue = gs.clearedLineRows.size
+            // Flash intensity based on clear size
             clearFlashAlpha = when (gs.clearedLineRows.size) {
-                4 -> 0.5f; 3 -> 0.3f; 2 -> 0.2f; else -> 0.12f
+                4 -> 0.7f; 3 -> 0.45f; 2 -> 0.3f; else -> 0.15f
             }
-            delay(100)
-            repeat(8) { clearFlashAlpha *= 0.7f; delay(30) }
-            clearFlashAlpha = 0f
+            // Screen shake — more violent for bigger clears
+            val shakeIntensity = when (gs.clearedLineRows.size) {
+                4 -> 12f; 3 -> 8f; 2 -> 5f; else -> 2f
+            }
+            val rng = java.util.Random()
+            repeat(12) { i ->
+                val decay = 1f - i / 12f
+                screenShakeX = (rng.nextFloat() - 0.5f) * shakeIntensity * decay * 2f
+                screenShakeY = (rng.nextFloat() - 0.5f) * shakeIntensity * decay * 2f
+                clearFlashAlpha *= 0.82f
+                delay(25)
+            }
+            screenShakeX = 0f; screenShakeY = 0f; clearFlashAlpha = 0f
         }
     }
 
-    // === Score flyup ===
+    // === Score flyup — fire-and-forget with key to prevent sticking ===
+    var flyupKey by remember { mutableIntStateOf(0) }
     var flyupText by remember { mutableStateOf("") }
-    var flyupVisible by remember { mutableStateOf(false) }
     var lastScore by remember { mutableIntStateOf(gs.score) }
     LaunchedEffect(gs.score) {
         val diff = gs.score - lastScore
         if (diff > 50 && gs.status == GameStatus.PLAYING) {
-            flyupText = "+$diff"; flyupVisible = true; delay(800); flyupVisible = false
+            flyupText = "+$diff"
+            flyupKey++  // new key forces fresh animation
         }
         lastScore = gs.score
     }
+    // Separate effect keyed on flyupKey — cannot get stuck
+    var flyupProgress by remember { mutableFloatStateOf(0f) }
+    LaunchedEffect(flyupKey) {
+        if (flyupKey > 0) {
+            flyupProgress = 1f
+            // Quick rise and fade — total 600ms
+            val steps = 20
+            repeat(steps) {
+                flyupProgress = 1f - (it + 1).toFloat() / steps
+                delay(30)
+            }
+            flyupProgress = 0f
+        }
+    }
 
-    // === Level up celebration ===
+    // === Level up BURST ===
     var levelUpFlash by remember { mutableFloatStateOf(0f) }
     var prevLevel by remember { mutableIntStateOf(gs.level) }
     LaunchedEffect(gs.level) {
         if (gs.level > prevLevel && prevLevel > 0) {
-            levelUpFlash = 0.6f; repeat(12) { levelUpFlash *= 0.8f; delay(40) }; levelUpFlash = 0f
+            levelUpFlash = 0.8f
+            repeat(16) { levelUpFlash *= 0.85f; delay(30) }
+            levelUpFlash = 0f
         }
         prevLevel = gs.level
     }
 
-    // === Combo glow ===
+    // === Combo glow + pulse ===
     val comboGlow = (gs.comboCount.coerceAtLeast(0) / 8f).coerceIn(0f, 1f)
+    val comboPulse = rememberInfiniteTransition(label = "combo")
+    val comboPulseAlpha by comboPulse.animateFloat(
+        0.3f, 1f, infiniteRepeatable(tween(300), RepeatMode.Reverse), label = "cp"
+    )
+
+    // === Explosion particles for line clears ===
+    data class Particle(val x: Float, val y: Float, val vx: Float, val vy: Float,
+                        val size: Float, val color: Int, val life: Float)
+    var particles by remember { mutableStateOf(emptyList<Particle>()) }
+    LaunchedEffect(gs.clearedLineRows) {
+        if (gs.clearedLineRows.isNotEmpty()) {
+            val rng = java.util.Random()
+            val newParticles = mutableListOf<Particle>()
+            val colors = listOf(0xFFF4D03F.toInt(), 0xFFFF6B6B.toInt(), 0xFF4ECDC4.toInt(),
+                0xFFFF9F43.toInt(), 0xFFA8E6CF.toInt(), 0xFFFF85A2.toInt())
+            gs.clearedLineRows.forEach { row ->
+                val rowY = row.toFloat() / 20f
+                repeat(if (gs.clearedLineRows.size >= 4) 30 else 15) {
+                    newParticles.add(Particle(
+                        x = rng.nextFloat(), y = rowY,
+                        vx = (rng.nextFloat() - 0.5f) * 0.04f,
+                        vy = (rng.nextFloat() - 0.5f) * 0.035f - 0.01f,
+                        size = 3f + rng.nextFloat() * 6f,
+                        color = colors[rng.nextInt(colors.size)],
+                        life = 1f
+                    ))
+                }
+            }
+            particles = newParticles
+            // Animate particles
+            repeat(25) {
+                particles = particles.mapNotNull { p ->
+                    val newLife = p.life - 0.04f
+                    if (newLife <= 0f) null
+                    else p.copy(x = p.x + p.vx, y = p.y + p.vy, vy = p.vy + 0.002f, life = newLife)
+                }
+                delay(25)
+            }
+            particles = emptyList()
+        }
+    }
 
     Box(Modifier.fillMaxSize()) {
-        // === Subtle falling pieces background — same as menu but very faint ===
-        Box(Modifier.matchParentSize().alpha(0.3f)) {
+        // === Falling pieces background — higher alpha, adapts to theme ===
+        Box(Modifier.matchParentSize().alpha(if (isDark) 0.4f else 0.25f)) {
             FallingPiecesBackground(theme, isDark)
         }
 
         Column(Modifier.fillMaxSize()) {
-            // === COMPACT INFO BAR above the board ===
+            // === COMPACT INFO BAR ===
             Row(Modifier.fillMaxWidth()
                 .shadow(6.dp)
-                .background(Color.Black.copy(0.55f))
+                .background((if (isDark) Color.Black else Color.White).copy(0.6f))
                 .padding(horizontal = 6.dp, vertical = 3.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // HOLD piece with label
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("HOLD", fontSize = 6.sp, color = Color.White.copy(0.45f),
+                    Text("HOLD", fontSize = 6.sp, color = (if (isDark) Color.White else Color.Black).copy(0.45f),
                         fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, letterSpacing = 0.5.sp)
                     HoldPiecePreview(gs.holdPiece?.shape, gs.holdUsed, Modifier.size(28.dp))
                 }
-
                 Spacer(Modifier.width(4.dp))
-
-                // Center: LVL · SCORE · LINES with tiny labels above
-                Row(Modifier.weight(1f),
-                    horizontalArrangement = Arrangement.SpaceEvenly,
+                Row(Modifier.weight(1f), horizontalArrangement = Arrangement.SpaceEvenly,
                     verticalAlignment = Alignment.CenterVertically) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("LVL", fontSize = 6.sp, color = Color.White.copy(0.4f),
+                        Text("LVL", fontSize = 6.sp, color = (if (isDark) Color.White else Color.Black).copy(0.4f),
                             fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, letterSpacing = 0.5.sp)
                         Text("${gs.level}", fontSize = 14.sp, fontWeight = FontWeight.ExtraBold,
                             fontFamily = FontFamily.Monospace, color = theme.accentColor)
                     }
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("SCORE", fontSize = 6.sp, color = Color.White.copy(0.4f),
+                        Text("SCORE", fontSize = 6.sp, color = (if (isDark) Color.White else Color.Black).copy(0.4f),
                             fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, letterSpacing = 0.5.sp)
                         Text(animatedScore.toString().padStart(7, '0'), fontSize = 14.sp,
                             fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace,
-                            color = Color.White.copy(0.9f), letterSpacing = 1.sp)
+                            color = (if (isDark) Color.White else Color.Black).copy(0.9f), letterSpacing = 1.sp)
                     }
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("LINES", fontSize = 6.sp, color = Color.White.copy(0.4f),
+                        Text("LINES", fontSize = 6.sp, color = (if (isDark) Color.White else Color.Black).copy(0.4f),
                             fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, letterSpacing = 0.5.sp)
                         Text("${gs.lines}", fontSize = 13.sp, fontWeight = FontWeight.Bold,
-                            fontFamily = FontFamily.Monospace, color = Color.White.copy(0.7f))
+                            fontFamily = FontFamily.Monospace, color = (if (isDark) Color.White else Color.Black).copy(0.7f))
                     }
                 }
-
                 Spacer(Modifier.width(4.dp))
-
-                // NEXT queue — horizontal with label
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("NEXT", fontSize = 6.sp, color = Color.White.copy(0.45f),
+                    Text("NEXT", fontSize = 6.sp, color = (if (isDark) Color.White else Color.Black).copy(0.45f),
                         fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, letterSpacing = 0.5.sp)
                     Row(horizontalArrangement = Arrangement.spacedBy(2.dp),
                         verticalAlignment = Alignment.CenterVertically) {
@@ -580,17 +646,18 @@ fun GameScreen(
                 }
             }
 
-            // === Board area: edge-to-edge, fills remaining space ===
-            Box(Modifier.weight(1f).fillMaxWidth()) {
+            // === Board area with screen shake ===
+            Box(Modifier.weight(1f).fillMaxWidth()
+                .graphicsLayer { translationX = screenShakeX; translationY = screenShakeY }) {
                 // Dynamic level-hue background
                 Box(Modifier.matchParentSize().background(bgGradientColor))
 
-                // Game board — transparent LCD so background shows through
+                // Game board — semi-transparent LCD
                 GameBoard(gs.board, Modifier.fillMaxSize().alpha(boardDimAlpha),
                     gs.currentPiece, gs.ghostY, ghost, gs.clearedLineRows, anim, ad, multiColor = true,
                     hardDropTrail = gs.hardDropTrail, lockEvent = gs.lockEvent,
                     pieceMaterial = LocalPieceMaterial.current, highContrast = LocalHighContrast.current,
-                    boardOpacity = 0.3f)
+                    boardOpacity = if (isDark) 0.15f else 0.25f)
 
                 // === Danger zone overlay ===
                 if (dangerAlpha > 0.01f) {
@@ -602,30 +669,69 @@ fun GameScreen(
                     }
                 }
 
-                // === Line clear flash ===
+                // === Explosion flash — white to orange gradient for big clears ===
                 if (clearFlashAlpha > 0.01f) {
-                    Box(Modifier.matchParentSize().background(Color.White.copy(alpha = clearFlashAlpha)))
+                    val flashColor = when {
+                        clearSize.intValue >= 4 -> Color(0xFFF4D03F) // gold for Tetris
+                        clearSize.intValue >= 3 -> Color(0xFFFF9F43) // orange for triple
+                        else -> Color.White
+                    }
+                    Box(Modifier.matchParentSize().background(flashColor.copy(alpha = clearFlashAlpha)))
                 }
 
-                // === Level up flash ===
+                // === Level up BURST — golden ring expanding outward ===
                 if (levelUpFlash > 0.01f) {
-                    Box(Modifier.matchParentSize().background(Color(0xFFF4D03F).copy(alpha = levelUpFlash)))
+                    Canvas(Modifier.matchParentSize()) {
+                        val ringProgress = 1f - levelUpFlash / 0.8f
+                        val ringRadius = size.minDimension * 0.2f + ringProgress * size.maxDimension * 0.6f
+                        val ringWidth = 8f + (1f - ringProgress) * 20f
+                        drawCircle(
+                            Color(0xFFF4D03F).copy(alpha = levelUpFlash),
+                            radius = ringRadius,
+                            center = Offset(size.width / 2f, size.height / 2f),
+                            style = Stroke(ringWidth)
+                        )
+                    }
+                    Box(Modifier.matchParentSize().background(Color(0xFFF4D03F).copy(alpha = levelUpFlash * 0.3f)))
                 }
 
-                // === Combo glow border ===
+                // === Combo glow — pulsing border ===
                 if (comboGlow > 0.05f) {
-                    Box(Modifier.matchParentSize().border(2.dp, Color(0xFFF4D03F).copy(comboGlow * 0.5f)))
+                    val pulseWidth = (1.5f + comboGlow * 2f).dp
+                    val comboColor = Color(0xFFF4D03F).copy(comboGlow * comboPulseAlpha * 0.6f)
+                    Box(Modifier.matchParentSize().border(pulseWidth, comboColor))
                 }
 
-                // === Score flyup ===
-                val flyupAlpha by animateFloatAsState(if (flyupVisible) 1f else 0f, tween(400), label = "fua")
-                val flyupOffset by animateFloatAsState(if (flyupVisible) 0f else 20f, tween(300), label = "fuo")
-                if (flyupAlpha > 0.01f) {
-                    Text(flyupText, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold,
+                // === Explosion particles ===
+                if (particles.isNotEmpty()) {
+                    Canvas(Modifier.matchParentSize()) {
+                        particles.forEach { p ->
+                            drawCircle(
+                                Color(p.color).copy(alpha = (p.life * p.life).coerceIn(0f, 1f)),
+                                radius = p.size * p.life,
+                                center = Offset(p.x * size.width, p.y * size.height)
+                            )
+                            // Bright core
+                            if (p.life > 0.5f) {
+                                drawCircle(
+                                    Color.White.copy(alpha = (p.life - 0.5f) * 2f),
+                                    radius = p.size * 0.3f * p.life,
+                                    center = Offset(p.x * size.width, p.y * size.height)
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // === Score flyup — quick flash, never sticks ===
+                if (flyupProgress > 0.01f) {
+                    val yOff = (1f - flyupProgress) * -80f
+                    val scale = 0.8f + flyupProgress * 0.4f
+                    Text(flyupText, fontSize = 32.sp, fontWeight = FontWeight.ExtraBold,
                         fontFamily = FontFamily.Monospace,
-                        color = Color(0xFFF4D03F).copy(flyupAlpha * 0.9f),
+                        color = Color(0xFFF4D03F).copy(alpha = (flyupProgress * flyupProgress).coerceIn(0f, 0.95f)),
                         modifier = Modifier.align(Alignment.Center).graphicsLayer {
-                            translationY = -flyupOffset * 3f; shadowElevation = 8f
+                            translationY = yOff; scaleX = scale; scaleY = scale; shadowElevation = 12f
                         })
                 }
             }
