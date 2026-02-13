@@ -46,7 +46,8 @@ fun GameBoard(
     multiColor: Boolean = false,
     classicLCD: Boolean = false,
     hardDropTrail: List<Triple<Int, Int, Int>> = emptyList(),
-    lockEvent: Int = 0
+    lockEvent: Int = 0,
+    pieceMaterial: String = "CLASSIC"
 ) {
     val theme = LocalGameTheme.current
     val clearProgress = remember { Animatable(0f) }
@@ -128,16 +129,7 @@ fun GameBoard(
                             } else {
                                 drawRoundRect(pieceColor, offset, cs, CornerRadius(corner))
                                 if (multiColor && cellValue in 1..7) {
-                                    // Subtle color bloom/glow around placed pieces
-                                    val glowSize = gap * 1.2f
-                                    drawRoundRect(pieceColor.copy(alpha = 0.08f),
-                                        Offset(offset.x - glowSize, offset.y - glowSize),
-                                        Size(cs.width + glowSize * 2, cs.height + glowSize * 2),
-                                        CornerRadius(corner + glowSize))
-                                    // 3D bevel: dark border, bottom shadow, top highlight
-                                    drawRoundRect(Color.Black.copy(alpha = 0.35f), offset, cs, CornerRadius(corner), style = Stroke(gap * 1.2f))
-                                    drawRoundRect(Color.Black.copy(alpha = 0.2f), Offset(offset.x, offset.y + cs.height * 0.65f), Size(cs.width, cs.height * 0.35f), CornerRadius(corner))
-                                    drawRoundRect(Color.White.copy(alpha = 0.2f), offset, Size(cs.width, cs.height * 0.3f), CornerRadius(corner))
+                                    drawPieceMaterial(offset, cs, corner, gap, pieceColor, pieceMaterial, isActive = false)
                                 }
                             }
                         }
@@ -145,7 +137,7 @@ fun GameBoard(
                 }
             }
 
-            // Current piece — with glow bloom in multiColor mode
+            // Current piece — with material rendering
             if (currentPiece != null) {
                 val pColor = if (multiColor) PIECE_COLORS.getOrElse(currentPiece.type.ordinal + 1) { theme.pixelOn } else theme.pixelOn
                 for (py in currentPiece.shape.indices) for (px in currentPiece.shape[py].indices) {
@@ -157,19 +149,9 @@ fun GameBoard(
                             if (classicLCD) {
                                 drawLCDCell(offset, cs, true, theme.pixelOff, theme.pixelOn)
                             } else {
-                                // Glow bloom behind active piece
-                                if (multiColor) {
-                                    val glowSize = gap * 2f
-                                    drawRoundRect(pColor.copy(alpha = 0.15f),
-                                        Offset(offset.x - glowSize, offset.y - glowSize),
-                                        Size(cs.width + glowSize * 2, cs.height + glowSize * 2),
-                                        CornerRadius(corner + glowSize))
-                                }
                                 drawRoundRect(pColor, offset, cs, CornerRadius(corner))
                                 if (multiColor) {
-                                    drawRoundRect(Color.Black.copy(alpha = 0.35f), offset, cs, CornerRadius(corner), style = Stroke(gap * 1.2f))
-                                    drawRoundRect(Color.Black.copy(alpha = 0.2f), Offset(offset.x, offset.y + cs.height * 0.65f), Size(cs.width, cs.height * 0.35f), CornerRadius(corner))
-                                    drawRoundRect(Color.White.copy(alpha = 0.25f), offset, Size(cs.width, cs.height * 0.3f), CornerRadius(corner))
+                                    drawPieceMaterial(offset, cs, corner, gap, pColor, pieceMaterial, isActive = true)
                                 }
                             }
                         }
@@ -288,6 +270,82 @@ private fun Color.darken(f: Float) = Color(
     (blue * (1 - f)).coerceIn(0f, 1f),
     alpha
 )
+
+/** Draw material-specific effects on a piece cell.
+ *  Called AFTER the base color rect is already drawn.
+ *  isActive = true for the currently falling piece (slightly brighter effects). */
+private fun DrawScope.drawPieceMaterial(
+    offset: Offset, cs: Size, corner: Float, gap: Float,
+    baseColor: Color, material: String, isActive: Boolean
+) {
+    val glowAlpha = if (isActive) 0.15f else 0.08f
+    when (material) {
+        "STONE" -> {
+            // Matte, rough look — strong dark border, no glossy highlight, subtle texture lines
+            drawRoundRect(Color.Black.copy(alpha = 0.5f), offset, cs, CornerRadius(corner), style = Stroke(gap * 1.5f))
+            drawRoundRect(Color.Black.copy(alpha = 0.25f), Offset(offset.x, offset.y + cs.height * 0.6f), Size(cs.width, cs.height * 0.4f), CornerRadius(corner))
+            // Subtle horizontal texture lines
+            val lineCount = 3
+            for (i in 1..lineCount) {
+                val ly = offset.y + cs.height * i / (lineCount + 1)
+                drawRect(Color.Black.copy(alpha = 0.08f), Offset(offset.x + gap, ly), Size(cs.width - gap * 2, 1f))
+            }
+        }
+        "GRANITE" -> {
+            // Darker, more contrast — thicker border, darker shadow, subtle speckle effect
+            drawRoundRect(Color.Black.copy(alpha = 0.6f), offset, cs, CornerRadius(corner), style = Stroke(gap * 1.8f))
+            drawRoundRect(Color.Black.copy(alpha = 0.35f), Offset(offset.x, offset.y + cs.height * 0.55f), Size(cs.width, cs.height * 0.45f), CornerRadius(corner))
+            // Very faint top edge light
+            drawRoundRect(Color.White.copy(alpha = 0.08f), offset, Size(cs.width, cs.height * 0.15f), CornerRadius(corner))
+        }
+        "GLASS" -> {
+            // Glossy marble — transparent edges, strong specular, inner glow
+            val glowSize = gap * 1.5f
+            drawRoundRect(baseColor.copy(alpha = glowAlpha),
+                Offset(offset.x - glowSize, offset.y - glowSize),
+                Size(cs.width + glowSize * 2, cs.height + glowSize * 2),
+                CornerRadius(corner + glowSize))
+            // Thin elegant border
+            drawRoundRect(Color.White.copy(alpha = 0.25f), offset, cs, CornerRadius(corner), style = Stroke(gap * 0.6f))
+            // Strong specular highlight — top third
+            drawRoundRect(Color.White.copy(alpha = 0.35f), offset, Size(cs.width, cs.height * 0.35f), CornerRadius(corner))
+            // Subtle bottom reflection
+            drawRoundRect(Color.White.copy(alpha = 0.08f), Offset(offset.x, offset.y + cs.height * 0.85f), Size(cs.width, cs.height * 0.15f), CornerRadius(corner))
+            // Inner shadow for depth
+            drawRoundRect(Color.Black.copy(alpha = 0.1f), Offset(offset.x, offset.y + cs.height * 0.5f), Size(cs.width, cs.height * 0.5f), CornerRadius(corner))
+        }
+        "CRYSTAL" -> {
+            // Maximum shine — prismatic edge glow, bright specular, diamond-like
+            val glowSize = gap * 2.5f
+            drawRoundRect(baseColor.copy(alpha = glowAlpha * 1.5f),
+                Offset(offset.x - glowSize, offset.y - glowSize),
+                Size(cs.width + glowSize * 2, cs.height + glowSize * 2),
+                CornerRadius(corner + glowSize))
+            // Prismatic edge — slightly shifted color on border
+            drawRoundRect(Color.White.copy(alpha = 0.3f), offset, cs, CornerRadius(corner), style = Stroke(gap * 0.8f))
+            // Bright specular — top 40%
+            drawRoundRect(Color.White.copy(alpha = 0.45f), offset, Size(cs.width, cs.height * 0.4f), CornerRadius(corner))
+            // Small bright center highlight (diamond facet)
+            val facetSize = cs.width * 0.3f
+            drawRoundRect(Color.White.copy(alpha = 0.25f),
+                Offset(offset.x + cs.width * 0.35f, offset.y + cs.height * 0.15f),
+                Size(facetSize, facetSize * 0.6f), CornerRadius(corner * 0.5f))
+            // Bottom edge reflection
+            drawRoundRect(Color.White.copy(alpha = 0.12f), Offset(offset.x, offset.y + cs.height * 0.8f), Size(cs.width, cs.height * 0.2f), CornerRadius(corner))
+        }
+        else -> {
+            // CLASSIC — standard 3D bevel
+            val glowSize = gap * 1.2f
+            drawRoundRect(baseColor.copy(alpha = glowAlpha),
+                Offset(offset.x - glowSize, offset.y - glowSize),
+                Size(cs.width + glowSize * 2, cs.height + glowSize * 2),
+                CornerRadius(corner + glowSize))
+            drawRoundRect(Color.Black.copy(alpha = 0.35f), offset, cs, CornerRadius(corner), style = Stroke(gap * 1.2f))
+            drawRoundRect(Color.Black.copy(alpha = 0.2f), Offset(offset.x, offset.y + cs.height * 0.65f), Size(cs.width, cs.height * 0.35f), CornerRadius(corner))
+            drawRoundRect(Color.White.copy(alpha = if (isActive) 0.25f else 0.2f), offset, Size(cs.width, cs.height * 0.3f), CornerRadius(corner))
+        }
+    }
+}
 
 /** Lighten a color by a factor */
 private fun Color.lighten(f: Float) = Color(

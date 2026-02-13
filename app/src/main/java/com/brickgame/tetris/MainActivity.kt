@@ -419,6 +419,7 @@ class MainActivity : ComponentActivity() {
                                 controllerConnected = GamepadController.getConnectedControllers().isNotEmpty(),
                                 timerExpired = timerExpired,
                                 remainingSeconds = remainingSeconds,
+                                pieceMaterial = pieceMaterial,
                                 onCloseApp = { this@MainActivity.finishAndRemoveTask() },
                                 showOnboarding = showOnboarding,
                                 onDismissOnboarding = vm::dismissOnboarding,
