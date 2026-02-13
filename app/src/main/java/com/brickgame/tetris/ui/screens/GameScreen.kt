@@ -888,29 +888,33 @@ fun GameScreen(
     boardDimAlpha: Float = 1f, nextCount: Int = 3
 ) {
     val theme = LocalGameTheme.current
+    val isDark = LocalDarkTheme.current
     // Fullscreen: board fills maximum area, controls overlay with transparency
     Box(Modifier.fillMaxSize()) {
-        // Board fills entire area
+        // Falling pieces background
+        Box(Modifier.matchParentSize().alpha(if (isDark) 0.3f else 0.2f)) {
+            FallingPiecesBackground(theme, isDark)
+        }
+        // Board fills entire area — transparent modern grid
         GameBoard(gs.board, Modifier.fillMaxSize().alpha(boardDimAlpha), gs.currentPiece, gs.ghostY, ghost, gs.clearedLineRows, anim, ad, multiColor = LocalMultiColor.current,
             hardDropTrail = gs.hardDropTrail, lockEvent = gs.lockEvent, pieceMaterial = LocalPieceMaterial.current, highContrast = LocalHighContrast.current,
-            gameLevel = gs.level)
-        // Floating info strip — rounded pill
-        Row(Modifier.fillMaxWidth().align(Alignment.TopCenter).padding(horizontal = 12.dp, vertical = 6.dp)
-            .background(Color.Black.copy(0.5f), RoundedCornerShape(12.dp)).padding(horizontal = 12.dp, vertical = 5.dp),
+            boardOpacity = if (isDark) 0.10f else 0.15f, gameLevel = gs.level)
+        // Floating info strip — semi-transparent
+        Row(Modifier.fillMaxWidth().align(Alignment.TopCenter).padding(horizontal = 8.dp, vertical = 4.dp)
+            .background((if (isDark) Color.Black else Color.White).copy(0.5f), RoundedCornerShape(8.dp)).padding(horizontal = 10.dp, vertical = 4.dp),
             Arrangement.SpaceBetween, Alignment.CenterVertically) {
-            HoldPiecePreview(gs.holdPiece?.shape, gs.holdUsed, Modifier.size(28.dp))
-            Text("LV${gs.level}", fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace, color = theme.accentColor)
-            Text(gs.score.toString().padStart(7, '0'), fontSize = 14.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, color = Color.White.copy(0.9f), letterSpacing = 1.sp)
-            Text("${gs.lines}L", fontSize = 12.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, color = Color.White.copy(0.7f))
+            HoldPiecePreview(gs.holdPiece?.shape, gs.holdUsed, Modifier.size(26.dp))
+            Tag("LV${gs.level}")
+            Text(gs.score.toString().padStart(7, '0'), fontSize = 14.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, color = theme.accentColor)
+            Tag("${gs.lines}L")
             Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                 gs.nextPieces.take(2).forEachIndexed { i, p ->
-                    NextPiecePreview(p.shape, Modifier.size(if (i == 0) 28.dp else 22.dp), if (i == 0) 1f else 0.5f)
+                    NextPiecePreview(p.shape, Modifier.size(if (i == 0) 26.dp else 20.dp), if (i == 0) 1f else 0.5f)
                 }
             }
         }
-        // Controls at bottom — semi-transparent
-        Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth()
-            .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(0.3f)))).alpha(0.75f)) {
+        // Controls at bottom with transparency
+        Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().alpha(0.65f)) {
             FullControls(dp, onHD, onHold, onLP, onLR, onRP, onRR, onDP, onDR, onRotate, onPause, onSet, onStart, gs.status)
         }
     }
@@ -925,7 +929,7 @@ fun GameScreen(
 ) {
     val theme = LocalGameTheme.current
     Column(Modifier.fillMaxSize().padding(4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        // Info row: Level | Score | Lines
+        // Redesigned info row: Level (left) | Score (center) | Lines (right)
         Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 2.dp), Arrangement.SpaceBetween, Alignment.CenterVertically) {
             Column(horizontalAlignment = Alignment.Start) {
                 Text("LEVEL", fontSize = 8.sp, color = theme.textSecondary, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
@@ -933,7 +937,7 @@ fun GameScreen(
             }
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text("SCORE", fontSize = 8.sp, color = theme.textSecondary, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
-                Text(gs.score.toString().padStart(7, '0'), fontSize = 16.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, color = theme.accentColor, letterSpacing = 1.sp)
+                Text(gs.score.toString(), fontSize = 16.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, color = theme.accentColor)
             }
             Column(horizontalAlignment = Alignment.End) {
                 Text("LINES", fontSize = 8.sp, color = theme.textSecondary, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
@@ -942,13 +946,15 @@ fun GameScreen(
         }
         // Board with Hold panel on left and Next panel on right
         Row(Modifier.weight(1f).fillMaxWidth().padding(horizontal = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+            // Left: Hold preview
             Column(Modifier.width(44.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
                 Text("HOLD", fontSize = 7.sp, color = theme.textSecondary, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
                 Spacer(Modifier.height(2.dp))
                 HoldPiecePreview(gs.holdPiece?.shape, gs.holdUsed, Modifier.size(40.dp))
             }
-            GameBoard(gs.board, Modifier.weight(1f).fillMaxHeight(), gs.currentPiece, gs.ghostY, ghost, gs.clearedLineRows, anim, ad, multiColor = LocalMultiColor.current, pieceMaterial = LocalPieceMaterial.current, highContrast = LocalHighContrast.current,
-                gameLevel = gs.level)
+            // Center: Board
+            GameBoard(gs.board, Modifier.weight(1f).fillMaxHeight(), gs.currentPiece, gs.ghostY, ghost, gs.clearedLineRows, anim, ad, multiColor = LocalMultiColor.current, pieceMaterial = LocalPieceMaterial.current, highContrast = LocalHighContrast.current)
+            // Right: Next queue
             Column(Modifier.width(44.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
                 Text("NEXT", fontSize = 7.sp, color = theme.textSecondary, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
                 Spacer(Modifier.height(2.dp))
@@ -958,18 +964,21 @@ fun GameScreen(
             }
         }
         Spacer(Modifier.height(2.dp))
-        // Controls — DPad centered with rotate-in-center, actions tucked to sides
+        // Centered D-Pad with rotate in center + action buttons on sides
         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), Arrangement.SpaceBetween, Alignment.CenterVertically) {
+            // Hold + Pause on left
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                ActionButton("HOLD", onHold, width = 62.dp, height = 30.dp)
+                ActionButton("HOLD", onHold, width = 64.dp, height = 30.dp)
                 ActionButton(if (gs.status == GameStatus.MENU) "START" else "PAUSE",
-                    { if (gs.status == GameStatus.MENU) onStart() else onPause() }, width = 62.dp, height = 30.dp)
+                    { if (gs.status == GameStatus.MENU) onStart() else onPause() }, width = 64.dp, height = 30.dp)
                 ActionButton("···", onSet, width = 44.dp, height = 24.dp, backgroundColor = LocalGameTheme.current.buttonSecondary)
             }
+            // Central D-Pad — always rotate-in-center style, larger with spread
             DPad(64.dp, rotateInCenter = true, horizontalSpread = 18.dp,
                 onUpPress = onHD, onDownPress = onDP, onDownRelease = onDR,
                 onLeftPress = onLP, onLeftRelease = onLR, onRightPress = onRP, onRightRelease = onRR, onRotate = onRotate)
-            Spacer(Modifier.width(62.dp))
+            // Right spacer to balance
+            Spacer(Modifier.width(64.dp))
         }
     }
 }
@@ -1140,8 +1149,7 @@ fun GameScreen(
 ) {
     Row(Modifier.fillMaxSize().padding(6.dp)) {
         Box(Modifier.weight(1f).fillMaxHeight(), Alignment.Center) { if (lefty) LandInfo(gs, onPause, onSet) else LandCtrl(dp, onHD, onHold, onLP, onLR, onRP, onRR, onDP, onDR, onRotate, onPause) }
-        GameBoard(gs.board, Modifier.fillMaxHeight().aspectRatio(0.5f).padding(horizontal = 6.dp), gs.currentPiece, gs.ghostY, ghost, gs.clearedLineRows, anim, ad, multiColor = LocalMultiColor.current, pieceMaterial = LocalPieceMaterial.current, highContrast = LocalHighContrast.current,
-            gameLevel = gs.level)
+        GameBoard(gs.board, Modifier.fillMaxHeight().aspectRatio(0.5f).padding(horizontal = 6.dp), gs.currentPiece, gs.ghostY, ghost, gs.clearedLineRows, anim, ad, multiColor = LocalMultiColor.current, pieceMaterial = LocalPieceMaterial.current, highContrast = LocalHighContrast.current)
         Box(Modifier.weight(1f).fillMaxHeight(), Alignment.Center) { if (lefty) LandCtrl(dp, onHD, onHold, onLP, onLR, onRP, onRR, onDP, onDR, onRotate, onPause) else LandInfo(gs, onPause, onSet) }
     }
 }

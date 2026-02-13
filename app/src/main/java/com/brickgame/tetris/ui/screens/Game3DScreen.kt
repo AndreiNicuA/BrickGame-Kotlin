@@ -69,39 +69,17 @@ fun Game3DScreen(
         glViewRef.value?.setCameraExternal(az, el, z, px, py)
     }
 
-    /**
-     * Map screen-relative DPad input to world X/Z movement.
-     * Quantizes camera azimuth to nearest 90° so controls stay consistent
-     * within each camera quadrant — no jittery axis switching.
-     *
-     * Camera facing:  0° → screen-left = -X, screen-up = +Z
-     *                90° → screen-left = +Z, screen-up = +X
-     *               180° → screen-left = +X, screen-up = -Z
-     *               270° → screen-left = -Z, screen-up = -X
-     */
     fun moveCameraRelative(screenDx: Int, screenDz: Int) {
         if (starWars) { onMoveX(screenDx); onMoveZ(screenDz); return }
-        // Normalize azimuth to 0-360 and quantize to nearest 90°
-        val norm = ((azimuth % 360f) + 360f) % 360f
-        val quadrant = ((norm + 45f) / 90f).toInt() % 4
-        when (quadrant) {
-            0 -> { // ~0° — default front view
-                if (screenDx != 0) onMoveX(screenDx)
-                if (screenDz != 0) onMoveZ(screenDz)
-            }
-            1 -> { // ~90° — rotated right
-                if (screenDx != 0) onMoveZ(-screenDx)
-                if (screenDz != 0) onMoveX(screenDz)
-            }
-            2 -> { // ~180° — behind
-                if (screenDx != 0) onMoveX(-screenDx)
-                if (screenDz != 0) onMoveZ(-screenDz)
-            }
-            3 -> { // ~270° — rotated left
-                if (screenDx != 0) onMoveZ(screenDx)
-                if (screenDz != 0) onMoveX(-screenDz)
-            }
-        }
+        // Snap azimuth to nearest 90° for controls — prevents confusing diagonal mappings
+        // Visual camera rotation stays smooth, only CONTROLS snap to cardinal directions
+        val snapped = (Math.round(azimuth / 90f) * 90f).toDouble()
+        val rad = Math.toRadians(snapped)
+        val cosA = cos(rad).toFloat(); val sinA = sin(rad).toFloat()
+        val worldX = screenDx * cosA - screenDz * sinA
+        val worldZ = screenDx * sinA + screenDz * cosA
+        if (abs(worldX) >= abs(worldZ)) onMoveX(if (worldX > 0) 1 else -1)
+        else onMoveZ(if (worldZ > 0) 1 else -1)
     }
 
     Box(Modifier.fillMaxSize().background(theme.backgroundColor).systemBarsPadding()) {
@@ -245,8 +223,8 @@ fun Game3DScreen(
                 Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 4.dp),
                 Arrangement.SpaceBetween, Alignment.CenterVertically
             ) {
-                // DPad — bigger, with HOLD tucked in upper-right
-                Box {
+                // Left: DPad with compass indicator
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     DPad(
                         buttonSize = 52.dp, rotateInCenter = false,
                         onUpPress = { moveCameraRelative(0, 1) },
@@ -257,33 +235,40 @@ fun Game3DScreen(
                         onRightPress = { moveCameraRelative(1, 0) },
                         onRightRelease = {}
                     )
-                    Box(Modifier.align(Alignment.TopEnd).offset(x = 6.dp, y = (-2).dp)) {
-                        ActionButton("HOLD", onHold, width = 48.dp, height = 22.dp)
+                    // Compass — shows which direction the DPad maps to
+                    Spacer(Modifier.height(2.dp))
+                    Canvas(Modifier.size(24.dp)) {
+                        val rad = Math.toRadians(-azimuth.toDouble()).toFloat()
+                        val cx = size.width / 2f; val cy = size.height / 2f; val r = size.width * 0.4f
+                        // North arrow
+                        drawLine(Color.White.copy(0.3f), Offset(cx, cy), Offset(cx + sin(rad) * r, cy - cos(rad) * r), 2f)
+                        drawCircle(Color(0xFF22C55E).copy(0.6f), 3f, Offset(cx + sin(rad) * r, cy - cos(rad) * r))
                     }
                 }
-                // Centre: PAUSE + toggles + settings
+                // Centre: HOLD + PAUSE + toggles
                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    ActionButton("HOLD", onHold, width = 58.dp, height = 26.dp)
                     ActionButton(
                         if (state.status == GameStatus.MENU) "START" else "PAUSE",
                         { if (state.status == GameStatus.MENU) onStart() else onPause() },
-                        width = 64.dp, height = 28.dp
+                        width = 58.dp, height = 26.dp
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
                         MiniToggle("SW", starWars, theme.accentColor) { starWars = !starWars }
                         MiniToggle("❄", !state.autoGravity, Color(0xFF38BDF8)) { onToggleGravity() }
                         MiniToggle("⚙", showCamSettings, Color(0xFFF59E0B)) { showCamSettings = !showCamSettings }
                     }
-                    ActionButton("···", onOpenSettings, width = 40.dp, height = 20.dp)
+                    ActionButton("···", onOpenSettings, width = 36.dp, height = 18.dp)
                 }
-                // Right side: rotation buttons + drop controls
-                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                // Right: Rotate + Drop buttons
+                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                        ActionButton("↻ SPIN", onRotateXZ, width = 60.dp, height = 38.dp)
-                        ActionButton("↻ TILT", onRotateXY, width = 60.dp, height = 38.dp)
+                        ActionButton("↻ SPIN", onRotateXZ, width = 56.dp, height = 36.dp)
+                        ActionButton("↻ TILT", onRotateXY, width = 56.dp, height = 36.dp)
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        TapButton(ButtonIcon.UP, 46.dp) { onHardDrop() }
-                        HoldButton(ButtonIcon.DOWN, 46.dp, onPress = { onSoftDrop() }, onRelease = {})
+                        TapButton(ButtonIcon.UP, 48.dp) { onHardDrop() }
+                        HoldButton(ButtonIcon.DOWN, 48.dp, onPress = { onSoftDrop() }, onRelease = {})
                     }
                 }
             }
