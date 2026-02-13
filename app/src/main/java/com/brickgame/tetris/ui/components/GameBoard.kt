@@ -122,10 +122,10 @@ fun GameBoard(
                         }
                     } else {
                         if (useModernGrid) {
-                            // Modern: thin subtle outline instead of solid fill
-                            drawRoundRect(emptyColor.copy(alpha = emptyColor.alpha * 0.5f),
+                            // Modern: subtle outline — visible but not distracting
+                            drawRoundRect(emptyColor.copy(alpha = (emptyColor.alpha * 2.5f).coerceAtMost(0.3f)),
                                 offset, cs, CornerRadius(corner),
-                                style = Stroke(gap * 0.8f))
+                                style = Stroke(gap * 1.2f))
                         } else {
                             drawRoundRect(emptyColor, offset, cs, CornerRadius(corner))
                         }
