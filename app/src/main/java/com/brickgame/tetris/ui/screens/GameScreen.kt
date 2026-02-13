@@ -23,6 +23,8 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.text.font.FontFamily
@@ -124,16 +126,20 @@ fun GameScreen(
     val useControllerLayout = controllerConnected &&
         (controllerLayoutMode == "minimal" || controllerLayoutMode == "auto")
 
+    // Scale only text (sp) by uiScale — board dp/px dimensions stay unaffected
+    val baseDensity = LocalDensity.current
+    val scaledDensity = Density(baseDensity.density, baseDensity.fontScale * uiScale)
+
     CompositionLocalProvider(
         LocalMultiColor provides multiColor,
         LocalPieceMaterial provides pieceMaterial,
         LocalHighContrast provides highContrast,
         LocalUiScale provides uiScale,
-        LocalButtonShape provides btnShape
+        LocalButtonShape provides btnShape,
+        LocalDensity provides scaledDensity
     ) {
     val isMenu = gameState.status == GameStatus.MENU
-    val effectiveScale = uiScale
-    Box(Modifier.fillMaxSize().graphicsLayer { scaleX = effectiveScale; scaleY = effectiveScale }) {
+    Box(Modifier.fillMaxSize()) {
         if (isMenu) {
             MenuOverlay(gameState.highScore, scoreHistory, onStartGame, onOpenSettings)
         } else if (useControllerLayout) {

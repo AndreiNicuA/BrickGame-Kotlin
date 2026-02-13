@@ -31,6 +31,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
 import com.brickgame.tetris.ui.layout.ButtonShape
 import com.brickgame.tetris.ui.theme.LocalGameTheme
 
@@ -264,13 +266,19 @@ fun ActionButton(
             } else Modifier),
         Alignment.Center
     ) {
-        Text(text, fontSize = (height.value * 0.34f).sp, fontWeight = FontWeight.Bold,
-            fontFamily = FontFamily.Monospace, letterSpacing = 1.sp,
-            color = if (!enabled) theme.textPrimary.copy(alpha = 0.3f)
-                    else { // Auto-contrast: use dark text on light backgrounds, light text on dark
-                        val bgLum = bg.red * 0.299f + bg.green * 0.587f + bg.blue * 0.114f
-                        if (bgLum > 0.5f) Color(0xFF1A1A1A) else Color(0xFFF0F0F0)
-                    })
+        // Button text should be proportional to button dp size, not affected by UI scale.
+        // Counteract any external fontScale so text fits the fixed-size button.
+        val density = LocalDensity.current
+        val baseDensity = Density(density.density, 1f)
+        CompositionLocalProvider(LocalDensity provides baseDensity) {
+            Text(text, fontSize = (height.value * 0.34f).sp, fontWeight = FontWeight.Bold,
+                fontFamily = FontFamily.Monospace, letterSpacing = 1.sp,
+                color = if (!enabled) theme.textPrimary.copy(alpha = 0.3f)
+                        else { // Auto-contrast: use dark text on light backgrounds, light text on dark
+                            val bgLum = bg.red * 0.299f + bg.green * 0.587f + bg.blue * 0.114f
+                            if (bgLum > 0.5f) Color(0xFF1A1A1A) else Color(0xFFF0F0F0)
+                        })
+        }
     }
 }
 

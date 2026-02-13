@@ -211,10 +211,10 @@ fun SettingsScreen(
         } }
         item { Card {
             Text("UI Scale", color = tx(), fontSize = 14.sp)
-            Slider(uiScale, onUiScale, valueRange = 0.8f..1.5f, colors = sliderColors())
+            Slider(uiScale, onUiScale, valueRange = 0.8f..1.3f, colors = sliderColors())
             Text("${(uiScale * 100).toInt()}%", color = dim(), fontSize = 12.sp)
             Spacer(Modifier.height(4.dp))
-            Text("Scale game board and controls", color = dim(), fontSize = 11.sp)
+            Text("Scale text size for better readability", color = dim(), fontSize = 11.sp)
         } }
         item { Spacer(Modifier.height(16.dp)) }
     }

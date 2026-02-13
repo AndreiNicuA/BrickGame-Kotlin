@@ -138,7 +138,7 @@ class SettingsRepository(private val context: Context) {
     suspend fun setHighContrast(v: Boolean) = set(HIGH_CONTRAST, v)
 
     val uiScale get() = pref(UI_SCALE, 1.0f)
-    suspend fun setUiScale(v: Float) = set(UI_SCALE, v.coerceIn(0.8f, 1.5f))
+    suspend fun setUiScale(v: Float) = set(UI_SCALE, v.coerceIn(0.8f, 1.3f))
 
     // Level events
     val levelEventsEnabled get() = pref(LEVEL_EVENTS, true)
