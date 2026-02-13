@@ -158,6 +158,10 @@ class MainActivity : ComponentActivity() {
             val vib by vm.vibrationEnabled.collectAsState()
             val multiColor by vm.multiColorEnabled.collectAsState()
             val pieceMaterial by vm.pieceMaterial.collectAsState()
+            val soundVolume by vm.soundVolume.collectAsState()
+            val soundStyle by vm.soundStyle.collectAsState()
+            val vibrationIntensity by vm.vibrationIntensity.collectAsState()
+            val vibrationStyle by vm.vibrationStyle.collectAsState()
             val controllerEnabled by vm.controllerEnabled.collectAsState()
             val controllerDeadzone by vm.controllerDeadzone.collectAsState()
             // General App Settings
@@ -328,6 +332,8 @@ class MainActivity : ComponentActivity() {
                             difficulty = diff, gameMode = mode, ghostEnabled = ghost,
                             animationStyle = anim, animationDuration = animDur,
                             soundEnabled = sound, vibrationEnabled = vib, multiColorEnabled = multiColor,
+                            soundVolume = soundVolume, soundStyle = soundStyle,
+                            vibrationIntensity = vibrationIntensity, vibrationStyle = vibrationStyle,
                             pieceMaterial = pieceMaterial,
                             controllerEnabled = controllerEnabled, controllerDeadzone = controllerDeadzone,
                             appThemeMode = appThemeMode, keepScreenOn = keepScreenOn,
@@ -355,6 +361,10 @@ class MainActivity : ComponentActivity() {
                             onSetVibrationEnabled = vm::setVibrationEnabled, onSetPlayerName = vm::setPlayerName,
                             onSetMultiColorEnabled = vm::setMultiColorEnabled,
                             onSetPieceMaterial = vm::setPieceMaterial,
+                            onSetSoundVolume = vm::setSoundVolume,
+                            onSetSoundStyle = vm::setSoundStyle,
+                            onSetVibrationIntensity = vm::setVibrationIntensity,
+                            onSetVibrationStyle = vm::setVibrationStyle,
                             onSetControllerEnabled = vm::setControllerEnabled,
                             onSetControllerDeadzone = vm::setControllerDeadzone,
                             onSetAppThemeMode = vm::setAppThemeMode,
@@ -420,6 +430,8 @@ class MainActivity : ComponentActivity() {
                                 timerExpired = timerExpired,
                                 remainingSeconds = remainingSeconds,
                                 pieceMaterial = pieceMaterial,
+                                highContrast = highContrast,
+                                uiScale = uiScale,
                                 onCloseApp = { this@MainActivity.finishAndRemoveTask() },
                                 showOnboarding = showOnboarding,
                                 onDismissOnboarding = vm::dismissOnboarding,

@@ -52,6 +52,8 @@ fun SettingsScreen(
     difficulty: Difficulty, gameMode: GameMode, ghostEnabled: Boolean,
     animationStyle: AnimationStyle, animationDuration: Float,
     soundEnabled: Boolean, vibrationEnabled: Boolean, multiColorEnabled: Boolean,
+    soundVolume: Float = 0.7f, soundStyle: String = "RETRO_BEEP",
+    vibrationIntensity: Float = 0.7f, vibrationStyle: String = "CLASSIC",
     pieceMaterial: String = "CLASSIC",
     controllerEnabled: Boolean = true, controllerDeadzone: Float = 0.25f,
     appThemeMode: String = "auto", keepScreenOn: Boolean = true,
@@ -71,6 +73,10 @@ fun SettingsScreen(
     onSetVibrationEnabled: (Boolean) -> Unit, onSetPlayerName: (String) -> Unit,
     onSetMultiColorEnabled: (Boolean) -> Unit,
     onSetPieceMaterial: (String) -> Unit = {},
+    onSetSoundVolume: (Float) -> Unit = {},
+    onSetSoundStyle: (String) -> Unit = {},
+    onSetVibrationIntensity: (Float) -> Unit = {},
+    onSetVibrationStyle: (String) -> Unit = {},
     onSetControllerEnabled: (Boolean) -> Unit = {},
     onSetControllerDeadzone: (Float) -> Unit = {},
     onSetAppThemeMode: (String) -> Unit = {},
@@ -105,14 +111,14 @@ fun SettingsScreen(
     Box(Modifier.fillMaxSize().background(bg()).systemBarsPadding()) {
         when (page) {
             GameViewModel.SettingsPage.MAIN -> MainPage(onNavigate, onBack, on3DMode)
-            GameViewModel.SettingsPage.GENERAL -> GeneralPage(appThemeMode, keepScreenOn, orientationLock, immersiveMode, frameRateTarget, batterySaver, onSetAppThemeMode, onSetKeepScreenOn, onSetOrientationLock, onSetImmersiveMode, onSetFrameRateTarget, onSetBatterySaver) { onNavigate(GameViewModel.SettingsPage.MAIN) }
+            GameViewModel.SettingsPage.GENERAL -> GeneralPage(appThemeMode, keepScreenOn, orientationLock, immersiveMode, frameRateTarget, batterySaver, highContrast, uiScale, onSetAppThemeMode, onSetKeepScreenOn, onSetOrientationLock, onSetImmersiveMode, onSetFrameRateTarget, onSetBatterySaver, onSetHighContrast, onSetUiScale) { onNavigate(GameViewModel.SettingsPage.MAIN) }
             GameViewModel.SettingsPage.PROFILE -> ProfilePage(playerName, highScore, scoreHistory, onSetPlayerName, onClearHistory) { onNavigate(GameViewModel.SettingsPage.MAIN) }
             GameViewModel.SettingsPage.THEME -> ThemePage(currentTheme, customThemes, multiColorEnabled, pieceMaterial, onSetTheme, onSetMultiColorEnabled, onSetPieceMaterial, onNewTheme, onEditTheme, onDeleteTheme) { onNavigate(GameViewModel.SettingsPage.MAIN) }
             GameViewModel.SettingsPage.THEME_EDITOR -> if (editingTheme != null) ThemeEditorScreen(editingTheme, onUpdateEditingTheme, onSaveTheme) { onNavigate(GameViewModel.SettingsPage.THEME) }
             GameViewModel.SettingsPage.LAYOUT -> LayoutPage(portraitLayout, landscapeLayout, dpadStyle, buttonStyle, customLayouts, activeCustomLayout, onSetPortraitLayout, onSetLandscapeLayout, onSetDPadStyle, onSetButtonStyle, onNewLayout, onEditLayout, onSelectCustomLayout, onClearCustomLayout, onDeleteLayout, onEditFreeform = { onEditFreeform() }) { onNavigate(GameViewModel.SettingsPage.MAIN) }
             GameViewModel.SettingsPage.LAYOUT_EDITOR -> if (editingLayout != null) LayoutEditorScreen(editingLayout, currentTheme, portraitLayout, dpadStyle, onUpdateEditingLayout, onSaveLayout) { onNavigate(GameViewModel.SettingsPage.LAYOUT) }
             GameViewModel.SettingsPage.GAMEPLAY -> GameplayPage(difficulty, gameMode, ghostEnabled, levelEventsEnabled, infinityTimer, infinityTimerEnabled, onSetDifficulty, onSetGameMode, onSetGhostEnabled, onSetLevelEventsEnabled, onSetInfinityTimer, onSetInfinityTimerEnabled) { onNavigate(GameViewModel.SettingsPage.MAIN) }
-            GameViewModel.SettingsPage.EXPERIENCE -> ExperiencePage(animationStyle, animationDuration, soundEnabled, vibrationEnabled, onSetAnimationStyle, onSetAnimationDuration, onSetSoundEnabled, onSetVibrationEnabled) { onNavigate(GameViewModel.SettingsPage.MAIN) }
+            GameViewModel.SettingsPage.EXPERIENCE -> ExperiencePage(animationStyle, animationDuration, soundEnabled, soundVolume, soundStyle, vibrationEnabled, vibrationIntensity, vibrationStyle, onSetAnimationStyle, onSetAnimationDuration, onSetSoundEnabled, onSetSoundVolume, onSetSoundStyle, onSetVibrationEnabled, onSetVibrationIntensity, onSetVibrationStyle) { onNavigate(GameViewModel.SettingsPage.MAIN) }
             GameViewModel.SettingsPage.CONTROLLER -> ControllerPage(controllerEnabled, controllerDeadzone, controllerLayoutMode, onSetControllerEnabled, onSetControllerDeadzone, onSetControllerLayout) { onNavigate(GameViewModel.SettingsPage.MAIN) }
             GameViewModel.SettingsPage.ABOUT -> AboutPage { onNavigate(GameViewModel.SettingsPage.MAIN) }
             GameViewModel.SettingsPage.HOW_TO_PLAY -> HowToPlayPage { onNavigate(GameViewModel.SettingsPage.MAIN) }
@@ -139,9 +145,10 @@ fun SettingsScreen(
 // ===== GENERAL APP SETTINGS =====
 @Composable private fun GeneralPage(
     appThemeMode: String, keepScreenOn: Boolean, orientationLock: String, immersiveMode: Boolean,
-    frameRateTarget: Int, batterySaver: Boolean,
+    frameRateTarget: Int, batterySaver: Boolean, highContrast: Boolean, uiScale: Float,
     onThemeMode: (String) -> Unit, onKeepScreen: (Boolean) -> Unit, onOrientation: (String) -> Unit,
     onImmersive: (Boolean) -> Unit, onFrameRate: (Int) -> Unit, onBatterySaver: (Boolean) -> Unit,
+    onHighContrast: (Boolean) -> Unit, onUiScale: (Float) -> Unit,
     onBack: () -> Unit
 ) {
     LazyColumn(Modifier.fillMaxSize().padding(20.dp)) {
@@ -195,6 +202,19 @@ fun SettingsScreen(
             Toggle("Battery Saver", batterySaver, onBatterySaver)
             Spacer(Modifier.height(4.dp))
             Text("Reduces animations and lowers frame rate to save battery", color = dim(), fontSize = 11.sp)
+        } }
+        item { Lbl("Accessibility") }
+        item { Card {
+            Toggle("High Contrast", highContrast, onHighContrast)
+            Spacer(Modifier.height(4.dp))
+            Text("Increases board contrast for better visibility", color = dim(), fontSize = 11.sp)
+        } }
+        item { Card {
+            Text("UI Scale", color = tx(), fontSize = 14.sp)
+            Slider(uiScale, onUiScale, valueRange = 0.8f..1.5f, colors = sliderColors())
+            Text("${(uiScale * 100).toInt()}%", color = dim(), fontSize = 12.sp)
+            Spacer(Modifier.height(4.dp))
+            Text("Scale game board and controls", color = dim(), fontSize = 11.sp)
         } }
         item { Spacer(Modifier.height(16.dp)) }
     }
@@ -462,12 +482,46 @@ fun SettingsScreen(
 }
 
 // ===== EXPERIENCE =====
-@Composable private fun ExperiencePage(aS: AnimationStyle, aD: Float, s: Boolean, v: Boolean, onAS: (AnimationStyle) -> Unit, onAD: (Float) -> Unit, onS: (Boolean) -> Unit, onV: (Boolean) -> Unit, onBack: () -> Unit) {
+@Composable private fun ExperiencePage(aS: AnimationStyle, aD: Float, s: Boolean, sVol: Float, sStyle: String, v: Boolean, vInt: Float, vStyle: String, onAS: (AnimationStyle) -> Unit, onAD: (Float) -> Unit, onS: (Boolean) -> Unit, onSVol: (Float) -> Unit, onSStyle: (String) -> Unit, onV: (Boolean) -> Unit, onVInt: (Float) -> Unit, onVStyle: (String) -> Unit, onBack: () -> Unit) {
     LazyColumn(Modifier.fillMaxSize().padding(20.dp)) {
         item { Header("Experience", onBack) }
+        // Animation
         item { Lbl("Animation") }; items(AnimationStyle.entries.size) { i -> val x = AnimationStyle.entries[i]; Sel("${x.displayName} — ${x.description}", x == aS) { onAS(x) } }
         item { Card { Text("Speed", color = tx(), fontSize = 14.sp); Slider(aD, onAD, valueRange = 0.1f..2f, colors = sliderColors()); Text("${(aD*1000).toInt()}ms", color = dim(), fontSize = 12.sp) } }
-        item { Lbl("Sound & Vibration") }; item { Card { Toggle("Sound", s, onS); Spacer(Modifier.height(8.dp)); Toggle("Vibration", v, onV) } }
+        // Sound
+        item { Lbl("Sound") }
+        item { Card {
+            Toggle("Sound", s, onS)
+            if (s) {
+                Spacer(Modifier.height(8.dp))
+                Text("Volume", color = tx(), fontSize = 14.sp)
+                Slider(sVol, onSVol, valueRange = 0f..1f, colors = sliderColors())
+                Text("${(sVol * 100).toInt()}%", color = dim(), fontSize = 12.sp)
+                Spacer(Modifier.height(8.dp))
+                Text("Sound Style", color = tx(), fontSize = 14.sp)
+                Spacer(Modifier.height(4.dp))
+                com.brickgame.tetris.ui.styles.SoundStyle.entries.forEach { ss ->
+                    Sel("${ss.displayName} — ${ss.description}", sStyle == ss.name) { onSStyle(ss.name) }
+                }
+            }
+        } }
+        // Vibration
+        item { Lbl("Vibration") }
+        item { Card {
+            Toggle("Vibration", v, onV)
+            if (v) {
+                Spacer(Modifier.height(8.dp))
+                Text("Intensity", color = tx(), fontSize = 14.sp)
+                Slider(vInt, onVInt, valueRange = 0f..1f, colors = sliderColors())
+                Text("${(vInt * 100).toInt()}%", color = dim(), fontSize = 12.sp)
+                Spacer(Modifier.height(8.dp))
+                Text("Vibration Style", color = tx(), fontSize = 14.sp)
+                Spacer(Modifier.height(4.dp))
+                com.brickgame.tetris.ui.styles.VibrationStyle.entries.forEach { vs ->
+                    Sel("${vs.displayName} — ${vs.description}", vStyle == vs.name) { onVStyle(vs.name) }
+                }
+            }
+        } }
     }
 }
 

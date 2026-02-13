@@ -60,6 +60,14 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     val multiColorEnabled: StateFlow<Boolean> = _multiColorEnabled.asStateFlow()
     private val _pieceMaterial = MutableStateFlow("CLASSIC")
     val pieceMaterial: StateFlow<String> = _pieceMaterial.asStateFlow()
+    private val _soundVolume = MutableStateFlow(0.7f)
+    val soundVolume: StateFlow<Float> = _soundVolume.asStateFlow()
+    private val _soundStyle = MutableStateFlow("RETRO_BEEP")
+    val soundStyle: StateFlow<String> = _soundStyle.asStateFlow()
+    private val _vibrationIntensity = MutableStateFlow(0.7f)
+    val vibrationIntensity: StateFlow<Float> = _vibrationIntensity.asStateFlow()
+    private val _vibrationStyle = MutableStateFlow("CLASSIC")
+    val vibrationStyle: StateFlow<String> = _vibrationStyle.asStateFlow()
     private val _controllerEnabled = MutableStateFlow(true)
     val controllerEnabled: StateFlow<Boolean> = _controllerEnabled.asStateFlow()
     private val _controllerDeadzone = MutableStateFlow(0.25f)
@@ -148,11 +156,11 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch { settingsRepo.difficulty.collect { val d = Difficulty.entries.find { e -> e.name == it } ?: Difficulty.NORMAL; _difficulty.value = d; game.setDifficulty(d) } }
         viewModelScope.launch { settingsRepo.highScore.collect { _highScore.value = it } }
         viewModelScope.launch { settingsRepo.soundEnabled.collect { _soundEnabled.value = it; soundManager.setEnabled(it) } }
-        viewModelScope.launch { settingsRepo.soundVolume.collect { soundManager.setVolume(it) } }
-        viewModelScope.launch { settingsRepo.soundStyle.collect { soundManager.setSoundStyle(SoundStyle.entries.find { e -> e.name == it } ?: SoundStyle.RETRO_BEEP) } }
+        viewModelScope.launch { settingsRepo.soundVolume.collect { _soundVolume.value = it; soundManager.setVolume(it) } }
+        viewModelScope.launch { settingsRepo.soundStyle.collect { _soundStyle.value = it; soundManager.setSoundStyle(SoundStyle.entries.find { e -> e.name == it } ?: SoundStyle.RETRO_BEEP) } }
         viewModelScope.launch { settingsRepo.vibrationEnabled.collect { _vibrationEnabled.value = it; vibrationManager.setEnabled(it) } }
-        viewModelScope.launch { settingsRepo.vibrationIntensity.collect { vibrationManager.setIntensity(it) } }
-        viewModelScope.launch { settingsRepo.vibrationStyle.collect { vibrationManager.setVibrationStyle(VibrationStyle.entries.find { e -> e.name == it } ?: VibrationStyle.CLASSIC) } }
+        viewModelScope.launch { settingsRepo.vibrationIntensity.collect { _vibrationIntensity.value = it; vibrationManager.setIntensity(it) } }
+        viewModelScope.launch { settingsRepo.vibrationStyle.collect { _vibrationStyle.value = it; vibrationManager.setVibrationStyle(VibrationStyle.entries.find { e -> e.name == it } ?: VibrationStyle.CLASSIC) } }
         viewModelScope.launch { settingsRepo.animationStyle.collect { _animationStyle.value = AnimationStyle.entries.find { e -> e.name == it } ?: AnimationStyle.MODERN } }
         viewModelScope.launch { settingsRepo.animationDuration.collect { _animationDuration.value = it } }
         viewModelScope.launch { settingsRepo.portraitLayout.collect { name -> _portraitLayout.value = LayoutPreset.entries.find { it.name == name } ?: LayoutPreset.PORTRAIT_CLASSIC } }
@@ -304,6 +312,10 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     fun setDPadStyle(s: DPadStyle) { _dpadStyle.value = s; viewModelScope.launch { settingsRepo.setDpadStyle(s.name) } }
     fun setMultiColorEnabled(v: Boolean) { _multiColorEnabled.value = v; viewModelScope.launch { settingsRepo.setMultiColorEnabled(v) } }
     fun setPieceMaterial(v: String) { _pieceMaterial.value = v; viewModelScope.launch { settingsRepo.setPieceMaterial(v) } }
+    fun setSoundVolume(v: Float) { _soundVolume.value = v; soundManager.setVolume(v); viewModelScope.launch { settingsRepo.setSoundVolume(v) } }
+    fun setSoundStyle(v: String) { _soundStyle.value = v; soundManager.setSoundStyle(SoundStyle.entries.find { it.name == v } ?: SoundStyle.RETRO_BEEP); viewModelScope.launch { settingsRepo.setSoundStyle(v) } }
+    fun setVibrationIntensity(v: Float) { _vibrationIntensity.value = v; vibrationManager.setIntensity(v); viewModelScope.launch { settingsRepo.setVibrationIntensity(v) } }
+    fun setVibrationStyle(v: String) { _vibrationStyle.value = v; vibrationManager.setVibrationStyle(VibrationStyle.entries.find { it.name == v } ?: VibrationStyle.CLASSIC); viewModelScope.launch { settingsRepo.setVibrationStyle(v) } }
     fun setControllerEnabled(v: Boolean) { _controllerEnabled.value = v; viewModelScope.launch { settingsRepo.setControllerEnabled(v) } }
     fun setControllerDeadzone(v: Float) { _controllerDeadzone.value = v; viewModelScope.launch { settingsRepo.setControllerDeadzone(v) } }
 

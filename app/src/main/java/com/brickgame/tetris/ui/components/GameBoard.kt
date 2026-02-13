@@ -47,7 +47,8 @@ fun GameBoard(
     classicLCD: Boolean = false,
     hardDropTrail: List<Triple<Int, Int, Int>> = emptyList(),
     lockEvent: Int = 0,
-    pieceMaterial: String = "CLASSIC"
+    pieceMaterial: String = "CLASSIC",
+    highContrast: Boolean = false
 ) {
     val theme = LocalGameTheme.current
     val clearProgress = remember { Animatable(0f) }
@@ -93,6 +94,8 @@ fun GameBoard(
             val cellSize = size.width / TetrisGame.BOARD_WIDTH
             val gap = cellSize * 0.06f
             val corner = cellSize * 0.15f
+            // High contrast: boost grid visibility
+            val emptyColor = if (highContrast) theme.pixelOff.boostContrast(theme.screenBackground) else theme.pixelOff
 
             // Draw board cells
             for (y in 0 until TetrisGame.BOARD_HEIGHT) {
@@ -112,7 +115,7 @@ fun GameBoard(
                             drawLCDCell(offset, cs, cellValue > 0, theme.pixelOff, theme.pixelOn)
                         }
                     } else {
-                        drawRoundRect(theme.pixelOff, offset, cs, CornerRadius(corner))
+                        drawRoundRect(emptyColor, offset, cs, CornerRadius(corner))
 
                         if (cellValue > 0) {
                             val pieceColor = if (multiColor && cellValue in 1..7) PIECE_COLORS[cellValue] else theme.pixelOn
@@ -354,6 +357,12 @@ private fun Color.lighten(f: Float) = Color(
     (blue + (1f - blue) * f).coerceIn(0f, 1f),
     alpha
 )
+
+/** Boost contrast of a color relative to a background */
+private fun Color.boostContrast(bg: Color): Color {
+    val bgLum = bg.red * 0.299f + bg.green * 0.587f + bg.blue * 0.114f
+    return if (bgLum > 0.5f) darken(0.15f) else lighten(0.15f)
+}
 
 private fun DrawScope.drawTetrisExplosion(
     progress: Float, x: Int, y: Int, cellSize: Float,

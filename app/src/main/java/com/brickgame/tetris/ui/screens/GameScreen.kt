@@ -53,6 +53,8 @@ private fun Color.darken(f: Float) = Color((red * (1 - f)).coerceIn(0f, 1f), (gr
 // CompositionLocal for multicolor mode — avoids threading through every layout function
 val LocalMultiColor = compositionLocalOf { false }
 val LocalPieceMaterial = compositionLocalOf { "CLASSIC" }
+val LocalHighContrast = compositionLocalOf { false }
+val LocalUiScale = compositionLocalOf { 1.0f }
 
 @Composable
 fun GameScreen(
@@ -75,6 +77,8 @@ fun GameScreen(
     timerExpired: Boolean = false,
     remainingSeconds: Int = 0,
     pieceMaterial: String = "CLASSIC",
+    highContrast: Boolean = false,
+    uiScale: Float = 1.0f,
     onCloseApp: () -> Unit = {},
     showOnboarding: Boolean = false,
     onDismissOnboarding: () -> Unit = {},
@@ -123,10 +127,13 @@ fun GameScreen(
     CompositionLocalProvider(
         LocalMultiColor provides multiColor,
         LocalPieceMaterial provides pieceMaterial,
+        LocalHighContrast provides highContrast,
+        LocalUiScale provides uiScale,
         LocalButtonShape provides btnShape
     ) {
     val isMenu = gameState.status == GameStatus.MENU
-    Box(Modifier.fillMaxSize()) {
+    val effectiveScale = uiScale
+    Box(Modifier.fillMaxSize().graphicsLayer { scaleX = effectiveScale; scaleY = effectiveScale }) {
         if (isMenu) {
             MenuOverlay(gameState.highScore, scoreHistory, onStartGame, onOpenSettings)
         } else if (useControllerLayout) {
@@ -563,7 +570,7 @@ fun GameScreen(
             GameBoard(gs.board, Modifier.fillMaxSize().alpha(boardDimAlpha),
                 gs.currentPiece, gs.ghostY, ghost, gs.clearedLineRows, anim, ad, multiColor = true,
                 hardDropTrail = gs.hardDropTrail, lockEvent = gs.lockEvent,
-                pieceMaterial = LocalPieceMaterial.current)
+                pieceMaterial = LocalPieceMaterial.current, highContrast = LocalHighContrast.current)
 
             // === Danger zone: red pulse overlay at top of board ===
             if (dangerAlpha > 0.01f) {
@@ -637,7 +644,7 @@ fun GameScreen(
     Box(Modifier.fillMaxSize()) {
         // Board fills entire area
         GameBoard(gs.board, Modifier.fillMaxSize().alpha(boardDimAlpha), gs.currentPiece, gs.ghostY, ghost, gs.clearedLineRows, anim, ad, multiColor = LocalMultiColor.current,
-            hardDropTrail = gs.hardDropTrail, lockEvent = gs.lockEvent, pieceMaterial = LocalPieceMaterial.current)
+            hardDropTrail = gs.hardDropTrail, lockEvent = gs.lockEvent, pieceMaterial = LocalPieceMaterial.current, highContrast = LocalHighContrast.current)
         // Floating info strip
         Row(Modifier.fillMaxWidth().align(Alignment.TopCenter).padding(horizontal = 8.dp, vertical = 4.dp)
             .background(Color.Black.copy(0.4f), RoundedCornerShape(8.dp)).padding(horizontal = 8.dp, vertical = 4.dp),
@@ -688,7 +695,7 @@ fun GameScreen(
                 HoldPiecePreview(gs.holdPiece?.shape, gs.holdUsed, Modifier.size(40.dp))
             }
             // Center: Board
-            GameBoard(gs.board, Modifier.weight(1f).fillMaxHeight(), gs.currentPiece, gs.ghostY, ghost, gs.clearedLineRows, anim, ad, multiColor = LocalMultiColor.current, pieceMaterial = LocalPieceMaterial.current)
+            GameBoard(gs.board, Modifier.weight(1f).fillMaxHeight(), gs.currentPiece, gs.ghostY, ghost, gs.clearedLineRows, anim, ad, multiColor = LocalMultiColor.current, pieceMaterial = LocalPieceMaterial.current, highContrast = LocalHighContrast.current)
             // Right: Next queue
             Column(Modifier.width(44.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
                 Text("NEXT", fontSize = 7.sp, color = theme.textSecondary, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
@@ -803,7 +810,7 @@ fun GameScreen(
                 else -> Modifier.fillMaxHeight().aspectRatio(0.5f)
             }
             Box(boardMod) {
-                GameBoard(gs.board, Modifier.fillMaxSize(), gs.currentPiece, gs.ghostY, ghost, gs.clearedLineRows, anim, ad, multiColor = LocalMultiColor.current, pieceMaterial = LocalPieceMaterial.current)
+                GameBoard(gs.board, Modifier.fillMaxSize(), gs.currentPiece, gs.ghostY, ghost, gs.clearedLineRows, anim, ad, multiColor = LocalMultiColor.current, pieceMaterial = LocalPieceMaterial.current, highContrast = LocalHighContrast.current)
                 // Info overlay when top bar is hidden
                 if (!cl.topBarVisible && cl.boardInfoOverlay != "HIDDEN") {
                     Box(Modifier.fillMaxWidth().align(Alignment.TopCenter).background(Color.Black.copy(0.35f)).padding(horizontal = 6.dp, vertical = 3.dp)) {
@@ -884,7 +891,7 @@ fun GameScreen(
 ) {
     Row(Modifier.fillMaxSize().padding(6.dp)) {
         Box(Modifier.weight(1f).fillMaxHeight(), Alignment.Center) { if (lefty) LandInfo(gs, onPause, onSet) else LandCtrl(dp, onHD, onHold, onLP, onLR, onRP, onRR, onDP, onDR, onRotate, onPause) }
-        GameBoard(gs.board, Modifier.fillMaxHeight().aspectRatio(0.5f).padding(horizontal = 6.dp), gs.currentPiece, gs.ghostY, ghost, gs.clearedLineRows, anim, ad, multiColor = LocalMultiColor.current, pieceMaterial = LocalPieceMaterial.current)
+        GameBoard(gs.board, Modifier.fillMaxHeight().aspectRatio(0.5f).padding(horizontal = 6.dp), gs.currentPiece, gs.ghostY, ghost, gs.clearedLineRows, anim, ad, multiColor = LocalMultiColor.current, pieceMaterial = LocalPieceMaterial.current, highContrast = LocalHighContrast.current)
         Box(Modifier.weight(1f).fillMaxHeight(), Alignment.Center) { if (lefty) LandCtrl(dp, onHD, onHold, onLP, onLR, onRP, onRR, onDP, onDR, onRotate, onPause) else LandInfo(gs, onPause, onSet) }
     }
 }
@@ -990,7 +997,7 @@ fun GameScreen(
         if (isVisible(LayoutElements.BOARD)) {
             val bp = pos[LayoutElements.BOARD] ?: ElementPosition(0.5f, 0.38f)
             Box(Modifier.size(maxW * 0.85f, maxH * 0.6f).offset(x = maxW * bp.x - maxW * 0.425f, y = maxH * bp.y - maxH * 0.3f)) {
-                GameBoard(gs.board, Modifier.fillMaxSize(), gs.currentPiece, gs.ghostY, ghost, gs.clearedLineRows, anim, ad, multiColor = LocalMultiColor.current, pieceMaterial = LocalPieceMaterial.current)
+                GameBoard(gs.board, Modifier.fillMaxSize(), gs.currentPiece, gs.ghostY, ghost, gs.clearedLineRows, anim, ad, multiColor = LocalMultiColor.current, pieceMaterial = LocalPieceMaterial.current, highContrast = LocalHighContrast.current)
             }
         }
         // Score
