@@ -657,8 +657,9 @@ fun GameScreen(
     Box(Modifier.fillMaxSize()) {
         // === Falling pieces background — higher alpha, adapts to theme ===
         // Level 10+: background falls faster
+        val bgSpeed = if (gs.level >= 10) 1f + (gs.level - 10) * 0.15f else 1f
         Box(Modifier.matchParentSize().alpha(if (isDark) 0.4f else 0.25f)) {
-            FallingPiecesBackground(theme, isDark)
+            FallingPiecesBackground(theme, isDark, bgSpeed)
         }
 
         Column(Modifier.fillMaxSize()) {
@@ -879,7 +880,7 @@ fun GameScreen(
     }
 }
 
-// === FULLSCREEN: Modern effects + board fills entire screen + ghost overlay controls ===
+// === FULLSCREEN: Max board, tiny info strip above ===
 @Composable private fun FullscreenLayout(
     gs: GameState, dp: DPadStyle, ghost: Boolean, anim: AnimationStyle, ad: Float,
     onRotate: () -> Unit, onHD: () -> Unit, onHold: () -> Unit,
@@ -889,205 +890,39 @@ fun GameScreen(
 ) {
     val theme = LocalGameTheme.current
     val isDark = com.brickgame.tetris.ui.theme.LocalIsDarkMode.current
-    val animatedScore by animateIntAsState(gs.score, animationSpec = tween(300), label = "score")
-
-    // Reuse Modern effects state
-    val currentPieceCells = remember(gs.currentPiece) {
-        val cells = mutableSetOf<Long>()
-        gs.currentPiece?.let { cp ->
-            for (py in cp.shape.indices) for (px in cp.shape[py].indices) {
-                if (cp.shape[py][px] > 0) cells.add((cp.position.y + py).toLong() * 100 + (cp.position.x + px))
-            }
-        }
-        cells
-    }
-    val highestLockedRow = run {
-        for (y in gs.board.indices) {
-            for (x in gs.board[y].indices) {
-                if (gs.board[y][x] > 0 && !currentPieceCells.contains(y.toLong() * 100 + x)) return@run y
-            }
-        }
-        -1
-    }
-    val dangerAlpha by animateFloatAsState(
-        if (gs.status == GameStatus.PLAYING && highestLockedRow in 0..3) (4 - highestLockedRow) / 4f * 0.35f else 0f,
-        tween(400), label = "da"
-    )
-
-    // Screen shake
-    var screenShakeX by remember { mutableFloatStateOf(0f) }
-    var screenShakeY by remember { mutableFloatStateOf(0f) }
-    var clearSize = remember { mutableIntStateOf(0) }
-    var clearFlashAlpha by remember { mutableFloatStateOf(0f) }
-    LaunchedEffect(gs.clearedLineRows) {
-        if (gs.clearedLineRows.isNotEmpty()) {
-            clearSize.intValue = gs.clearedLineRows.size
-            clearFlashAlpha = when (gs.clearedLineRows.size) { 4 -> 0.7f; 3 -> 0.45f; 2 -> 0.3f; else -> 0.15f }
-            val shakeIntensity = when (gs.clearedLineRows.size) { 4 -> 20f; 3 -> 14f; 2 -> 8f; else -> 4f }
-            val rng = java.util.Random()
-            repeat(18) { i ->
-                val decay = 1f - i / 18f
-                screenShakeX = (rng.nextFloat() - 0.5f) * shakeIntensity * decay * 2f
-                screenShakeY = (rng.nextFloat() - 0.5f) * shakeIntensity * decay * 2f
-                clearFlashAlpha *= 0.82f
-                delay(20)
-            }
-            screenShakeX = 0f; screenShakeY = 0f; clearFlashAlpha = 0f
-        }
-    }
-
-    // Particles
-    data class FSParticle(val x: Float, val y: Float, val vx: Float, val vy: Float,
-                          val size: Float, val color: Int, val life: Float, val type: Int = 0)
-    var particles by remember { mutableStateOf(emptyList<FSParticle>()) }
-    LaunchedEffect(gs.clearedLineRows) {
-        if (gs.clearedLineRows.isNotEmpty()) {
-            val rng = java.util.Random()
-            val newP = mutableListOf<FSParticle>()
-            val colors = listOf(0xFFF4D03F.toInt(), 0xFFFF6B6B.toInt(), 0xFF4ECDC4.toInt(),
-                0xFFFF9F43.toInt(), 0xFFA8E6CF.toInt(), 0xFFFF85A2.toInt(),
-                0xFF6C5CE7.toInt(), 0xFF00B894.toInt(), 0xFFE17055.toInt())
-            val isTetris = gs.clearedLineRows.size >= 4
-            gs.clearedLineRows.forEach { row ->
-                val rowY = row.toFloat() / 20f
-                val count = when (gs.clearedLineRows.size) { 4 -> 50; 3 -> 35; 2 -> 20; else -> 12 }
-                repeat(count) {
-                    newP.add(FSParticle(rng.nextFloat(), rowY,
-                        (rng.nextFloat() - 0.5f) * (if (isTetris) 0.06f else 0.04f),
-                        (rng.nextFloat() - 0.5f) * (if (isTetris) 0.06f else 0.04f) - 0.015f,
-                        2f + rng.nextFloat() * (if (isTetris) 10f else 7f),
-                        colors[rng.nextInt(colors.size)], 1f))
-                }
-            }
-            particles = newP
-            val totalSteps = if (isTetris) 40 else 30
-            repeat(totalSteps) {
-                particles = particles.mapNotNull { p ->
-                    val nl = p.life - 0.033f; if (nl <= 0f) null
-                    else p.copy(x = p.x + p.vx, y = p.y + p.vy, vy = p.vy + 0.0015f, vx = p.vx * 0.98f, life = nl)
-                }; delay(20)
-            }
-            particles = emptyList()
-        }
-    }
-
-    // Breathing
-    val breathTransition = rememberInfiniteTransition(label = "fsbreath")
-    val breathScale by breathTransition.animateFloat(
-        0.998f, 1.002f, infiniteRepeatable(tween(2000, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "fsbs"
-    )
-
+    // Fullscreen: board fills maximum area, controls overlay with transparency
     Box(Modifier.fillMaxSize()) {
         // Falling pieces background
-        Box(Modifier.matchParentSize().alpha(if (isDark) 0.4f else 0.25f)) {
-            FallingPiecesBackground(theme, isDark)
+        val bgSpeed = if (gs.level >= 10) 1f + (gs.level - 10) * 0.15f else 1f
+        Box(Modifier.matchParentSize().alpha(if (isDark) 0.3f else 0.2f)) {
+            FallingPiecesBackground(theme, isDark, bgSpeed)
         }
-
-        // === Info bar — same as Modern ===
-        Column(Modifier.fillMaxSize()) {
-            Row(Modifier.fillMaxWidth().shadow(6.dp)
-                .background((if (isDark) Color.Black else Color.White).copy(0.6f))
-                .padding(horizontal = 6.dp, vertical = 3.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("HOLD", fontSize = 6.sp, color = (if (isDark) Color.White else Color.Black).copy(0.45f),
-                        fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, letterSpacing = 0.5.sp)
-                    HoldPiecePreview(gs.holdPiece?.shape, gs.holdUsed, Modifier.size(28.dp))
-                }
-                Spacer(Modifier.width(4.dp))
-                Row(Modifier.weight(1f), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("LVL", fontSize = 6.sp, color = (if (isDark) Color.White else Color.Black).copy(0.4f),
-                            fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, letterSpacing = 0.5.sp)
-                        Text("${gs.level}", fontSize = 14.sp, fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace, color = theme.accentColor)
-                    }
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("SCORE", fontSize = 6.sp, color = (if (isDark) Color.White else Color.Black).copy(0.4f),
-                            fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, letterSpacing = 0.5.sp)
-                        Text(animatedScore.toString().padStart(7, '0'), fontSize = 14.sp, fontWeight = FontWeight.Bold,
-                            fontFamily = FontFamily.Monospace, color = (if (isDark) Color.White else Color.Black).copy(0.9f), letterSpacing = 1.sp)
-                    }
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("LINES", fontSize = 6.sp, color = (if (isDark) Color.White else Color.Black).copy(0.4f),
-                            fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, letterSpacing = 0.5.sp)
-                        Text("${gs.lines}", fontSize = 13.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace,
-                            color = (if (isDark) Color.White else Color.Black).copy(0.7f))
-                    }
-                }
-                Spacer(Modifier.width(4.dp))
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("NEXT", fontSize = 6.sp, color = (if (isDark) Color.White else Color.Black).copy(0.45f),
-                        fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, letterSpacing = 0.5.sp)
-                    Row(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
-                        gs.nextPieces.take(nextCount.coerceAtMost(3)).forEachIndexed { i, p ->
-                            NextPiecePreview(p.shape, Modifier.size(if (i == 0) 28.dp else 20.dp), alpha = if (i == 0) 1f else 0.5f)
-                        }
-                    }
-                }
-            }
-
-            // === Board — fills ALL remaining space with shake + breathing ===
-            Box(Modifier.weight(1f).fillMaxWidth()
-                .graphicsLayer {
-                    translationX = screenShakeX; translationY = screenShakeY
-                    if (gs.level >= 8) { scaleX = breathScale; scaleY = breathScale }
-                }) {
-
-                GameBoard(gs.board, Modifier.fillMaxSize().alpha(boardDimAlpha),
-                    gs.currentPiece, gs.ghostY, ghost, gs.clearedLineRows, anim, ad, multiColor = true,
-                    hardDropTrail = gs.hardDropTrail, lockEvent = gs.lockEvent,
-                    pieceMaterial = LocalPieceMaterial.current, highContrast = LocalHighContrast.current,
-                    boardOpacity = if (isDark) 0.12f else 0.18f, gameLevel = gs.level)
-
-                // Danger overlay
-                if (dangerAlpha > 0.01f) {
-                    Canvas(Modifier.matchParentSize()) {
-                        for (i in 0..5) {
-                            val rowH = size.height / 20f
-                            drawRect(Color.Red.copy(alpha = dangerAlpha * (1f - i / 6f)), Offset(0f, i * rowH), Size(size.width, rowH))
-                        }
-                    }
-                }
-
-                // Edge glow flash
-                if (clearFlashAlpha > 0.01f) {
-                    val flashColor = when {
-                        clearSize.intValue >= 4 -> Color(0xFFF4D03F)
-                        clearSize.intValue >= 3 -> Color(0xFFFF9F43)
-                        clearSize.intValue >= 2 -> Color(0xFF4ECDC4)
-                        else -> Color.White
-                    }
-                    Canvas(Modifier.matchParentSize()) {
-                        val a = clearFlashAlpha.coerceIn(0f, 1f)
-                        val edgeW = size.width * 0.12f; val edgeH = size.height * 0.06f
-                        drawRect(Brush.horizontalGradient(listOf(flashColor.copy(a), Color.Transparent)), Offset.Zero, Size(edgeW, size.height))
-                        drawRect(Brush.horizontalGradient(listOf(Color.Transparent, flashColor.copy(a))), Offset(size.width - edgeW, 0f), Size(edgeW, size.height))
-                        drawRect(Brush.verticalGradient(listOf(flashColor.copy(a * 0.7f), Color.Transparent)), Offset.Zero, Size(size.width, edgeH))
-                        drawRect(Brush.verticalGradient(listOf(Color.Transparent, flashColor.copy(a * 0.7f))), Offset(0f, size.height - edgeH), Size(size.width, edgeH))
-                    }
-                }
-
-                // Particles
-                if (particles.isNotEmpty()) {
-                    Canvas(Modifier.matchParentSize()) {
-                        particles.forEach { p ->
-                            drawCircle(Color(p.color).copy(alpha = (p.life * p.life).coerceIn(0f, 1f)),
-                                radius = p.size * (0.5f + p.life * 0.5f), center = Offset(p.x * size.width, p.y * size.height))
-                        }
-                    }
+        // Board fills entire area — transparent modern grid
+        GameBoard(gs.board, Modifier.fillMaxSize().alpha(boardDimAlpha), gs.currentPiece, gs.ghostY, ghost, gs.clearedLineRows, anim, ad, multiColor = LocalMultiColor.current,
+            hardDropTrail = gs.hardDropTrail, lockEvent = gs.lockEvent, pieceMaterial = LocalPieceMaterial.current, highContrast = LocalHighContrast.current,
+            boardOpacity = if (isDark) 0.10f else 0.15f, gameLevel = gs.level)
+        // Floating info strip — semi-transparent
+        Row(Modifier.fillMaxWidth().align(Alignment.TopCenter).padding(horizontal = 8.dp, vertical = 4.dp)
+            .background((if (isDark) Color.Black else Color.White).copy(0.5f), RoundedCornerShape(8.dp)).padding(horizontal = 10.dp, vertical = 4.dp),
+            Arrangement.SpaceBetween, Alignment.CenterVertically) {
+            HoldPiecePreview(gs.holdPiece?.shape, gs.holdUsed, Modifier.size(26.dp))
+            Tag("LV${gs.level}")
+            Text(gs.score.toString().padStart(7, '0'), fontSize = 14.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, color = theme.accentColor)
+            Tag("${gs.lines}L")
+            Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                gs.nextPieces.take(2).forEachIndexed { i, p ->
+                    NextPiecePreview(p.shape, Modifier.size(if (i == 0) 26.dp else 20.dp), if (i == 0) 1f else 0.5f)
                 }
             }
         }
-
-        // === Ghost overlay controls — very transparent, outline style ===
-        Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().alpha(0.25f).padding(bottom = 4.dp)) {
+        // Controls at bottom with transparency
+        Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().alpha(0.65f)) {
             FullControls(dp, onHD, onHold, onLP, onLR, onRP, onRR, onDP, onDR, onRotate, onPause, onSet, onStart, gs.status)
         }
     }
 }
 
-// === COMPACT: Modern info bar + transparent board + effects, own button layout ===
+// === COMPACT (was One-Hand): Board with side panels, D-Pad at bottom ===
 @Composable private fun OneHandLayout(
     gs: GameState, ghost: Boolean, anim: AnimationStyle, ad: Float,
     onRotate: () -> Unit, onHD: () -> Unit, onHold: () -> Unit,
@@ -1095,121 +930,57 @@ fun GameScreen(
     onDP: () -> Unit, onDR: () -> Unit, onPause: () -> Unit, onSet: () -> Unit, onStart: () -> Unit
 ) {
     val theme = LocalGameTheme.current
-    val isDark = com.brickgame.tetris.ui.theme.LocalIsDarkMode.current
-    val animatedScore by animateIntAsState(gs.score, animationSpec = tween(300), label = "cscore")
-
-    // Screen shake
-    var screenShakeX by remember { mutableFloatStateOf(0f) }
-    var screenShakeY by remember { mutableFloatStateOf(0f) }
-    var clearFlashAlpha by remember { mutableFloatStateOf(0f) }
-    var clearSize = remember { mutableIntStateOf(0) }
-    LaunchedEffect(gs.clearedLineRows) {
-        if (gs.clearedLineRows.isNotEmpty()) {
-            clearSize.intValue = gs.clearedLineRows.size
-            clearFlashAlpha = when (gs.clearedLineRows.size) { 4 -> 0.7f; 3 -> 0.45f; 2 -> 0.3f; else -> 0.15f }
-            val shakeIntensity = when (gs.clearedLineRows.size) { 4 -> 16f; 3 -> 10f; 2 -> 6f; else -> 3f }
-            val rng = java.util.Random()
-            repeat(14) { i ->
-                val decay = 1f - i / 14f
-                screenShakeX = (rng.nextFloat() - 0.5f) * shakeIntensity * decay * 2f
-                screenShakeY = (rng.nextFloat() - 0.5f) * shakeIntensity * decay * 2f
-                clearFlashAlpha *= 0.85f
-                delay(20)
+    Column(Modifier.fillMaxSize().padding(4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        // Redesigned info row: Level (left) | Score (center) | Lines (right)
+        Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 2.dp), Arrangement.SpaceBetween, Alignment.CenterVertically) {
+            Column(horizontalAlignment = Alignment.Start) {
+                Text("LEVEL", fontSize = 8.sp, color = theme.textSecondary, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                Text("${gs.level}", fontSize = 16.sp, fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace, color = theme.accentColor)
             }
-            screenShakeX = 0f; screenShakeY = 0f; clearFlashAlpha = 0f
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("SCORE", fontSize = 8.sp, color = theme.textSecondary, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                Text(gs.score.toString(), fontSize = 16.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, color = theme.accentColor)
+            }
+            Column(horizontalAlignment = Alignment.End) {
+                Text("LINES", fontSize = 8.sp, color = theme.textSecondary, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                Text("${gs.lines}", fontSize = 16.sp, fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace, color = theme.accentColor)
+            }
         }
-    }
-
-    Box(Modifier.fillMaxSize()) {
-        // Falling pieces background
-        Box(Modifier.matchParentSize().alpha(if (isDark) 0.35f else 0.2f)) {
-            FallingPiecesBackground(theme, isDark)
+        // Board with Hold panel on left and Next panel on right
+        Row(Modifier.weight(1f).fillMaxWidth().padding(horizontal = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+            // Left: Hold preview
+            Column(Modifier.width(44.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                Text("HOLD", fontSize = 7.sp, color = theme.textSecondary, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                Spacer(Modifier.height(2.dp))
+                HoldPiecePreview(gs.holdPiece?.shape, gs.holdUsed, Modifier.size(40.dp))
+            }
+            // Center: Board
+            GameBoard(gs.board, Modifier.weight(1f).fillMaxHeight(), gs.currentPiece, gs.ghostY, ghost, gs.clearedLineRows, anim, ad, multiColor = LocalMultiColor.current, pieceMaterial = LocalPieceMaterial.current, highContrast = LocalHighContrast.current)
+            // Right: Next queue
+            Column(Modifier.width(44.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                Text("NEXT", fontSize = 7.sp, color = theme.textSecondary, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                Spacer(Modifier.height(2.dp))
+                gs.nextPieces.take(2).forEachIndexed { i, p ->
+                    NextPiecePreview(p.shape, Modifier.size(if (i == 0) 40.dp else 30.dp).padding(1.dp), if (i == 0) 1f else 0.5f)
+                }
+            }
         }
-
-        Column(Modifier.fillMaxSize()) {
-            // === Modern-style info bar ===
-            Row(Modifier.fillMaxWidth().shadow(6.dp)
-                .background((if (isDark) Color.Black else Color.White).copy(0.6f))
-                .padding(horizontal = 6.dp, vertical = 3.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("HOLD", fontSize = 6.sp, color = (if (isDark) Color.White else Color.Black).copy(0.45f),
-                        fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, letterSpacing = 0.5.sp)
-                    HoldPiecePreview(gs.holdPiece?.shape, gs.holdUsed, Modifier.size(28.dp))
-                }
-                Spacer(Modifier.width(4.dp))
-                Row(Modifier.weight(1f), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("LVL", fontSize = 6.sp, color = (if (isDark) Color.White else Color.Black).copy(0.4f),
-                            fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, letterSpacing = 0.5.sp)
-                        Text("${gs.level}", fontSize = 14.sp, fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace, color = theme.accentColor)
-                    }
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("SCORE", fontSize = 6.sp, color = (if (isDark) Color.White else Color.Black).copy(0.4f),
-                            fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, letterSpacing = 0.5.sp)
-                        Text(animatedScore.toString().padStart(7, '0'), fontSize = 14.sp, fontWeight = FontWeight.Bold,
-                            fontFamily = FontFamily.Monospace, color = (if (isDark) Color.White else Color.Black).copy(0.9f), letterSpacing = 1.sp)
-                    }
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("LINES", fontSize = 6.sp, color = (if (isDark) Color.White else Color.Black).copy(0.4f),
-                            fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, letterSpacing = 0.5.sp)
-                        Text("${gs.lines}", fontSize = 13.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace,
-                            color = (if (isDark) Color.White else Color.Black).copy(0.7f))
-                    }
-                }
-                Spacer(Modifier.width(4.dp))
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("NEXT", fontSize = 6.sp, color = (if (isDark) Color.White else Color.Black).copy(0.45f),
-                        fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, letterSpacing = 0.5.sp)
-                    Row(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
-                        gs.nextPieces.take(3).forEachIndexed { i, p ->
-                            NextPiecePreview(p.shape, Modifier.size(if (i == 0) 28.dp else 20.dp), alpha = if (i == 0) 1f else 0.5f)
-                        }
-                    }
-                }
+        Spacer(Modifier.height(2.dp))
+        // Centered D-Pad with rotate in center + action buttons on sides
+        Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), Arrangement.SpaceBetween, Alignment.CenterVertically) {
+            // Hold + Pause on left
+            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                ActionButton("HOLD", onHold, width = 64.dp, height = 30.dp)
+                ActionButton(if (gs.status == GameStatus.MENU) "START" else "PAUSE",
+                    { if (gs.status == GameStatus.MENU) onStart() else onPause() }, width = 64.dp, height = 30.dp)
+                ActionButton("···", onSet, width = 44.dp, height = 24.dp, backgroundColor = LocalGameTheme.current.buttonSecondary)
             }
-
-            // === Board with shake ===
-            Box(Modifier.weight(1f).fillMaxWidth()
-                .graphicsLayer { translationX = screenShakeX; translationY = screenShakeY }) {
-
-                GameBoard(gs.board, Modifier.fillMaxSize(), gs.currentPiece, gs.ghostY, ghost,
-                    gs.clearedLineRows, anim, ad, multiColor = LocalMultiColor.current,
-                    hardDropTrail = gs.hardDropTrail, lockEvent = gs.lockEvent,
-                    pieceMaterial = LocalPieceMaterial.current, highContrast = LocalHighContrast.current,
-                    boardOpacity = if (isDark) 0.12f else 0.18f, gameLevel = gs.level)
-
-                // Edge glow
-                if (clearFlashAlpha > 0.01f) {
-                    val flashColor = when {
-                        clearSize.intValue >= 4 -> Color(0xFFF4D03F)
-                        clearSize.intValue >= 3 -> Color(0xFFFF9F43)
-                        clearSize.intValue >= 2 -> Color(0xFF4ECDC4)
-                        else -> Color.White
-                    }
-                    Canvas(Modifier.matchParentSize()) {
-                        val a = clearFlashAlpha.coerceIn(0f, 1f)
-                        val edgeW = size.width * 0.12f
-                        drawRect(Brush.horizontalGradient(listOf(flashColor.copy(a), Color.Transparent)), Offset.Zero, Size(edgeW, size.height))
-                        drawRect(Brush.horizontalGradient(listOf(Color.Transparent, flashColor.copy(a))), Offset(size.width - edgeW, 0f), Size(edgeW, size.height))
-                    }
-                }
-            }
-
-            // === Compact controls — same button layout as before ===
-            Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), Arrangement.SpaceBetween, Alignment.CenterVertically) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    ActionButton("HOLD", onHold, width = 64.dp, height = 30.dp)
-                    ActionButton(if (gs.status == GameStatus.MENU) "START" else "PAUSE",
-                        { if (gs.status == GameStatus.MENU) onStart() else onPause() }, width = 64.dp, height = 30.dp)
-                    ActionButton("···", onSet, width = 44.dp, height = 24.dp, backgroundColor = LocalGameTheme.current.buttonSecondary)
-                }
-                DPad(64.dp, rotateInCenter = true, horizontalSpread = 18.dp,
-                    onUpPress = onHD, onDownPress = onDP, onDownRelease = onDR,
-                    onLeftPress = onLP, onLeftRelease = onLR, onRightPress = onRP, onRightRelease = onRR, onRotate = onRotate)
-                Spacer(Modifier.width(64.dp))
-            }
+            // Central D-Pad — always rotate-in-center style, larger with spread
+            DPad(64.dp, rotateInCenter = true, horizontalSpread = 18.dp,
+                onUpPress = onHD, onDownPress = onDP, onDownRelease = onDR,
+                onLeftPress = onLP, onLeftRelease = onLR, onRightPress = onRP, onRightRelease = onRR, onRotate = onRotate)
+            // Right spacer to balance
+            Spacer(Modifier.width(64.dp))
         }
     }
 }
@@ -1716,7 +1487,7 @@ fun GameScreen(
 
 // Falling transparent tetris pieces — matrix rain style with colored pieces, long green trails, and sparkle
 @Composable
-private fun FallingPiecesBackground(theme: com.brickgame.tetris.ui.theme.GameTheme, isDark: Boolean = true) {
+private fun FallingPiecesBackground(theme: com.brickgame.tetris.ui.theme.GameTheme, isDark: Boolean = true, speedMultiplier: Float = 1f) {
     data class FP(val col: Float, val speed: Float, val sz: Float, val shape: Int,
                   val alpha: Float, val startY: Float, val colorIdx: Int, val trailLen: Int,
                   val sparkle: Boolean, val sparklePhase: Float)
@@ -1763,7 +1534,7 @@ private fun FallingPiecesBackground(theme: com.brickgame.tetris.ui.theme.GameThe
         val actualTrailColor = if (isDark) trailColor else Color(0xFF22A050)
         pieces.forEach { p ->
             // Each piece wraps independently based on its own startY offset
-            val rawY = p.startY + anim * p.speed
+            val rawY = p.startY + anim * p.speed * speedMultiplier
             val baseY = (rawY % wrapH) - 300f
             val x = p.col * w
             val s = p.sz
