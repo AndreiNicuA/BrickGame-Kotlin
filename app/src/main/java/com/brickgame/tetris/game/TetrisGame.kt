@@ -272,14 +272,29 @@ class TetrisGame {
 
     fun hardDrop(): Int {
         if (!canMove()) return 0
+        val piece = currentPiece!!
+        val startY = currentPosition.y
         var dropDistance = 0
-        while (!checkCollision(currentPiece!!.shape,
+        while (!checkCollision(piece.shape,
                 Position(currentPosition.x, currentPosition.y + 1))) {
             currentPosition = Position(currentPosition.x, currentPosition.y + 1)
             dropDistance++
         }
         if (dropDistance > 0) {
             _state.update { it.copy(score = it.score + dropDistance * 2) }
+        }
+        // Emit hard drop trail: for each column occupied by the piece, record start→end Y
+        if (dropDistance > 1) {
+            val trail = mutableListOf<Triple<Int, Int, Int>>()
+            for (py in piece.shape.indices) for (px in piece.shape[py].indices) {
+                if (piece.shape[py][px] > 0) {
+                    val bx = currentPosition.x + px
+                    val trailStart = (startY + py - TetrisGame.HIDDEN_ROWS).coerceAtLeast(0)
+                    val trailEnd = (currentPosition.y + py - TetrisGame.HIDDEN_ROWS).coerceAtLeast(0)
+                    if (trailEnd > trailStart) trail.add(Triple(bx, trailStart, trailEnd))
+                }
+            }
+            _state.update { it.copy(hardDropTrail = trail) }
         }
         lastActionWasRotation = false
         lockPiece()
@@ -507,7 +522,8 @@ class TetrisGame {
                     lastActionLabel = scoreResult.label,
                     tSpinType = tSpinType,
                     comboCount = comboCount,
-                    backToBackCount = backToBackCount
+                    backToBackCount = backToBackCount,
+                    lockEvent = it.lockEvent + 1
                 )
             }
         } else {
@@ -522,9 +538,12 @@ class TetrisGame {
                 _state.update {
                     it.copy(
                         score = it.score + scoreResult.points,
-                        lastActionLabel = scoreResult.label
+                        lastActionLabel = scoreResult.label,
+                        lockEvent = it.lockEvent + 1
                     )
                 }
+            } else {
+                _state.update { it.copy(lockEvent = it.lockEvent + 1) }
             }
             spawnPiece()
         }
@@ -616,7 +635,8 @@ class TetrisGame {
                 holdUsed = holdUsedThisTurn,
                 ghostY = visibleGhostY,
                 linesCleared = 0,
-                clearedLineRows = emptyList()
+                clearedLineRows = emptyList(),
+                hardDropTrail = emptyList()
             )
         }
     }
@@ -721,7 +741,11 @@ data class GameState(
     val tSpinType: TSpinType = TSpinType.NONE,
     val comboCount: Int = 0,
     val backToBackCount: Int = 0,
-    val elapsedTimeMs: Long = 0
+    val elapsedTimeMs: Long = 0,
+    /** Hard drop trail: list of (x, startY, endY) columns for trail rendering */
+    val hardDropTrail: List<Triple<Int, Int, Int>> = emptyList(),
+    /** Incremented each time a piece locks — UI can watch for changes */
+    val lockEvent: Int = 0
 ) {
     /** Backward compat: first next piece */
     val effectiveNextPiece: PieceState? get() = nextPieces.firstOrNull() ?: nextPiece

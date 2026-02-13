@@ -551,7 +551,8 @@ fun GameScreen(
 
             // The actual game board
             GameBoard(gs.board, Modifier.fillMaxSize().alpha(boardDimAlpha),
-                gs.currentPiece, gs.ghostY, ghost, gs.clearedLineRows, anim, ad, multiColor = true)
+                gs.currentPiece, gs.ghostY, ghost, gs.clearedLineRows, anim, ad, multiColor = true,
+                hardDropTrail = gs.hardDropTrail, lockEvent = gs.lockEvent)
 
             // === Danger zone: red pulse overlay at top of board ===
             if (dangerAlpha > 0.01f) {
@@ -624,7 +625,8 @@ fun GameScreen(
     // Fullscreen: board fills maximum area, controls overlay with transparency
     Box(Modifier.fillMaxSize()) {
         // Board fills entire area
-        GameBoard(gs.board, Modifier.fillMaxSize().alpha(boardDimAlpha), gs.currentPiece, gs.ghostY, ghost, gs.clearedLineRows, anim, ad, multiColor = LocalMultiColor.current)
+        GameBoard(gs.board, Modifier.fillMaxSize().alpha(boardDimAlpha), gs.currentPiece, gs.ghostY, ghost, gs.clearedLineRows, anim, ad, multiColor = LocalMultiColor.current,
+            hardDropTrail = gs.hardDropTrail, lockEvent = gs.lockEvent)
         // Floating info strip
         Row(Modifier.fillMaxWidth().align(Alignment.TopCenter).padding(horizontal = 8.dp, vertical = 4.dp)
             .background(Color.Black.copy(0.4f), RoundedCornerShape(8.dp)).padding(horizontal = 8.dp, vertical = 4.dp),

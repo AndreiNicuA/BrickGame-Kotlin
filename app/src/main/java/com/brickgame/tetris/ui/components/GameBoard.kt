@@ -44,7 +44,9 @@ fun GameBoard(
     animationStyle: AnimationStyle = AnimationStyle.MODERN,
     animationDuration: Float = 0.5f,
     multiColor: Boolean = false,
-    classicLCD: Boolean = false
+    classicLCD: Boolean = false,
+    hardDropTrail: List<Triple<Int, Int, Int>> = emptyList(),
+    lockEvent: Int = 0
 ) {
     val theme = LocalGameTheme.current
     val clearProgress = remember { Animatable(0f) }
@@ -54,6 +56,24 @@ fun GameBoard(
             clearProgress.snapTo(0f)
             clearProgress.animateTo(1f, tween((animationDuration * 500).toInt().coerceAtLeast(150), easing = LinearEasing))
         } else clearProgress.snapTo(0f)
+    }
+
+    // Hard drop trail fade animation
+    val trailProgress = remember { Animatable(0f) }
+    LaunchedEffect(hardDropTrail) {
+        if (hardDropTrail.isNotEmpty()) {
+            trailProgress.snapTo(0f)
+            trailProgress.animateTo(1f, tween(200, easing = LinearEasing))
+        } else trailProgress.snapTo(0f)
+    }
+
+    // Piece lock flash animation
+    val lockFlashProgress = remember { Animatable(0f) }
+    LaunchedEffect(lockEvent) {
+        if (lockEvent > 0) {
+            lockFlashProgress.snapTo(0f)
+            lockFlashProgress.animateTo(1f, tween(250, easing = FastOutSlowInEasing))
+        }
     }
 
     val progress = clearProgress.value
@@ -161,6 +181,54 @@ fun GameBoard(
             if (showGhost && currentPiece != null && ghostY > currentPiece.position.y) {
                 val gc = if (multiColor) PIECE_COLORS.getOrElse(currentPiece.type.ordinal + 1) { theme.pixelOn } else theme.pixelOn
                 drawGhost(currentPiece, ghostY, cellSize, gap, corner, gc)
+            }
+
+            // Hard drop trail — vertical streaks fade out quickly
+            if (hardDropTrail.isNotEmpty() && trailProgress.value < 1f && !classicLCD) {
+                val trailAlpha = (1f - trailProgress.value) * 0.6f
+                for ((col, startRow, endRow) in hardDropTrail) {
+                    if (col in 0 until TetrisGame.BOARD_WIDTH) {
+                        val topY = startRow * cellSize
+                        val bottomY = endRow * cellSize
+                        val trailHeight = (bottomY - topY) * (1f - trailProgress.value * 0.5f)
+                        val x = col * cellSize + cellSize * 0.3f
+                        val w = cellSize * 0.4f
+                        // Gradient trail: brighter at bottom, fading at top
+                        val color = if (multiColor && currentPiece != null)
+                            PIECE_COLORS.getOrElse(currentPiece.type.ordinal + 1) { Color.White }
+                        else Color.White
+                        drawRect(
+                            color.copy(alpha = trailAlpha * 0.3f),
+                            Offset(x, topY + (bottomY - topY - trailHeight)),
+                            Size(w, trailHeight)
+                        )
+                        // Bright tip at landing position
+                        drawRoundRect(
+                            color.copy(alpha = trailAlpha),
+                            Offset(col * cellSize + gap, (endRow - 1) * cellSize + gap),
+                            Size(cellSize - gap * 2, cellSize - gap * 2),
+                            CornerRadius(corner)
+                        )
+                    }
+                }
+            }
+
+            // Lock flash — brief glow on recently placed cells
+            if (lockFlashProgress.value < 1f && lockFlashProgress.value > 0f && !classicLCD) {
+                val flashAlpha = (1f - lockFlashProgress.value) * 0.35f
+                // Flash the entire bottom area where pieces typically lock
+                for (y in 0 until TetrisGame.BOARD_HEIGHT) {
+                    for (x in 0 until TetrisGame.BOARD_WIDTH) {
+                        if (board[y][x] > 0) {
+                            val offset = Offset(x * cellSize + gap, y * cellSize + gap)
+                            val cs = Size(cellSize - gap * 2, cellSize - gap * 2)
+                            drawRoundRect(
+                                Color.White.copy(alpha = flashAlpha * (1f - y.toFloat() / TetrisGame.BOARD_HEIGHT)),
+                                offset, cs, CornerRadius(corner)
+                            )
+                        }
+                    }
+                }
             }
         }
     }
