@@ -888,7 +888,7 @@ fun GameScreen(
     boardDimAlpha: Float = 1f, nextCount: Int = 3
 ) {
     val theme = LocalGameTheme.current
-    val isDark = LocalDarkTheme.current
+    val isDark = com.brickgame.tetris.ui.theme.LocalIsDarkMode.current
     // Fullscreen: board fills maximum area, controls overlay with transparency
     Box(Modifier.fillMaxSize()) {
         // Falling pieces background
