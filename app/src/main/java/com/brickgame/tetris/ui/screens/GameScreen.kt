@@ -335,9 +335,13 @@ fun GameScreen(
                     }
                 }
 
-                // Classic Game Over overlay — simple LCD text
+                // Classic Game Over overlay — simple LCD text, tap to restart
                 if (showGameOverText) {
-                    Box(Modifier.fillMaxSize().background(lcdBg), Alignment.Center) {
+                    Box(Modifier.fillMaxSize().background(lcdBg)
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null
+                        ) { onStart() }, Alignment.Center) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text("GAME", fontSize = 28.sp, fontWeight = FontWeight.ExtraBold,
                                 fontFamily = FontFamily.Monospace, color = lcdDark, letterSpacing = 6.sp)
