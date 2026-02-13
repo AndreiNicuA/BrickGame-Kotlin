@@ -100,6 +100,8 @@ fun GameBoard(
             // High contrast: boost grid visibility; apply boardOpacity to empty cells
             val rawEmpty = if (highContrast) theme.pixelOff.boostContrast(theme.screenBackground) else theme.pixelOff
             val emptyColor = rawEmpty.copy(alpha = rawEmpty.alpha * boardOpacity)
+            // Modern thin grid lines when board is transparent
+            val useModernGrid = boardOpacity < 0.5f
 
             // Draw board cells
             for (y in 0 until TetrisGame.BOARD_HEIGHT) {
@@ -119,7 +121,14 @@ fun GameBoard(
                             drawLCDCell(offset, cs, cellValue > 0, theme.pixelOff, theme.pixelOn)
                         }
                     } else {
-                        drawRoundRect(emptyColor, offset, cs, CornerRadius(corner))
+                        if (useModernGrid) {
+                            // Modern: thin subtle outline instead of solid fill
+                            drawRoundRect(emptyColor.copy(alpha = emptyColor.alpha * 0.5f),
+                                offset, cs, CornerRadius(corner),
+                                style = Stroke(gap * 0.8f))
+                        } else {
+                            drawRoundRect(emptyColor, offset, cs, CornerRadius(corner))
+                        }
 
                         if (cellValue > 0) {
                             val pieceColor = if (multiColor && cellValue in 1..7) PIECE_COLORS[cellValue] else theme.pixelOn
@@ -172,32 +181,80 @@ fun GameBoard(
                 drawGhost(currentPiece, ghostY, cellSize, gap, corner, gc)
             }
 
-            // Hard drop trail — vertical streaks fade out quickly
+            // Hard drop trail — DRAMATIC vertical streaks with glow
             if (hardDropTrail.isNotEmpty() && trailProgress.value < 1f && !classicLCD) {
-                val trailAlpha = (1f - trailProgress.value) * 0.6f
+                val trailAlpha = (1f - trailProgress.value) * 0.8f
                 for ((col, startRow, endRow) in hardDropTrail) {
                     if (col in 0 until TetrisGame.BOARD_WIDTH) {
                         val topY = startRow * cellSize
                         val bottomY = endRow * cellSize
-                        val trailHeight = (bottomY - topY) * (1f - trailProgress.value * 0.5f)
-                        val x = col * cellSize + cellSize * 0.3f
-                        val w = cellSize * 0.4f
-                        // Gradient trail: brighter at bottom, fading at top
+                        val trailHeight = (bottomY - topY) * (1f - trailProgress.value * 0.3f)
                         val color = if (multiColor && currentPiece != null)
                             PIECE_COLORS.getOrElse(currentPiece.type.ordinal + 1) { Color.White }
                         else Color.White
+
+                        // Wide outer glow
                         drawRect(
-                            color.copy(alpha = trailAlpha * 0.3f),
-                            Offset(x, topY + (bottomY - topY - trailHeight)),
-                            Size(w, trailHeight)
+                            color.copy(alpha = trailAlpha * 0.15f),
+                            Offset(col * cellSize, topY + (bottomY - topY - trailHeight)),
+                            Size(cellSize, trailHeight)
                         )
-                        // Bright tip at landing position
+                        // Core bright streak
+                        val coreX = col * cellSize + cellSize * 0.2f
+                        val coreW = cellSize * 0.6f
+                        drawRect(
+                            color.copy(alpha = trailAlpha * 0.5f),
+                            Offset(coreX, topY + (bottomY - topY - trailHeight)),
+                            Size(coreW, trailHeight)
+                        )
+                        // Hot center line
+                        drawRect(
+                            Color.White.copy(alpha = trailAlpha * 0.7f),
+                            Offset(col * cellSize + cellSize * 0.35f, topY + (bottomY - topY - trailHeight)),
+                            Size(cellSize * 0.3f, trailHeight)
+                        )
+                        // Bright flash at landing position
                         drawRoundRect(
                             color.copy(alpha = trailAlpha),
                             Offset(col * cellSize + gap, (endRow - 1) * cellSize + gap),
                             Size(cellSize - gap * 2, cellSize - gap * 2),
                             CornerRadius(corner)
                         )
+                        // White-hot core at landing
+                        drawRoundRect(
+                            Color.White.copy(alpha = trailAlpha * 0.6f),
+                            Offset(col * cellSize + gap * 2, (endRow - 1) * cellSize + gap * 2),
+                            Size(cellSize - gap * 4, cellSize - gap * 4),
+                            CornerRadius(corner * 0.5f)
+                        )
+                    }
+                }
+            }
+
+            // Falling piece motion shadow — trailing copies below the piece
+            if (currentPiece != null && !classicLCD && board.isNotEmpty()) {
+                val shape = currentPiece.shape
+                val px = currentPiece.position.x
+                val py = currentPiece.position.y
+                val pColor = if (multiColor) PIECE_COLORS.getOrElse(currentPiece.type.ordinal + 1) { theme.pixelOn } else theme.pixelOn
+                // Draw 3 trailing shadow copies below the piece
+                for (trail in 1..3) {
+                    val trailY = py - trail
+                    val shadowAlpha = (0.2f - trail * 0.06f).coerceAtLeast(0f)
+                    if (shadowAlpha > 0.01f && trailY >= 0) {
+                        for (sy in shape.indices) {
+                            for (sx in shape[sy].indices) {
+                                if (shape[sy][sx] > 0) {
+                                    val bx = px + sx
+                                    val by = trailY + sy
+                                    if (bx in 0 until TetrisGame.BOARD_WIDTH && by in 0 until TetrisGame.BOARD_HEIGHT) {
+                                        val off = Offset(bx * cellSize + gap, by * cellSize + gap)
+                                        val sz = Size(cellSize - gap * 2, cellSize - gap * 2)
+                                        drawRoundRect(pColor.copy(alpha = shadowAlpha), off, sz, CornerRadius(corner))
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }

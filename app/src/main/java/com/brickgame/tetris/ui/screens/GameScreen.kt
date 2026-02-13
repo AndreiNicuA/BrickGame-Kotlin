@@ -491,13 +491,13 @@ fun GameScreen(
             clearFlashAlpha = when (gs.clearedLineRows.size) {
                 4 -> 0.7f; 3 -> 0.45f; 2 -> 0.3f; else -> 0.15f
             }
-            // Screen shake — more violent for bigger clears
+            // Screen shake — MORE violent for bigger clears
             val shakeIntensity = when (gs.clearedLineRows.size) {
-                4 -> 12f; 3 -> 8f; 2 -> 5f; else -> 2f
+                4 -> 20f; 3 -> 14f; 2 -> 8f; else -> 4f
             }
             val rng = java.util.Random()
-            repeat(12) { i ->
-                val decay = 1f - i / 12f
+            repeat(18) { i ->
+                val decay = 1f - i / 18f
                 screenShakeX = (rng.nextFloat() - 0.5f) * shakeIntensity * decay * 2f
                 screenShakeY = (rng.nextFloat() - 0.5f) * shakeIntensity * decay * 2f
                 clearFlashAlpha *= 0.82f
@@ -555,38 +555,85 @@ fun GameScreen(
 
     // === Explosion particles for line clears ===
     data class Particle(val x: Float, val y: Float, val vx: Float, val vy: Float,
-                        val size: Float, val color: Int, val life: Float)
+                        val size: Float, val color: Int, val life: Float, val type: Int = 0)
     var particles by remember { mutableStateOf(emptyList<Particle>()) }
+    // Shockwave rings from line clears
+    var shockwaveProgress by remember { mutableFloatStateOf(0f) }
+    var shockwaveY by remember { mutableFloatStateOf(0.5f) }
+    var shockwaveCount by remember { mutableIntStateOf(0) }
     LaunchedEffect(gs.clearedLineRows) {
         if (gs.clearedLineRows.isNotEmpty()) {
             val rng = java.util.Random()
             val newParticles = mutableListOf<Particle>()
             val colors = listOf(0xFFF4D03F.toInt(), 0xFFFF6B6B.toInt(), 0xFF4ECDC4.toInt(),
-                0xFFFF9F43.toInt(), 0xFFA8E6CF.toInt(), 0xFFFF85A2.toInt())
+                0xFFFF9F43.toInt(), 0xFFA8E6CF.toInt(), 0xFFFF85A2.toInt(),
+                0xFF6C5CE7.toInt(), 0xFF00B894.toInt(), 0xFFE17055.toInt())
+            val isTetrisClear = gs.clearedLineRows.size >= 4
+
             gs.clearedLineRows.forEach { row ->
                 val rowY = row.toFloat() / 20f
-                repeat(if (gs.clearedLineRows.size >= 4) 30 else 15) {
+                // Main explosion particles — LOTS more
+                val count = when (gs.clearedLineRows.size) { 4 -> 60; 3 -> 40; 2 -> 25; else -> 15 }
+                repeat(count) {
+                    val speed = if (isTetrisClear) 0.06f else 0.04f
                     newParticles.add(Particle(
                         x = rng.nextFloat(), y = rowY,
-                        vx = (rng.nextFloat() - 0.5f) * 0.04f,
-                        vy = (rng.nextFloat() - 0.5f) * 0.035f - 0.01f,
-                        size = 3f + rng.nextFloat() * 6f,
+                        vx = (rng.nextFloat() - 0.5f) * speed,
+                        vy = (rng.nextFloat() - 0.5f) * speed - 0.015f,
+                        size = 2f + rng.nextFloat() * (if (isTetrisClear) 10f else 7f),
                         color = colors[rng.nextInt(colors.size)],
-                        life = 1f
+                        life = 1f, type = 0
+                    ))
+                }
+                // Spark streaks — fast narrow particles that shoot outward
+                repeat(if (isTetrisClear) 20 else 8) {
+                    val angle = rng.nextFloat() * 6.28f
+                    val spd = 0.03f + rng.nextFloat() * 0.05f
+                    newParticles.add(Particle(
+                        x = rng.nextFloat(), y = rowY,
+                        vx = kotlin.math.cos(angle) * spd,
+                        vy = kotlin.math.sin(angle) * spd,
+                        size = 1.5f + rng.nextFloat() * 2f,
+                        color = 0xFFFFFFFF.toInt(),
+                        life = 1f, type = 1  // spark type
                     ))
                 }
             }
             particles = newParticles
-            // Animate particles
-            repeat(25) {
+
+            // Trigger shockwave
+            shockwaveY = gs.clearedLineRows.average().toFloat() / 20f
+            shockwaveCount++
+
+            // Animate particles — longer for Tetris
+            val totalSteps = if (isTetrisClear) 40 else 30
+            repeat(totalSteps) {
                 particles = particles.mapNotNull { p ->
-                    val newLife = p.life - 0.04f
+                    val decay = if (p.type == 1) 0.06f else 0.033f
+                    val newLife = p.life - decay
                     if (newLife <= 0f) null
-                    else p.copy(x = p.x + p.vx, y = p.y + p.vy, vy = p.vy + 0.002f, life = newLife)
+                    else p.copy(
+                        x = p.x + p.vx,
+                        y = p.y + p.vy,
+                        vy = p.vy + 0.0015f,  // gravity
+                        vx = p.vx * 0.98f,     // air drag
+                        life = newLife
+                    )
                 }
-                delay(25)
+                delay(20)
             }
             particles = emptyList()
+        }
+    }
+    // Shockwave animation
+    LaunchedEffect(shockwaveCount) {
+        if (shockwaveCount > 0) {
+            shockwaveProgress = 0f
+            repeat(20) {
+                shockwaveProgress = (it + 1) / 20f
+                delay(15)
+            }
+            shockwaveProgress = 0f
         }
     }
 
@@ -649,15 +696,14 @@ fun GameScreen(
             // === Board area with screen shake ===
             Box(Modifier.weight(1f).fillMaxWidth()
                 .graphicsLayer { translationX = screenShakeX; translationY = screenShakeY }) {
-                // Dynamic level-hue background
-                Box(Modifier.matchParentSize().background(bgGradientColor))
+                // NO colored background — falling pieces show through cleanly
 
-                // Game board — semi-transparent LCD
+                // Game board — transparent modern grid
                 GameBoard(gs.board, Modifier.fillMaxSize().alpha(boardDimAlpha),
                     gs.currentPiece, gs.ghostY, ghost, gs.clearedLineRows, anim, ad, multiColor = true,
                     hardDropTrail = gs.hardDropTrail, lockEvent = gs.lockEvent,
                     pieceMaterial = LocalPieceMaterial.current, highContrast = LocalHighContrast.current,
-                    boardOpacity = if (isDark) 0.15f else 0.25f)
+                    boardOpacity = if (isDark) 0.12f else 0.18f)
 
                 // === Danger zone overlay ===
                 if (dangerAlpha > 0.01f) {
@@ -702,23 +748,63 @@ fun GameScreen(
                     Box(Modifier.matchParentSize().border(pulseWidth, comboColor))
                 }
 
-                // === Explosion particles ===
+                // === Explosion particles + spark streaks ===
                 if (particles.isNotEmpty()) {
                     Canvas(Modifier.matchParentSize()) {
                         particles.forEach { p ->
-                            drawCircle(
-                                Color(p.color).copy(alpha = (p.life * p.life).coerceIn(0f, 1f)),
-                                radius = p.size * p.life,
-                                center = Offset(p.x * size.width, p.y * size.height)
-                            )
-                            // Bright core
-                            if (p.life > 0.5f) {
+                            if (p.type == 1) {
+                                // Spark streak — draw as a line trailing behind
+                                val trailLen = 12f * p.life
+                                drawLine(
+                                    Color(p.color).copy(alpha = (p.life * p.life).coerceIn(0f, 1f)),
+                                    start = Offset(p.x * size.width, p.y * size.height),
+                                    end = Offset((p.x - p.vx * 8f) * size.width, (p.y - p.vy * 8f) * size.height),
+                                    strokeWidth = p.size * p.life
+                                )
+                            } else {
+                                // Main particle — glowing circle
                                 drawCircle(
-                                    Color.White.copy(alpha = (p.life - 0.5f) * 2f),
-                                    radius = p.size * 0.3f * p.life,
+                                    Color(p.color).copy(alpha = (p.life * p.life).coerceIn(0f, 1f)),
+                                    radius = p.size * (0.5f + p.life * 0.5f),
                                     center = Offset(p.x * size.width, p.y * size.height)
                                 )
+                                // Bright core
+                                if (p.life > 0.4f) {
+                                    drawCircle(
+                                        Color.White.copy(alpha = ((p.life - 0.4f) * 1.5f).coerceIn(0f, 0.9f)),
+                                        radius = p.size * 0.25f * p.life,
+                                        center = Offset(p.x * size.width, p.y * size.height)
+                                    )
+                                }
                             }
+                        }
+                    }
+                }
+
+                // === Shockwave ring expanding from cleared rows ===
+                if (shockwaveProgress > 0.01f && shockwaveProgress < 1f) {
+                    Canvas(Modifier.matchParentSize()) {
+                        val maxRadius = size.maxDimension * 0.8f
+                        val radius = shockwaveProgress * maxRadius
+                        val ringAlpha = (1f - shockwaveProgress) * 0.6f
+                        val ringWidth = (1f - shockwaveProgress) * 6f + 2f
+                        // Main ring
+                        drawCircle(
+                            Color.White.copy(alpha = ringAlpha),
+                            radius = radius,
+                            center = Offset(size.width / 2f, shockwaveY * size.height),
+                            style = Stroke(ringWidth)
+                        )
+                        // Secondary ring — slightly delayed
+                        if (shockwaveProgress > 0.1f) {
+                            val r2 = (shockwaveProgress - 0.1f) / 0.9f * maxRadius
+                            val a2 = (1f - shockwaveProgress) * 0.3f
+                            drawCircle(
+                                Color(0xFFF4D03F).copy(alpha = a2),
+                                radius = r2,
+                                center = Offset(size.width / 2f, shockwaveY * size.height),
+                                style = Stroke(ringWidth * 0.5f)
+                            )
                         }
                     }
                 }
