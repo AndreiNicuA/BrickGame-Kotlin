@@ -20,7 +20,6 @@ import com.brickgame.tetris.game.PieceState
 import com.brickgame.tetris.game.TetrisGame
 import com.brickgame.tetris.ui.styles.AnimationStyle
 import com.brickgame.tetris.ui.theme.LocalGameTheme
-import com.brickgame.tetris.ui.screens.LocalMultiColor
 
 // Standard Tetris piece colors
 val PIECE_COLORS = listOf(
@@ -521,15 +520,12 @@ private fun DrawScope.drawGhost(piece: PieceState, ghostY: Int, cellSize: Float,
 // ===== Piece Previews =====
 @Composable
 fun NextPiecePreview(shape: List<List<Int>>?, modifier: Modifier = Modifier, alpha: Float = 1f) {
-    val theme = LocalGameTheme.current
-    val multiColor = LocalMultiColor.current
-    Box(modifier.clip(RoundedCornerShape(6.dp)).background(theme.pixelOff.copy(alpha = 0.3f)).padding(4.dp)) {
+    Box(modifier.clip(RoundedCornerShape(6.dp)).background(Color.White.copy(alpha = 0.08f)).padding(4.dp)) {
         if (shape != null) Canvas(Modifier.fillMaxSize()) {
             val rows = shape.size; val cols = shape.maxOfOrNull { it.size } ?: 0; if (rows == 0 || cols == 0) return@Canvas
             val cs = minOf(size.width / cols, size.height / rows); val ox = (size.width - cs * cols) / 2; val oy = (size.height - cs * rows) / 2; val g = cs * 0.1f; val c = cs * 0.2f
             for (y in shape.indices) for (x in shape[y].indices) if (shape[y][x] > 0) {
-                val color = if (multiColor && shape[y][x] in 1..7) PIECE_COLORS[shape[y][x]] else theme.pixelOn
-                drawRoundRect(color.copy(alpha = alpha), Offset(ox + x * cs + g, oy + y * cs + g), Size(cs - g * 2, cs - g * 2), CornerRadius(c))
+                drawRoundRect(Color.White.copy(alpha = alpha * 0.9f), Offset(ox + x * cs + g, oy + y * cs + g), Size(cs - g * 2, cs - g * 2), CornerRadius(c))
             }
         }
     }
@@ -537,15 +533,13 @@ fun NextPiecePreview(shape: List<List<Int>>?, modifier: Modifier = Modifier, alp
 
 @Composable
 fun HoldPiecePreview(shape: List<List<Int>>?, isUsed: Boolean = false, modifier: Modifier = Modifier) {
-    val theme = LocalGameTheme.current; val a = if (isUsed) 0.3f else 1f
-    val multiColor = LocalMultiColor.current
-    Box(modifier.clip(RoundedCornerShape(6.dp)).background(theme.pixelOff.copy(alpha = if (isUsed) 0.2f else 0.3f)).padding(4.dp)) {
+    val a = if (isUsed) 0.3f else 1f
+    Box(modifier.clip(RoundedCornerShape(6.dp)).background(Color.White.copy(alpha = 0.08f)).padding(4.dp)) {
         if (shape != null) Canvas(Modifier.fillMaxSize()) {
             val rows = shape.size; val cols = shape.maxOfOrNull { it.size } ?: 0; if (rows == 0 || cols == 0) return@Canvas
             val cs = minOf(size.width / cols, size.height / rows); val ox = (size.width - cs * cols) / 2; val oy = (size.height - cs * rows) / 2; val g = cs * 0.1f; val c = cs * 0.2f
             for (y in shape.indices) for (x in shape[y].indices) if (shape[y][x] > 0) {
-                val color = if (multiColor && shape[y][x] in 1..7) PIECE_COLORS[shape[y][x]] else theme.pixelOn
-                drawRoundRect(color.copy(alpha = a), Offset(ox + x * cs + g, oy + y * cs + g), Size(cs - g * 2, cs - g * 2), CornerRadius(c))
+                drawRoundRect(Color.White.copy(alpha = a * 0.9f), Offset(ox + x * cs + g, oy + y * cs + g), Size(cs - g * 2, cs - g * 2), CornerRadius(c))
             }
         }
     }
