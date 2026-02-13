@@ -85,7 +85,10 @@ fun GameBoard(
 
     BoxWithConstraints(
         modifier = modifier.clip(RoundedCornerShape(6.dp))
-            .background(theme.screenBackground.copy(alpha = theme.screenBackground.alpha * boardOpacity))
+            .background(
+                if (boardOpacity < 0.5f) Color.Transparent
+                else theme.screenBackground.copy(alpha = theme.screenBackground.alpha * boardOpacity)
+            )
             .padding(2.dp),
         contentAlignment = Alignment.Center
     ) {
