@@ -585,11 +585,12 @@ fun GameScreen(
                 // Dynamic level-hue background
                 Box(Modifier.matchParentSize().background(bgGradientColor))
 
-                // Game board
+                // Game board — transparent LCD so background shows through
                 GameBoard(gs.board, Modifier.fillMaxSize().alpha(boardDimAlpha),
                     gs.currentPiece, gs.ghostY, ghost, gs.clearedLineRows, anim, ad, multiColor = true,
                     hardDropTrail = gs.hardDropTrail, lockEvent = gs.lockEvent,
-                    pieceMaterial = LocalPieceMaterial.current, highContrast = LocalHighContrast.current)
+                    pieceMaterial = LocalPieceMaterial.current, highContrast = LocalHighContrast.current,
+                    boardOpacity = 0.3f)
 
                 // === Danger zone overlay ===
                 if (dangerAlpha > 0.01f) {

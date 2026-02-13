@@ -48,7 +48,8 @@ fun GameBoard(
     hardDropTrail: List<Triple<Int, Int, Int>> = emptyList(),
     lockEvent: Int = 0,
     pieceMaterial: String = "CLASSIC",
-    highContrast: Boolean = false
+    highContrast: Boolean = false,
+    boardOpacity: Float = 1f
 ) {
     val theme = LocalGameTheme.current
     val clearProgress = remember { Animatable(0f) }
@@ -83,7 +84,9 @@ fun GameBoard(
     val isTetris = clearingLines.size >= 4
 
     BoxWithConstraints(
-        modifier = modifier.clip(RoundedCornerShape(6.dp)).background(theme.screenBackground).padding(2.dp),
+        modifier = modifier.clip(RoundedCornerShape(6.dp))
+            .background(theme.screenBackground.copy(alpha = theme.screenBackground.alpha * boardOpacity))
+            .padding(2.dp),
         contentAlignment = Alignment.Center
     ) {
         val pixelSize = minOf(maxWidth / TetrisGame.BOARD_WIDTH, maxHeight / TetrisGame.BOARD_HEIGHT)
@@ -94,8 +97,9 @@ fun GameBoard(
             val cellSize = size.width / TetrisGame.BOARD_WIDTH
             val gap = cellSize * 0.06f
             val corner = cellSize * 0.15f
-            // High contrast: boost grid visibility
-            val emptyColor = if (highContrast) theme.pixelOff.boostContrast(theme.screenBackground) else theme.pixelOff
+            // High contrast: boost grid visibility; apply boardOpacity to empty cells
+            val rawEmpty = if (highContrast) theme.pixelOff.boostContrast(theme.screenBackground) else theme.pixelOff
+            val emptyColor = rawEmpty.copy(alpha = rawEmpty.alpha * boardOpacity)
 
             // Draw board cells
             for (y in 0 until TetrisGame.BOARD_HEIGHT) {
