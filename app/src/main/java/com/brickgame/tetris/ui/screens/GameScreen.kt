@@ -435,7 +435,7 @@ fun GameScreen(
     }
 }
 
-// === MODERN: Edge-to-edge board with floating overlays ===
+// === MODERN: Clean info bar + edge-to-edge board + animated background ===
 @Composable private fun ModernLayout(
     gs: GameState, dp: DPadStyle, ghost: Boolean, anim: AnimationStyle, ad: Float,
     onRotate: () -> Unit, onHD: () -> Unit, onHold: () -> Unit,
@@ -444,6 +444,7 @@ fun GameScreen(
     boardDimAlpha: Float = 1f, nextCount: Int = 3
 ) {
     val theme = LocalGameTheme.current
+    val isDark = com.brickgame.tetris.ui.theme.LocalIsDarkMode.current
     val animatedScore by animateIntAsState(gs.score, animationSpec = tween(300), label = "score")
 
     // === Danger zone detection ===
@@ -473,7 +474,7 @@ fun GameScreen(
         infiniteRepeatable(tween(600), RepeatMode.Reverse), label = "da"
     )
 
-    // === Dynamic background gradient that shifts with level ===
+    // === Dynamic background hue shift with level ===
     val levelHue = (gs.level * 27f) % 360f
     val bgGradientColor = Color.hsl(levelHue, 0.3f, 0.08f)
 
@@ -515,98 +516,104 @@ fun GameScreen(
     // === Combo glow ===
     val comboGlow = (gs.comboCount.coerceAtLeast(0) / 8f).coerceIn(0f, 1f)
 
-    Column(Modifier.fillMaxSize()) {
-        // === Board area: edge-to-edge, takes all available space ===
-        Box(Modifier.weight(1f).fillMaxWidth()) {
-            // Dynamic background
-            Box(Modifier.matchParentSize().background(bgGradientColor))
+    Box(Modifier.fillMaxSize()) {
+        // === Subtle falling pieces background — same as menu but very faint ===
+        Box(Modifier.matchParentSize().alpha(0.3f)) {
+            FallingPiecesBackground(theme, isDark)
+        }
 
-            // Game board — FULL WIDTH, no padding
-            GameBoard(gs.board, Modifier.fillMaxSize().alpha(boardDimAlpha),
-                gs.currentPiece, gs.ghostY, ghost, gs.clearedLineRows, anim, ad, multiColor = true,
-                hardDropTrail = gs.hardDropTrail, lockEvent = gs.lockEvent,
-                pieceMaterial = LocalPieceMaterial.current, highContrast = LocalHighContrast.current)
+        Column(Modifier.fillMaxSize()) {
+            // === COMPACT INFO BAR above the board ===
+            // Single row: [HOLD] | Level · Score · Lines | [Next1][Next2][Next3]
+            Row(Modifier.fillMaxWidth()
+                .background(Color.Black.copy(0.55f))
+                .padding(horizontal = 6.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // HOLD piece — compact square
+                HoldPiecePreview(gs.holdPiece?.shape, gs.holdUsed, Modifier.size(28.dp))
 
-            // === Danger zone overlay ===
-            if (dangerAlpha > 0.01f) {
-                Canvas(Modifier.matchParentSize()) {
-                    for (i in 0..5) {
-                        val rowH = size.height / 20f
-                        drawRect(Color.Red.copy(alpha = dangerAlpha * (1f - i / 6f)), Offset(0f, i * rowH), Size(size.width, rowH))
+                Spacer(Modifier.width(6.dp))
+
+                // Center: Level · Score · Lines
+                Row(Modifier.weight(1f),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically) {
+                    Text("${gs.level}", fontSize = 14.sp, fontWeight = FontWeight.ExtraBold,
+                        fontFamily = FontFamily.Monospace, color = theme.accentColor)
+                    Text("  ", fontSize = 10.sp, color = Color.White.copy(0.3f))
+                    Text(animatedScore.toString().padStart(7, '0'), fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace,
+                        color = Color.White.copy(0.9f), letterSpacing = 1.sp)
+                    Text("  ", fontSize = 10.sp, color = Color.White.copy(0.3f))
+                    Text("${gs.lines}L", fontSize = 12.sp, fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace, color = Color.White.copy(0.55f))
+                }
+
+                Spacer(Modifier.width(6.dp))
+
+                // NEXT queue — horizontal row
+                Row(horizontalArrangement = Arrangement.spacedBy(2.dp),
+                    verticalAlignment = Alignment.CenterVertically) {
+                    gs.nextPieces.take(nextCount.coerceAtMost(3)).forEachIndexed { i, p ->
+                        NextPiecePreview(p.shape, Modifier.size(if (i == 0) 28.dp else 20.dp),
+                            alpha = if (i == 0) 1f else 0.5f)
                     }
                 }
             }
 
-            // === Line clear flash ===
-            if (clearFlashAlpha > 0.01f) {
-                Box(Modifier.matchParentSize().background(Color.White.copy(alpha = clearFlashAlpha)))
-            }
+            // === Board area: edge-to-edge, fills remaining space ===
+            Box(Modifier.weight(1f).fillMaxWidth()) {
+                // Dynamic level-hue background
+                Box(Modifier.matchParentSize().background(bgGradientColor))
 
-            // === Level up flash ===
-            if (levelUpFlash > 0.01f) {
-                Box(Modifier.matchParentSize().background(Color(0xFFF4D03F).copy(alpha = levelUpFlash)))
-            }
+                // Game board
+                GameBoard(gs.board, Modifier.fillMaxSize().alpha(boardDimAlpha),
+                    gs.currentPiece, gs.ghostY, ghost, gs.clearedLineRows, anim, ad, multiColor = true,
+                    hardDropTrail = gs.hardDropTrail, lockEvent = gs.lockEvent,
+                    pieceMaterial = LocalPieceMaterial.current, highContrast = LocalHighContrast.current)
 
-            // === Combo glow border ===
-            if (comboGlow > 0.05f) {
-                Box(Modifier.matchParentSize().border(2.dp, Color(0xFFF4D03F).copy(comboGlow * 0.5f)))
-            }
+                // === Danger zone overlay ===
+                if (dangerAlpha > 0.01f) {
+                    Canvas(Modifier.matchParentSize()) {
+                        for (i in 0..5) {
+                            val rowH = size.height / 20f
+                            drawRect(Color.Red.copy(alpha = dangerAlpha * (1f - i / 6f)), Offset(0f, i * rowH), Size(size.width, rowH))
+                        }
+                    }
+                }
 
-            // === Score flyup ===
-            val flyupAlpha by animateFloatAsState(if (flyupVisible) 1f else 0f, tween(400), label = "fua")
-            val flyupOffset by animateFloatAsState(if (flyupVisible) 0f else 20f, tween(300), label = "fuo")
-            if (flyupAlpha > 0.01f) {
-                Text(flyupText, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold,
-                    fontFamily = FontFamily.Monospace,
-                    color = Color(0xFFF4D03F).copy(flyupAlpha * 0.9f),
-                    modifier = Modifier.align(Alignment.Center).graphicsLayer {
-                        translationY = -flyupOffset * 3f; shadowElevation = 8f
-                    })
-            }
+                // === Line clear flash ===
+                if (clearFlashAlpha > 0.01f) {
+                    Box(Modifier.matchParentSize().background(Color.White.copy(alpha = clearFlashAlpha)))
+                }
 
-            // === FLOATING OVERLAYS on the board ===
+                // === Level up flash ===
+                if (levelUpFlash > 0.01f) {
+                    Box(Modifier.matchParentSize().background(Color(0xFFF4D03F).copy(alpha = levelUpFlash)))
+                }
 
-            // Top-left: HOLD piece (frosted glass style)
-            Column(Modifier.align(Alignment.TopStart).padding(6.dp)
-                .background(Color.Black.copy(0.45f), RoundedCornerShape(10.dp))
-                .padding(horizontal = 8.dp, vertical = 5.dp),
-                horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("HOLD", fontSize = 7.sp, color = Color.White.copy(0.6f),
-                    fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, letterSpacing = 0.5.sp)
-                HoldPiecePreview(gs.holdPiece?.shape, gs.holdUsed, Modifier.size(30.dp))
-            }
+                // === Combo glow border ===
+                if (comboGlow > 0.05f) {
+                    Box(Modifier.matchParentSize().border(2.dp, Color(0xFFF4D03F).copy(comboGlow * 0.5f)))
+                }
 
-            // Top-right: NEXT queue
-            Column(Modifier.align(Alignment.TopEnd).padding(6.dp)
-                .background(Color.Black.copy(0.45f), RoundedCornerShape(10.dp))
-                .padding(horizontal = 8.dp, vertical = 5.dp),
-                horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("NEXT", fontSize = 7.sp, color = Color.White.copy(0.6f),
-                    fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, letterSpacing = 0.5.sp)
-                gs.nextPieces.take(nextCount.coerceAtMost(3)).forEachIndexed { i, p ->
-                    NextPiecePreview(p.shape, Modifier.size(if (i == 0) 30.dp else 20.dp).padding(vertical = 1.dp),
-                        alpha = if (i == 0) 1f else 0.5f)
+                // === Score flyup ===
+                val flyupAlpha by animateFloatAsState(if (flyupVisible) 1f else 0f, tween(400), label = "fua")
+                val flyupOffset by animateFloatAsState(if (flyupVisible) 0f else 20f, tween(300), label = "fuo")
+                if (flyupAlpha > 0.01f) {
+                    Text(flyupText, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold,
+                        fontFamily = FontFamily.Monospace,
+                        color = Color(0xFFF4D03F).copy(flyupAlpha * 0.9f),
+                        modifier = Modifier.align(Alignment.Center).graphicsLayer {
+                            translationY = -flyupOffset * 3f; shadowElevation = 8f
+                        })
                 }
             }
 
-            // Top-center: Score / Level / Lines — thin floating pill
-            Row(Modifier.align(Alignment.TopCenter).padding(top = 6.dp)
-                .background(Color.Black.copy(0.45f), RoundedCornerShape(20.dp))
-                .padding(horizontal = 14.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                verticalAlignment = Alignment.CenterVertically) {
-                Text("${gs.level}", fontSize = 13.sp, fontWeight = FontWeight.ExtraBold,
-                    fontFamily = FontFamily.Monospace, color = theme.accentColor)
-                Text(animatedScore.toString().padStart(7, '0'), fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace,
-                    color = Color.White.copy(0.9f), letterSpacing = 1.sp)
-                Text("${gs.lines}L", fontSize = 11.sp, fontWeight = FontWeight.Bold,
-                    fontFamily = FontFamily.Monospace, color = Color.White.copy(0.6f))
-            }
+            // === Controls ===
+            FullControls(dp, onHD, onHold, onLP, onLR, onRP, onRR, onDP, onDR, onRotate, onPause, onSet, onStart, gs.status)
         }
-
-        // === Controls: compact, no extra spacing ===
-        FullControls(dp, onHD, onHold, onLP, onLR, onRP, onRR, onDP, onDR, onRotate, onPause, onSet, onStart, gs.status)
     }
 }
 
