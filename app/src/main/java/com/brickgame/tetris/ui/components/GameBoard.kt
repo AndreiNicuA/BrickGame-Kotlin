@@ -84,12 +84,14 @@ fun GameBoard(
     val isTetris = clearingLines.size >= 4
 
     BoxWithConstraints(
-        modifier = modifier.clip(RoundedCornerShape(6.dp))
-            .background(
-                if (boardOpacity < 0.5f) Color.Transparent
-                else theme.screenBackground.copy(alpha = theme.screenBackground.alpha * boardOpacity)
-            )
-            .padding(2.dp),
+        modifier = if (boardOpacity < 0.5f) {
+            // Modern transparent: no clip, no background, no padding — just the grid
+            modifier
+        } else {
+            modifier.clip(RoundedCornerShape(6.dp))
+                .background(theme.screenBackground.copy(alpha = theme.screenBackground.alpha * boardOpacity))
+                .padding(2.dp)
+        },
         contentAlignment = Alignment.Center
     ) {
         val pixelSize = minOf(maxWidth / TetrisGame.BOARD_WIDTH, maxHeight / TetrisGame.BOARD_HEIGHT)
@@ -125,10 +127,10 @@ fun GameBoard(
                         }
                     } else {
                         if (useModernGrid) {
-                            // Modern: subtle outline — visible but not distracting
-                            drawRoundRect(emptyColor.copy(alpha = (emptyColor.alpha * 2.5f).coerceAtMost(0.3f)),
+                            // Modern: pure neutral grid lines, no fill
+                            drawRoundRect(Color.White.copy(alpha = 0.12f),
                                 offset, cs, CornerRadius(corner),
-                                style = Stroke(gap * 1.2f))
+                                style = Stroke(gap * 1.0f))
                         } else {
                             drawRoundRect(emptyColor, offset, cs, CornerRadius(corner))
                         }

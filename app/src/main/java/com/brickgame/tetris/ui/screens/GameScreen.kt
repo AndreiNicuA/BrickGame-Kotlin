@@ -1150,23 +1150,28 @@ fun GameScreen(
     onDP: () -> Unit, onDR: () -> Unit, onRotate: () -> Unit,
     onPause: () -> Unit, onSet: () -> Unit, onStart: () -> Unit, status: GameStatus
 ) {
-    Row(Modifier.fillMaxWidth().padding(horizontal = 2.dp, vertical = 2.dp), Arrangement.SpaceBetween, Alignment.CenterVertically) {
-        // D-Pad — compact size
-        DPad(50.dp, rotateInCenter = dp == DPadStyle.ROTATE_CENTRE,
-            onUpPress = onHD, onDownPress = onDP, onDownRelease = onDR,
-            onLeftPress = onLP, onLeftRelease = onLR, onRightPress = onRP, onRightRelease = onRR, onRotate = onRotate)
-        // Centre: HOLD + PAUSE/START + SETTINGS
+    Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), Arrangement.SpaceBetween, Alignment.CenterVertically) {
+        // Left side: DPad with HOLD button tucked in upper-right
+        Box {
+            DPad(56.dp, rotateInCenter = dp == DPadStyle.ROTATE_CENTRE,
+                onUpPress = onHD, onDownPress = onDP, onDownRelease = onDR,
+                onLeftPress = onLP, onLeftRelease = onLR, onRightPress = onRP, onRightRelease = onRR, onRotate = onRotate)
+            // HOLD button — between UP and RIGHT
+            Box(Modifier.align(Alignment.TopEnd).offset(x = 8.dp, y = (-2).dp)) {
+                ActionButton("HOLD", onHold, width = 52.dp, height = 26.dp)
+            }
+        }
+        // Centre: PAUSE + menu only
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            ActionButton("HOLD", onHold, width = 72.dp, height = 30.dp)
             ActionButton(
                 if (status == GameStatus.MENU) "START" else "PAUSE",
                 { if (status == GameStatus.MENU) onStart() else onPause() },
-                width = 72.dp, height = 30.dp
+                width = 80.dp, height = 34.dp
             )
-            ActionButton("...", onSet, width = 42.dp, height = 22.dp, backgroundColor = LocalGameTheme.current.buttonSecondary)
+            ActionButton("...", onSet, width = 48.dp, height = 24.dp, backgroundColor = LocalGameTheme.current.buttonSecondary)
         }
-        // Rotate
-        if (dp == DPadStyle.STANDARD) RotateButton(onRotate, 60.dp) else Spacer(Modifier.size(60.dp))
+        // Rotate — bigger
+        if (dp == DPadStyle.STANDARD) RotateButton(onRotate, 72.dp) else Spacer(Modifier.size(72.dp))
     }
 }
 
