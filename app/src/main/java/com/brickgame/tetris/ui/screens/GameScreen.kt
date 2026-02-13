@@ -524,40 +524,58 @@ fun GameScreen(
 
         Column(Modifier.fillMaxSize()) {
             // === COMPACT INFO BAR above the board ===
-            // Single row: [HOLD] | Level · Score · Lines | [Next1][Next2][Next3]
             Row(Modifier.fillMaxWidth()
+                .shadow(6.dp)
                 .background(Color.Black.copy(0.55f))
-                .padding(horizontal = 6.dp, vertical = 4.dp),
+                .padding(horizontal = 6.dp, vertical = 3.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // HOLD piece — compact square
-                HoldPiecePreview(gs.holdPiece?.shape, gs.holdUsed, Modifier.size(28.dp))
-
-                Spacer(Modifier.width(6.dp))
-
-                // Center: Level · Score · Lines
-                Row(Modifier.weight(1f),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically) {
-                    Text("${gs.level}", fontSize = 14.sp, fontWeight = FontWeight.ExtraBold,
-                        fontFamily = FontFamily.Monospace, color = theme.accentColor)
-                    Text("  ", fontSize = 10.sp, color = Color.White.copy(0.3f))
-                    Text(animatedScore.toString().padStart(7, '0'), fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace,
-                        color = Color.White.copy(0.9f), letterSpacing = 1.sp)
-                    Text("  ", fontSize = 10.sp, color = Color.White.copy(0.3f))
-                    Text("${gs.lines}L", fontSize = 12.sp, fontWeight = FontWeight.Bold,
-                        fontFamily = FontFamily.Monospace, color = Color.White.copy(0.55f))
+                // HOLD piece with label
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("HOLD", fontSize = 6.sp, color = Color.White.copy(0.45f),
+                        fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, letterSpacing = 0.5.sp)
+                    HoldPiecePreview(gs.holdPiece?.shape, gs.holdUsed, Modifier.size(28.dp))
                 }
 
-                Spacer(Modifier.width(6.dp))
+                Spacer(Modifier.width(4.dp))
 
-                // NEXT queue — horizontal row
-                Row(horizontalArrangement = Arrangement.spacedBy(2.dp),
+                // Center: LVL · SCORE · LINES with tiny labels above
+                Row(Modifier.weight(1f),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
                     verticalAlignment = Alignment.CenterVertically) {
-                    gs.nextPieces.take(nextCount.coerceAtMost(3)).forEachIndexed { i, p ->
-                        NextPiecePreview(p.shape, Modifier.size(if (i == 0) 28.dp else 20.dp),
-                            alpha = if (i == 0) 1f else 0.5f)
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("LVL", fontSize = 6.sp, color = Color.White.copy(0.4f),
+                            fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, letterSpacing = 0.5.sp)
+                        Text("${gs.level}", fontSize = 14.sp, fontWeight = FontWeight.ExtraBold,
+                            fontFamily = FontFamily.Monospace, color = theme.accentColor)
+                    }
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("SCORE", fontSize = 6.sp, color = Color.White.copy(0.4f),
+                            fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, letterSpacing = 0.5.sp)
+                        Text(animatedScore.toString().padStart(7, '0'), fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace,
+                            color = Color.White.copy(0.9f), letterSpacing = 1.sp)
+                    }
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("LINES", fontSize = 6.sp, color = Color.White.copy(0.4f),
+                            fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, letterSpacing = 0.5.sp)
+                        Text("${gs.lines}", fontSize = 13.sp, fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace, color = Color.White.copy(0.7f))
+                    }
+                }
+
+                Spacer(Modifier.width(4.dp))
+
+                // NEXT queue — horizontal with label
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("NEXT", fontSize = 6.sp, color = Color.White.copy(0.45f),
+                        fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, letterSpacing = 0.5.sp)
+                    Row(horizontalArrangement = Arrangement.spacedBy(2.dp),
+                        verticalAlignment = Alignment.CenterVertically) {
+                        gs.nextPieces.take(nextCount.coerceAtMost(3)).forEachIndexed { i, p ->
+                            NextPiecePreview(p.shape, Modifier.size(if (i == 0) 28.dp else 20.dp),
+                                alpha = if (i == 0) 1f else 0.5f)
+                        }
                     }
                 }
             }
