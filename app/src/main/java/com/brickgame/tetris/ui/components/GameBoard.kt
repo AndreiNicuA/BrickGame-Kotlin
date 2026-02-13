@@ -231,33 +231,6 @@ fun GameBoard(
                 }
             }
 
-            // Falling piece motion shadow — trailing copies below the piece
-            if (currentPiece != null && !classicLCD && board.isNotEmpty()) {
-                val shape = currentPiece.shape
-                val px = currentPiece.position.x
-                val py = currentPiece.position.y
-                val pColor = if (multiColor) PIECE_COLORS.getOrElse(currentPiece.type.ordinal + 1) { theme.pixelOn } else theme.pixelOn
-                // Draw 3 trailing shadow copies below the piece
-                for (trail in 1..3) {
-                    val trailY = py - trail
-                    val shadowAlpha = (0.2f - trail * 0.06f).coerceAtLeast(0f)
-                    if (shadowAlpha > 0.01f && trailY >= 0) {
-                        for (sy in shape.indices) {
-                            for (sx in shape[sy].indices) {
-                                if (shape[sy][sx] > 0) {
-                                    val bx = px + sx
-                                    val by = trailY + sy
-                                    if (bx in 0 until TetrisGame.BOARD_WIDTH && by in 0 until TetrisGame.BOARD_HEIGHT) {
-                                        val off = Offset(bx * cellSize + gap, by * cellSize + gap)
-                                        val sz = Size(cellSize - gap * 2, cellSize - gap * 2)
-                                        drawRoundRect(pColor.copy(alpha = shadowAlpha), off, sz, CornerRadius(corner))
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
 
             // Lock flash — brief glow on recently placed cells
             if (lockFlashProgress.value < 1f && lockFlashProgress.value > 0f && !classicLCD) {
