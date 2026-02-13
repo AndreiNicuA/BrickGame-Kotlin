@@ -22,6 +22,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalDensity
@@ -715,17 +716,34 @@ fun GameScreen(
                     }
                 }
 
-                // === Explosion flash — white to orange gradient for big clears ===
+                // === Explosion flash — edge glow only, never covers the board ===
                 if (clearFlashAlpha > 0.01f) {
                     val flashColor = when {
                         clearSize.intValue >= 4 -> Color(0xFFF4D03F) // gold for Tetris
                         clearSize.intValue >= 3 -> Color(0xFFFF9F43) // orange for triple
+                        clearSize.intValue >= 2 -> Color(0xFF4ECDC4) // teal for double
                         else -> Color.White
                     }
-                    Box(Modifier.matchParentSize().background(flashColor.copy(alpha = clearFlashAlpha)))
+                    Canvas(Modifier.matchParentSize()) {
+                        val a = clearFlashAlpha.coerceIn(0f, 1f)
+                        val edgeW = size.width * 0.12f
+                        val edgeH = size.height * 0.06f
+                        // Left edge glow
+                        drawRect(Brush.horizontalGradient(listOf(flashColor.copy(a), Color.Transparent)),
+                            Offset.Zero, Size(edgeW, size.height))
+                        // Right edge glow
+                        drawRect(Brush.horizontalGradient(listOf(Color.Transparent, flashColor.copy(a))),
+                            Offset(size.width - edgeW, 0f), Size(edgeW, size.height))
+                        // Top edge glow
+                        drawRect(Brush.verticalGradient(listOf(flashColor.copy(a * 0.7f), Color.Transparent)),
+                            Offset.Zero, Size(size.width, edgeH))
+                        // Bottom edge glow
+                        drawRect(Brush.verticalGradient(listOf(Color.Transparent, flashColor.copy(a * 0.7f))),
+                            Offset(0f, size.height - edgeH), Size(size.width, edgeH))
+                    }
                 }
 
-                // === Level up BURST — golden ring expanding outward ===
+                // === Level up BURST — ring + edge glow, no board overlay ===
                 if (levelUpFlash > 0.01f) {
                     Canvas(Modifier.matchParentSize()) {
                         val ringProgress = 1f - levelUpFlash / 0.8f
@@ -737,8 +755,14 @@ fun GameScreen(
                             center = Offset(size.width / 2f, size.height / 2f),
                             style = Stroke(ringWidth)
                         )
+                        // Edge glow instead of full overlay
+                        val a = (levelUpFlash * 0.5f).coerceIn(0f, 1f)
+                        val ew = size.width * 0.1f
+                        drawRect(Brush.horizontalGradient(listOf(Color(0xFFF4D03F).copy(a), Color.Transparent)),
+                            Offset.Zero, Size(ew, size.height))
+                        drawRect(Brush.horizontalGradient(listOf(Color.Transparent, Color(0xFFF4D03F).copy(a))),
+                            Offset(size.width - ew, 0f), Size(ew, size.height))
                     }
-                    Box(Modifier.matchParentSize().background(Color(0xFFF4D03F).copy(alpha = levelUpFlash * 0.3f)))
                 }
 
                 // === Combo glow — pulsing border ===
