@@ -401,6 +401,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     fun start3DGame() {
         game3D.start()
         start3DLoop()
+        start3DSoundObserver()
     }
     private fun start3DLoop() {
         game3DJob?.cancel()
@@ -410,6 +411,37 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 if (st != GameStatus.PLAYING) break
                 game3D.tick(16L)
                 delay(16L)
+            }
+        }
+    }
+
+    // Reactive sound/vibration observer for 3D game events (line clears, level ups, game over)
+    private var prev3DLayers = 0
+    private var prev3DLevel = 1
+    private var prev3DStatus = GameStatus.MENU
+    private var sound3DJob: Job? = null
+
+    private fun start3DSoundObserver() {
+        prev3DLayers = 0; prev3DLevel = 1; prev3DStatus = GameStatus.PLAYING
+        sound3DJob?.cancel()
+        sound3DJob = viewModelScope.launch {
+            game3DState.collect { s ->
+                // Layer clear
+                val clearedNow = s.layers - prev3DLayers
+                if (clearedNow > 0 && prev3DLayers >= 0) {
+                    soundManager.playClear(); vibrationManager.vibrateClear(clearedNow)
+                }
+                prev3DLayers = s.layers
+                // Level up
+                if (s.level > prev3DLevel && prev3DLevel > 0) {
+                    soundManager.playLevelUp(); vibrationManager.vibrateLevelUp()
+                }
+                prev3DLevel = s.level
+                // Game over
+                if (s.status == GameStatus.GAME_OVER && prev3DStatus == GameStatus.PLAYING) {
+                    soundManager.playGameOver(); vibrationManager.vibrateGameOver()
+                }
+                prev3DStatus = s.status
             }
         }
     }
@@ -432,6 +464,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     /** Quit 3D game — save score to history, return to menu */
     fun quit3DGame() {
         game3DJob?.cancel()
+        sound3DJob?.cancel()
         val s = game3DState.value
         if (s.score > 0) {
             viewModelScope.launch {
@@ -441,14 +474,14 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         }
         game3D.resetToMenu()
     }
-    fun move3DX(dx: Int) { game3D.moveX(dx) }
-    fun move3DZ(dz: Int) { game3D.moveZ(dz) }
-    fun rotate3DXZ() { game3D.rotateXZ() }
-    fun rotate3DXY() { game3D.rotateXY() }
-    fun hardDrop3D() { game3D.hardDrop() }
-    fun hold3D() { game3D.hold() }
+    fun move3DX(dx: Int) { if (game3D.moveX(dx)) { soundManager.playMove(); vibrationManager.vibrateMove() } }
+    fun move3DZ(dz: Int) { if (game3D.moveZ(dz)) { soundManager.playMove(); vibrationManager.vibrateMove() } }
+    fun rotate3DXZ() { if (game3D.rotateXZ()) { soundManager.playRotate(); vibrationManager.vibrateRotate() } }
+    fun rotate3DXY() { if (game3D.rotateXY()) { soundManager.playRotate(); vibrationManager.vibrateRotate() } }
+    fun hardDrop3D() { val d = game3D.hardDrop(); if (d > 0) { soundManager.playDrop(); vibrationManager.vibrateDrop() } }
+    fun hold3D() { if (game3D.hold()) { soundManager.playRotate(); vibrationManager.vibrateMove() } }
     fun softDrop3D() { game3D.softDrop() }
     fun toggle3DGravity() { game3D.toggleGravity() }
 
-    override fun onCleared() { super.onCleared(); stopGameLoop(); game3DJob?.cancel(); soundManager.release() }
+    override fun onCleared() { super.onCleared(); stopGameLoop(); game3DJob?.cancel(); sound3DJob?.cancel(); soundManager.release() }
 }

@@ -423,10 +423,27 @@ fun GameScreen(
     val theme = LocalGameTheme.current
     val animatedScore by animateIntAsState(gs.score, animationSpec = tween(300), label = "score")
 
-    // === Danger zone detection: board stack getting high ===
-    val highestOccupiedRow = gs.board.indexOfFirst { row -> row.any { it > 0 } }
-    val dangerLevel = if (highestOccupiedRow in 0..4 && gs.status == GameStatus.PLAYING) {
-        ((5 - highestOccupiedRow) / 5f).coerceIn(0f, 1f)
+    // === Danger zone detection: board stack getting high (locked pieces only) ===
+    // gs.board includes the falling piece, so we exclude cells occupied by currentPiece
+    val currentPieceCells = remember(gs.currentPiece) {
+        val cells = mutableSetOf<Long>()
+        gs.currentPiece?.let { cp ->
+            for (py in cp.shape.indices) for (px in cp.shape[py].indices) {
+                if (cp.shape[py][px] > 0) cells.add((cp.position.y + py).toLong() * 100 + (cp.position.x + px))
+            }
+        }
+        cells
+    }
+    val highestLockedRow = run {
+        for (y in gs.board.indices) {
+            for (x in gs.board[y].indices) {
+                if (gs.board[y][x] > 0 && !currentPieceCells.contains(y.toLong() * 100 + x)) return@run y
+            }
+        }
+        -1
+    }
+    val dangerLevel = if (highestLockedRow in 0..4 && gs.status == GameStatus.PLAYING) {
+        ((5 - highestLockedRow) / 5f).coerceIn(0f, 1f)
     } else 0f
     val dangerPulse = rememberInfiniteTransition(label = "danger")
     val dangerAlpha by dangerPulse.animateFloat(

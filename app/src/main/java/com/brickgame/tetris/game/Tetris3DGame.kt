@@ -79,47 +79,49 @@ class Tetris3DGame {
         moveDown()
     }
 
-    fun moveX(dx: Int) = tryMove(dx, 0, 0)
-    fun moveZ(dz: Int) = tryMove(0, 0, dz)
-    fun hardDrop() {
-        val p = currentPiece ?: return
+    fun moveX(dx: Int): Boolean = tryMove(dx, 0, 0)
+    fun moveZ(dz: Int): Boolean = tryMove(0, 0, dz)
+    fun hardDrop(): Int {
+        val p = currentPiece ?: return 0
         var dy = 0
         while (canPlace(p.blocks, p.x, p.y - dy - 1, p.z)) dy++
         currentPiece = p.copy(y = p.y - dy)
         score += dy * 2
         lockPiece()
+        return dy
     }
 
-    fun rotateXZ() {
-        val p = currentPiece ?: return
+    fun rotateXZ(): Boolean {
+        val p = currentPiece ?: return false
         val rotated = p.blocks.map { Block3D(-it.z, it.y, it.x) }
         if (canPlace(rotated, p.x, p.y, p.z)) {
             currentPiece = p.copy(blocks = rotated)
-            resetLock()
+            resetLock(); emitState(); return true
         } else {
             // Wall kick attempts
             for (kick in listOf(1 to 0, -1 to 0, 0 to 1, 0 to -1)) {
                 if (canPlace(rotated, p.x + kick.first, p.y, p.z + kick.second)) {
                     currentPiece = p.copy(blocks = rotated, x = p.x + kick.first, z = p.z + kick.second)
-                    resetLock(); break
+                    resetLock(); emitState(); return true
                 }
             }
         }
-        emitState()
+        emitState(); return false
     }
 
-    fun rotateXY() {
-        val p = currentPiece ?: return
+    fun rotateXY(): Boolean {
+        val p = currentPiece ?: return false
         val rotated = p.blocks.map { Block3D(it.x, -it.z, it.y) }
         if (canPlace(rotated, p.x, p.y, p.z)) {
             currentPiece = p.copy(blocks = rotated); resetLock()
+            emitState(); return true
         }
-        emitState()
+        emitState(); return false
     }
 
-    fun hold() {
-        if (holdUsed) return
-        val p = currentPiece ?: return
+    fun hold(): Boolean {
+        if (holdUsed) return false
+        val p = currentPiece ?: return false
         val prev = holdType
         holdType = p.type
         holdUsed = true
@@ -128,7 +130,7 @@ class Tetris3DGame {
         } else {
             spawnPiece()
         }
-        emitState()
+        emitState(); return true
     }
 
     fun pause() { if (status == GameStatus.PLAYING) { status = GameStatus.PAUSED; emitState() } }
@@ -155,13 +157,13 @@ class Tetris3DGame {
         emitState()
     }
 
-    private fun tryMove(dx: Int, dy: Int, dz: Int) {
-        val p = currentPiece ?: return
+    private fun tryMove(dx: Int, dy: Int, dz: Int): Boolean {
+        val p = currentPiece ?: return false
         if (canPlace(p.blocks, p.x + dx, p.y + dy, p.z + dz)) {
             currentPiece = p.copy(x = p.x + dx, y = p.y + dy, z = p.z + dz)
-            resetLock()
+            resetLock(); emitState(); return true
         }
-        emitState()
+        emitState(); return false
     }
 
     private fun resetLock() { if (isLocking) { lockTimer = 0L } }
