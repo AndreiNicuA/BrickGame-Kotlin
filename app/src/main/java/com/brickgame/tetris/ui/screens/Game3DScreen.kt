@@ -69,14 +69,39 @@ fun Game3DScreen(
         glViewRef.value?.setCameraExternal(az, el, z, px, py)
     }
 
+    /**
+     * Map screen-relative DPad input to world X/Z movement.
+     * Quantizes camera azimuth to nearest 90° so controls stay consistent
+     * within each camera quadrant — no jittery axis switching.
+     *
+     * Camera facing:  0° → screen-left = -X, screen-up = +Z
+     *                90° → screen-left = +Z, screen-up = +X
+     *               180° → screen-left = +X, screen-up = -Z
+     *               270° → screen-left = -Z, screen-up = -X
+     */
     fun moveCameraRelative(screenDx: Int, screenDz: Int) {
         if (starWars) { onMoveX(screenDx); onMoveZ(screenDz); return }
-        val rad = Math.toRadians(azimuth.toDouble())
-        val cosA = cos(rad).toFloat(); val sinA = sin(rad).toFloat()
-        val worldX = screenDx * cosA - screenDz * sinA
-        val worldY = screenDx * sinA + screenDz * cosA
-        if (abs(worldX) >= abs(worldY)) onMoveX(if (worldX > 0) 1 else -1)
-        else onMoveZ(if (worldY > 0) 1 else -1)
+        // Normalize azimuth to 0-360 and quantize to nearest 90°
+        val norm = ((azimuth % 360f) + 360f) % 360f
+        val quadrant = ((norm + 45f) / 90f).toInt() % 4
+        when (quadrant) {
+            0 -> { // ~0° — default front view
+                if (screenDx != 0) onMoveX(screenDx)
+                if (screenDz != 0) onMoveZ(screenDz)
+            }
+            1 -> { // ~90° — rotated right
+                if (screenDx != 0) onMoveZ(-screenDx)
+                if (screenDz != 0) onMoveX(screenDz)
+            }
+            2 -> { // ~180° — behind
+                if (screenDx != 0) onMoveX(-screenDx)
+                if (screenDz != 0) onMoveZ(-screenDz)
+            }
+            3 -> { // ~270° — rotated left
+                if (screenDx != 0) onMoveZ(screenDx)
+                if (screenDz != 0) onMoveX(-screenDz)
+            }
+        }
     }
 
     Box(Modifier.fillMaxSize().background(theme.backgroundColor).systemBarsPadding()) {
@@ -217,41 +242,48 @@ fun Game3DScreen(
 
             // Controls
             Row(
-                Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 4.dp),
+                Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 4.dp),
                 Arrangement.SpaceBetween, Alignment.CenterVertically
             ) {
-                DPad(
-                    buttonSize = 44.dp, rotateInCenter = false,
-                    onUpPress = { moveCameraRelative(0, 1) },
-                    onDownPress = { moveCameraRelative(0, -1) },
-                    onDownRelease = {},
-                    onLeftPress = { moveCameraRelative(-1, 0) },
-                    onLeftRelease = {},
-                    onRightPress = { moveCameraRelative(1, 0) },
-                    onRightRelease = {}
-                )
+                // DPad — bigger, with HOLD tucked in upper-right
+                Box {
+                    DPad(
+                        buttonSize = 52.dp, rotateInCenter = false,
+                        onUpPress = { moveCameraRelative(0, 1) },
+                        onDownPress = { moveCameraRelative(0, -1) },
+                        onDownRelease = {},
+                        onLeftPress = { moveCameraRelative(-1, 0) },
+                        onLeftRelease = {},
+                        onRightPress = { moveCameraRelative(1, 0) },
+                        onRightRelease = {}
+                    )
+                    Box(Modifier.align(Alignment.TopEnd).offset(x = 6.dp, y = (-2).dp)) {
+                        ActionButton("HOLD", onHold, width = 48.dp, height = 22.dp)
+                    }
+                }
+                // Centre: PAUSE + toggles + settings
                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                    ActionButton("HOLD", onHold, width = 54.dp, height = 24.dp)
                     ActionButton(
                         if (state.status == GameStatus.MENU) "START" else "PAUSE",
                         { if (state.status == GameStatus.MENU) onStart() else onPause() },
-                        width = 54.dp, height = 24.dp
+                        width = 64.dp, height = 28.dp
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
                         MiniToggle("SW", starWars, theme.accentColor) { starWars = !starWars }
                         MiniToggle("❄", !state.autoGravity, Color(0xFF38BDF8)) { onToggleGravity() }
                         MiniToggle("⚙", showCamSettings, Color(0xFFF59E0B)) { showCamSettings = !showCamSettings }
                     }
-                    ActionButton("···", onOpenSettings, width = 36.dp, height = 18.dp)
+                    ActionButton("···", onOpenSettings, width = 40.dp, height = 20.dp)
                 }
-                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                // Right side: rotation buttons + drop controls
+                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(5.dp)) {
                     Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                        ActionButton("↻ SPIN", onRotateXZ, width = 56.dp, height = 36.dp)
-                        ActionButton("↻ TILT", onRotateXY, width = 56.dp, height = 36.dp)
+                        ActionButton("↻ SPIN", onRotateXZ, width = 60.dp, height = 38.dp)
+                        ActionButton("↻ TILT", onRotateXY, width = 60.dp, height = 38.dp)
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        TapButton(ButtonIcon.UP, 42.dp) { onHardDrop() }
-                        HoldButton(ButtonIcon.DOWN, 42.dp, onPress = { onSoftDrop() }, onRelease = {})
+                        TapButton(ButtonIcon.UP, 46.dp) { onHardDrop() }
+                        HoldButton(ButtonIcon.DOWN, 46.dp, onPress = { onSoftDrop() }, onRelease = {})
                     }
                 }
             }
