@@ -554,6 +554,16 @@ fun GameScreen(
         0.3f, 1f, infiniteRepeatable(tween(300), RepeatMode.Reverse), label = "cp"
     )
 
+    // === Level 9+: Score glow on change ===
+    var scoreGlowAlpha by remember { mutableFloatStateOf(0f) }
+    LaunchedEffect(gs.score) {
+        if (gs.score > 0 && gs.level >= 9) {
+            scoreGlowAlpha = 1f
+            repeat(10) { scoreGlowAlpha *= 0.8f; delay(30) }
+            scoreGlowAlpha = 0f
+        }
+    }
+
     // === Explosion particles for line clears ===
     data class Particle(val x: Float, val y: Float, val vx: Float, val vy: Float,
                         val size: Float, val color: Int, val life: Float, val type: Int = 0)
@@ -638,8 +648,15 @@ fun GameScreen(
         }
     }
 
+    // === Level 8+: Board breathing — subtle scale pulse ===
+    val breathTransition = rememberInfiniteTransition(label = "breath")
+    val breathScale by breathTransition.animateFloat(
+        0.998f, 1.002f, infiniteRepeatable(tween(2000, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "bs"
+    )
+
     Box(Modifier.fillMaxSize()) {
         // === Falling pieces background — higher alpha, adapts to theme ===
+        // Level 10+: background falls faster
         Box(Modifier.matchParentSize().alpha(if (isDark) 0.4f else 0.25f)) {
             FallingPiecesBackground(theme, isDark)
         }
@@ -666,12 +683,19 @@ fun GameScreen(
                         Text("${gs.level}", fontSize = 14.sp, fontWeight = FontWeight.ExtraBold,
                             fontFamily = FontFamily.Monospace, color = theme.accentColor)
                     }
+                    // Level 9+: Score glows on change
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text("SCORE", fontSize = 6.sp, color = (if (isDark) Color.White else Color.Black).copy(0.4f),
                             fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, letterSpacing = 0.5.sp)
                         Text(animatedScore.toString().padStart(7, '0'), fontSize = 14.sp,
                             fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace,
-                            color = (if (isDark) Color.White else Color.Black).copy(0.9f), letterSpacing = 1.sp)
+                            color = if (gs.level >= 9 && scoreGlowAlpha > 0.01f)
+                                Color(0xFFF4D03F).copy((0.9f + scoreGlowAlpha * 0.1f).coerceAtMost(1f))
+                            else (if (isDark) Color.White else Color.Black).copy(0.9f),
+                            letterSpacing = 1.sp,
+                            modifier = if (gs.level >= 9 && scoreGlowAlpha > 0.01f)
+                                Modifier.graphicsLayer { scaleX = 1f + scoreGlowAlpha * 0.15f; scaleY = 1f + scoreGlowAlpha * 0.15f }
+                            else Modifier)
                     }
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text("LINES", fontSize = 6.sp, color = (if (isDark) Color.White else Color.Black).copy(0.4f),
@@ -694,9 +718,12 @@ fun GameScreen(
                 }
             }
 
-            // === Board area with screen shake ===
+            // === Board area with screen shake + breathing ===
             Box(Modifier.weight(1f).fillMaxWidth()
-                .graphicsLayer { translationX = screenShakeX; translationY = screenShakeY }) {
+                .graphicsLayer {
+                    translationX = screenShakeX; translationY = screenShakeY
+                    if (gs.level >= 8) { scaleX = breathScale; scaleY = breathScale }
+                }) {
                 // NO colored background — falling pieces show through cleanly
 
                 // Game board — transparent modern grid
@@ -704,7 +731,7 @@ fun GameScreen(
                     gs.currentPiece, gs.ghostY, ghost, gs.clearedLineRows, anim, ad, multiColor = true,
                     hardDropTrail = gs.hardDropTrail, lockEvent = gs.lockEvent,
                     pieceMaterial = LocalPieceMaterial.current, highContrast = LocalHighContrast.current,
-                    boardOpacity = if (isDark) 0.12f else 0.18f)
+                    boardOpacity = if (isDark) 0.12f else 0.18f, gameLevel = gs.level)
 
                 // === Danger zone overlay ===
                 if (dangerAlpha > 0.01f) {

@@ -13,6 +13,7 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.dp
@@ -49,7 +50,8 @@ fun GameBoard(
     lockEvent: Int = 0,
     pieceMaterial: String = "CLASSIC",
     highContrast: Boolean = false,
-    boardOpacity: Float = 1f
+    boardOpacity: Float = 1f,
+    gameLevel: Int = 1
 ) {
     val theme = LocalGameTheme.current
     val clearProgress = remember { Animatable(0f) }
@@ -240,7 +242,6 @@ fun GameBoard(
             // Lock flash — brief glow on recently placed cells
             if (lockFlashProgress.value < 1f && lockFlashProgress.value > 0f && !classicLCD) {
                 val flashAlpha = (1f - lockFlashProgress.value) * 0.35f
-                // Flash the entire bottom area where pieces typically lock
                 for (y in 0 until TetrisGame.BOARD_HEIGHT) {
                     for (x in 0 until TetrisGame.BOARD_WIDTH) {
                         if (board[y][x] > 0) {
@@ -252,6 +253,65 @@ fun GameBoard(
                             )
                         }
                     }
+                }
+            }
+
+            // === PROGRESSIVE EFFECTS — unlock with level ===
+            if (!classicLCD) {
+                // Level 3+: Row fill indicator — glow on nearly-complete rows
+                if (gameLevel >= 3) {
+                    for (y in 0 until TetrisGame.BOARD_HEIGHT) {
+                        val filledCount = (0 until TetrisGame.BOARD_WIDTH).count { board[y][it] > 0 }
+                        if (filledCount >= 8) {
+                            val fillRatio = filledCount.toFloat() / TetrisGame.BOARD_WIDTH
+                            val glowAlpha = (fillRatio - 0.7f) / 0.3f * 0.15f
+                            drawRect(
+                                Color.White.copy(alpha = glowAlpha.coerceIn(0f, 0.15f)),
+                                Offset(0f, y * cellSize), Size(size.width, cellSize)
+                            )
+                        }
+                    }
+                }
+
+                // Level 4+: Piece lock sparks — small dots scatter from lock position
+                if (gameLevel >= 4 && lockFlashProgress.value in 0.01f..0.6f) {
+                    val sparkAlpha = (0.6f - lockFlashProgress.value) / 0.6f
+                    val rng = java.util.Random(lockEvent.toLong())
+                    repeat(12) {
+                        val sx = rng.nextFloat() * size.width
+                        val sy = size.height * 0.5f + rng.nextFloat() * size.height * 0.5f
+                        val spread = lockFlashProgress.value * 15f
+                        drawCircle(
+                            Color.White.copy(alpha = sparkAlpha * 0.6f),
+                            radius = 1.5f + rng.nextFloat() * 2.5f,
+                            center = Offset(sx + (rng.nextFloat() - 0.5f) * spread, sy + (rng.nextFloat() - 0.5f) * spread)
+                        )
+                    }
+                }
+
+                // Level 5+: Board edge vignette — subtle dark gradient at edges
+                if (gameLevel >= 5) {
+                    val vigAlpha = 0.2f
+                    val vigW = size.width * 0.08f
+                    drawRect(Brush.horizontalGradient(listOf(Color.Black.copy(vigAlpha), Color.Transparent)),
+                        Offset.Zero, Size(vigW, size.height))
+                    drawRect(Brush.horizontalGradient(listOf(Color.Transparent, Color.Black.copy(vigAlpha))),
+                        Offset(size.width - vigW, 0f), Size(vigW, size.height))
+                    val vigH = size.height * 0.05f
+                    drawRect(Brush.verticalGradient(listOf(Color.Black.copy(vigAlpha * 0.6f), Color.Transparent)),
+                        Offset.Zero, Size(size.width, vigH))
+                    drawRect(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(vigAlpha * 0.6f))),
+                        Offset(0f, size.height - vigH), Size(size.width, vigH))
+                }
+
+                // Level 7+: Speed curve tint — board edges tint red as level rises
+                if (gameLevel >= 7) {
+                    val intensity = ((gameLevel - 7) / 8f).coerceIn(0f, 0.3f)
+                    val tintW = size.width * 0.05f
+                    drawRect(Brush.horizontalGradient(listOf(Color.Red.copy(intensity * 0.3f), Color.Transparent)),
+                        Offset.Zero, Size(tintW, size.height))
+                    drawRect(Brush.horizontalGradient(listOf(Color.Transparent, Color.Red.copy(intensity * 0.3f))),
+                        Offset(size.width - tintW, 0f), Size(tintW, size.height))
                 }
             }
         }
