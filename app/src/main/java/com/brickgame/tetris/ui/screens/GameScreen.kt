@@ -1366,19 +1366,19 @@ fun GameScreen(
         }
     }
 
-    Row(Modifier.fillMaxSize().padding(4.dp)) {
-        // LEFT — DPad or Buttons
-        Box(Modifier.fillMaxHeight().width(90.dp), Alignment.Center) {
+    Row(Modifier.fillMaxSize().padding(horizontal = 2.dp, vertical = 4.dp),
+        horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+        // LEFT — DPad or Buttons, hugs the LCD
+        Box(Modifier.fillMaxHeight().padding(end = 4.dp), Alignment.Center) {
             if (!lh) dpadBlock() else buttonsBlock()
         }
 
-        // CENTER — Classic LCD bezel: board + info panel, centered with proper aspect ratio
-        Box(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.Center) {
-            Row(Modifier.fillMaxHeight().clip(RoundedCornerShape(8.dp))
-                .background(lcdBg).border(3.dp, bezelColor, RoundedCornerShape(8.dp)).padding(4.dp)) {
+        // CENTER — Classic LCD bezel: board + info panel
+        Row(Modifier.fillMaxHeight().clip(RoundedCornerShape(8.dp))
+            .background(lcdBg).border(3.dp, bezelColor, RoundedCornerShape(8.dp)).padding(4.dp)) {
 
-                // Board — classic LCD, constrained to 10:20 aspect ratio
-                GameBoard(gs.board, Modifier.fillMaxHeight().aspectRatio(0.5f).alpha(boardDimAlpha),
+            // Board — classic LCD, constrained to 10:20 aspect ratio
+            GameBoard(gs.board, Modifier.fillMaxHeight().aspectRatio(0.5f).alpha(boardDimAlpha),
                 gs.currentPiece, gs.ghostY, classicGhost, gs.clearedLineRows, classicAnim, ad,
                 multiColor = false, classicLCD = true)
 
@@ -1428,10 +1428,9 @@ fun GameScreen(
                 }
             }
         }
-        }
 
-        // RIGHT — Buttons or DPad
-        Box(Modifier.fillMaxHeight().width(90.dp), Alignment.Center) {
+        // RIGHT — Buttons or DPad, hugs the LCD
+        Box(Modifier.fillMaxHeight().padding(start = 4.dp), Alignment.Center) {
             if (!lh) buttonsBlock() else dpadBlock()
         }
     }
@@ -1512,9 +1511,10 @@ fun GameScreen(
             FallingPiecesBackground(theme, isDark, bgSpeed)
         }
 
-        Row(Modifier.fillMaxSize().padding(horizontal = 4.dp, vertical = 2.dp)) {
+        Row(Modifier.fillMaxSize().padding(horizontal = 2.dp, vertical = 2.dp),
+            verticalAlignment = Alignment.CenterVertically) {
             // LEFT — DPad or Buttons
-            Box(Modifier.fillMaxHeight().width(90.dp).alpha(controlAlpha), Alignment.Center) {
+            Box(Modifier.fillMaxHeight().padding(end = 4.dp).alpha(controlAlpha), Alignment.Center) {
                 if (isFullscreen) CompositionLocalProvider(LocalButtonShape provides ButtonShape.OUTLINE) {
                     if (!lh) dpadBlock() else buttonsBlock()
                 } else { if (!lh) dpadBlock() else buttonsBlock() }
@@ -1589,7 +1589,7 @@ fun GameScreen(
             }
 
             // RIGHT — Buttons or DPad
-            Box(Modifier.fillMaxHeight().width(90.dp).alpha(controlAlpha), Alignment.Center) {
+            Box(Modifier.fillMaxHeight().padding(start = 4.dp).alpha(controlAlpha), Alignment.Center) {
                 if (isFullscreen) CompositionLocalProvider(LocalButtonShape provides ButtonShape.OUTLINE) {
                     if (!lh) buttonsBlock() else dpadBlock()
                 } else { if (!lh) buttonsBlock() else dpadBlock() }
