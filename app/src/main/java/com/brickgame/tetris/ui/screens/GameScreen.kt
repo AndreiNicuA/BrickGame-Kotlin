@@ -85,6 +85,7 @@ fun GameScreen(
     highContrast: Boolean = false,
     uiScale: Float = 1.0f,
     leftHanded: Boolean = false,
+    portraitLayout: LayoutPreset = LayoutPreset.PORTRAIT_CLASSIC,
     onCloseApp: () -> Unit = {},
     showOnboarding: Boolean = false,
     onDismissOnboarding: () -> Unit = {},
@@ -195,8 +196,8 @@ fun GameScreen(
                     LayoutPreset.PORTRAIT_FULLSCREEN -> FullscreenLayout(gameState, dpadStyle, effectiveGhost, animationStyle, animationDuration, onRotate, onHardDrop, effectiveHold, onLeftPress, onLeftRelease, onRightPress, onRightRelease, onDownPress, onDownRelease, onPause, onOpenSettings, onStartGame, boardDimAlpha, effectiveNextCount)
                     LayoutPreset.PORTRAIT_ONEHAND -> OneHandLayout(gameState, effectiveGhost, animationStyle, animationDuration, onRotate, onHardDrop, effectiveHold, onLeftPress, onLeftRelease, onRightPress, onRightRelease, onDownPress, onDownRelease, onPause, onOpenSettings, onStartGame)
                     LayoutPreset.PORTRAIT_FREEFORM -> FreeformGameLayout(gameState, dpadStyle, effectiveGhost, animationStyle, animationDuration, freeformElements, onRotate, onHardDrop, effectiveHold, onLeftPress, onLeftRelease, onRightPress, onRightRelease, onDownPress, onDownRelease, onPause, onOpenSettings, onStartGame)
-                    LayoutPreset.LANDSCAPE_DEFAULT -> LandscapeLayout(gameState, dpadStyle, effectiveGhost, animationStyle, animationDuration, onRotate, onHardDrop, effectiveHold, onLeftPress, onLeftRelease, onRightPress, onRightRelease, onDownPress, onDownRelease, onPause, onOpenSettings, false)
-                    LayoutPreset.LANDSCAPE_LEFTY -> LandscapeLayout(gameState, dpadStyle, effectiveGhost, animationStyle, animationDuration, onRotate, onHardDrop, effectiveHold, onLeftPress, onLeftRelease, onRightPress, onRightRelease, onDownPress, onDownRelease, onPause, onOpenSettings, true)
+                    LayoutPreset.LANDSCAPE_DEFAULT -> LandscapeLayout(gameState, dpadStyle, effectiveGhost, animationStyle, animationDuration, onRotate, onHardDrop, effectiveHold, onLeftPress, onLeftRelease, onRightPress, onRightRelease, onDownPress, onDownRelease, onPause, onOpenSettings, onStartGame, portraitLayout, boardDimAlpha, effectiveNextCount)
+                    LayoutPreset.LANDSCAPE_LEFTY -> LandscapeLayout(gameState, dpadStyle, effectiveGhost, animationStyle, animationDuration, onRotate, onHardDrop, effectiveHold, onLeftPress, onLeftRelease, onRightPress, onRightRelease, onDownPress, onDownRelease, onPause, onOpenSettings, onStartGame, portraitLayout, boardDimAlpha, effectiveNextCount)
                     LayoutPreset.PORTRAIT_3D -> {}
                 }
                 if (gameState.status == GameStatus.PAUSED) PauseOverlay(onResume, onOpenSettings, onQuit)
@@ -1304,12 +1305,144 @@ fun GameScreen(
     }
 }
 
-// === LANDSCAPE: DPad left, Board+InfoBar center, Rotate+actions right ===
+// === LANDSCAPE: Mirrors portrait layout style — DPad left, board center, buttons right ===
 @Composable private fun LandscapeLayout(
     gs: GameState, dp: DPadStyle, ghost: Boolean, anim: AnimationStyle, ad: Float,
     onRotate: () -> Unit, onHD: () -> Unit, onHold: () -> Unit,
     onLP: () -> Unit, onLR: () -> Unit, onRP: () -> Unit, onRR: () -> Unit,
-    onDP: () -> Unit, onDR: () -> Unit, onPause: () -> Unit, onSet: () -> Unit, lefty: Boolean
+    onDP: () -> Unit, onDR: () -> Unit, onPause: () -> Unit, onSet: () -> Unit, onStart: () -> Unit,
+    portraitStyle: LayoutPreset = LayoutPreset.PORTRAIT_CLASSIC,
+    boardDimAlpha: Float = 1f, nextCount: Int = 3
+) {
+    val isClassic = portraitStyle == LayoutPreset.PORTRAIT_CLASSIC
+    val isFullscreen = portraitStyle == LayoutPreset.PORTRAIT_FULLSCREEN
+    if (isClassic) {
+        LandscapeClassic(gs, dp, anim, ad, onRotate, onHD, onLP, onLR, onRP, onRR, onDP, onDR, onPause, onSet, onStart, boardDimAlpha, nextCount)
+    } else {
+        LandscapeModern(gs, dp, ghost, anim, ad, onRotate, onHD, onHold, onLP, onLR, onRP, onRR, onDP, onDR, onPause, onSet, onStart, isFullscreen, boardDimAlpha, nextCount)
+    }
+}
+
+// --- LANDSCAPE CLASSIC: Same sage-green LCD bezel as portrait ---
+@Composable private fun LandscapeClassic(
+    gs: GameState, dp: DPadStyle, anim: AnimationStyle, ad: Float,
+    onRotate: () -> Unit, onHD: () -> Unit,
+    onLP: () -> Unit, onLR: () -> Unit, onRP: () -> Unit, onRR: () -> Unit,
+    onDP: () -> Unit, onDR: () -> Unit, onPause: () -> Unit, onSet: () -> Unit, onStart: () -> Unit,
+    boardDimAlpha: Float = 1f, nextCount: Int = 3
+) {
+    val lh = LocalLeftHanded.current
+    val lcdBg = Color(0xFFC8D0B4)
+    val lcdDark = Color(0xFF2A2E22)
+    val lcdGhost = Color(0xFFB0B8A0)
+    val lcdLabel = Color(0xFF3A4030)
+    val bezelColor = Color(0xFFB0B89C)
+
+    val classicGhost = false
+    val classicAnim = AnimationStyle.RETRO
+
+    // DPad block
+    val dpadBlock: @Composable () -> Unit = {
+        Column(Modifier.fillMaxHeight().padding(4.dp),
+            horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+            DPad(58.dp, rotateInCenter = dp == DPadStyle.ROTATE_CENTRE,
+                onUpPress = onHD, onDownPress = onDP, onDownRelease = onDR,
+                onLeftPress = onLP, onLeftRelease = onLR, onRightPress = onRP, onRightRelease = onRR, onRotate = onRotate)
+        }
+    }
+    // Buttons block (rotate + pause + settings)
+    val buttonsBlock: @Composable () -> Unit = {
+        Column(Modifier.fillMaxHeight().padding(4.dp),
+            horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+            if (dp == DPadStyle.STANDARD) {
+                RotateButton(onRotate, 68.dp)
+                Spacer(Modifier.height(8.dp))
+            }
+            ActionButton(if (gs.status == GameStatus.MENU) "START" else "PAUSE",
+                { if (gs.status == GameStatus.MENU) onStart() else onPause() },
+                width = 78.dp, height = 34.dp)
+            Spacer(Modifier.height(4.dp))
+            ActionButton("···", onSet, width = 48.dp, height = 24.dp, backgroundColor = LocalGameTheme.current.buttonSecondary)
+        }
+    }
+
+    Row(Modifier.fillMaxSize().padding(4.dp)) {
+        // LEFT — DPad or Buttons
+        Box(Modifier.fillMaxHeight().width(90.dp), Alignment.Center) {
+            if (!lh) dpadBlock() else buttonsBlock()
+        }
+
+        // CENTER — Classic LCD bezel: board + info panel (same as portrait)
+        Row(Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(8.dp))
+            .background(lcdBg).border(3.dp, bezelColor, RoundedCornerShape(8.dp)).padding(4.dp)) {
+
+            // Board — classic LCD
+            GameBoard(gs.board, Modifier.weight(1f).fillMaxHeight().alpha(boardDimAlpha),
+                gs.currentPiece, gs.ghostY, classicGhost, gs.clearedLineRows, classicAnim, ad,
+                multiColor = false, classicLCD = true)
+
+            // Vertical separator
+            Box(Modifier.fillMaxHeight().width(2.dp).background(lcdDark.copy(0.4f)))
+
+            // Right info panel — same as portrait Classic
+            Column(
+                Modifier.width(82.dp).fillMaxHeight().padding(start = 8.dp, top = 8.dp, bottom = 8.dp, end = 4.dp),
+                verticalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column {
+                    Text("SCORE", fontSize = 12.sp, color = lcdLabel, fontWeight = FontWeight.ExtraBold,
+                        fontFamily = FontFamily.Monospace, letterSpacing = 1.sp)
+                    Spacer(Modifier.height(2.dp))
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                        LCDNumber(gs.score, 6, lcdDark, lcdGhost, 14.sp)
+                    }
+                }
+                Column {
+                    Text("LEVELS", fontSize = 12.sp, color = lcdLabel, fontWeight = FontWeight.ExtraBold,
+                        fontFamily = FontFamily.Monospace, letterSpacing = 1.sp)
+                    Spacer(Modifier.height(2.dp))
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                        LCDNumber(gs.level, 6, lcdDark, lcdGhost, 14.sp)
+                    }
+                }
+                Column {
+                    Text("SPEED", fontSize = 12.sp, color = lcdLabel, fontWeight = FontWeight.ExtraBold,
+                        fontFamily = FontFamily.Monospace, letterSpacing = 1.sp)
+                    Spacer(Modifier.height(2.dp))
+                    val speed = gs.level.coerceIn(1, 20)
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                        Text("$speed", fontSize = 26.sp, fontWeight = FontWeight.ExtraBold,
+                            fontFamily = FontFamily.Monospace, color = lcdDark)
+                    }
+                }
+                Column {
+                    Text("NEXT", fontSize = 12.sp, color = lcdLabel, fontWeight = FontWeight.ExtraBold,
+                        fontFamily = FontFamily.Monospace, letterSpacing = 1.sp)
+                    Spacer(Modifier.height(4.dp))
+                    Box(Modifier.fillMaxWidth().height(52.dp).background(lcdBg)) {
+                        gs.nextPieces.firstOrNull()?.let { p ->
+                            LCDPiecePreview(p.shape, lcdDark, lcdBg)
+                        }
+                    }
+                }
+            }
+        }
+
+        // RIGHT — Buttons or DPad
+        Box(Modifier.fillMaxHeight().width(90.dp), Alignment.Center) {
+            if (!lh) buttonsBlock() else dpadBlock()
+        }
+    }
+}
+
+// --- LANDSCAPE MODERN/FULLSCREEN: Transparent board, falling bg, effects ---
+@Composable private fun LandscapeModern(
+    gs: GameState, dp: DPadStyle, ghost: Boolean, anim: AnimationStyle, ad: Float,
+    onRotate: () -> Unit, onHD: () -> Unit, onHold: () -> Unit,
+    onLP: () -> Unit, onLR: () -> Unit, onRP: () -> Unit, onRR: () -> Unit,
+    onDP: () -> Unit, onDR: () -> Unit, onPause: () -> Unit, onSet: () -> Unit, onStart: () -> Unit,
+    isFullscreen: Boolean = false,
+    boardDimAlpha: Float = 1f, nextCount: Int = 3
 ) {
     val theme = LocalGameTheme.current
     val isDark = com.brickgame.tetris.ui.theme.LocalIsDarkMode.current
@@ -1341,7 +1474,7 @@ fun GameScreen(
     val bgSpeed = if (gs.level >= 10) 1f + (gs.level - 10) * 0.15f else 1f
     val textColor = if (isDark) Color.White else Color.Black
 
-    // DPad composable
+    // DPad block
     val dpadBlock: @Composable () -> Unit = {
         Column(Modifier.fillMaxHeight().padding(4.dp),
             horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
@@ -1350,7 +1483,7 @@ fun GameScreen(
                 onLeftPress = onLP, onLeftRelease = onLR, onRightPress = onRP, onRightRelease = onRR, onRotate = onRotate)
         }
     }
-    // Right buttons composable
+    // Buttons block
     val buttonsBlock: @Composable () -> Unit = {
         Column(Modifier.fillMaxHeight().padding(4.dp),
             horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
@@ -1361,12 +1494,15 @@ fun GameScreen(
             ActionButton("HOLD", onHold, width = 78.dp, height = 34.dp)
             Spacer(Modifier.height(6.dp))
             ActionButton(if (gs.status == GameStatus.MENU) "START" else "PAUSE",
-                { if (gs.status == GameStatus.MENU) { /* handled by overlay */ } else onPause() },
+                { if (gs.status == GameStatus.MENU) onStart() else onPause() },
                 width = 78.dp, height = 34.dp)
             Spacer(Modifier.height(4.dp))
             ActionButton("···", onSet, width = 48.dp, height = 24.dp, backgroundColor = theme.buttonSecondary)
         }
     }
+
+    // For fullscreen: ghost outline controls
+    val controlAlpha = if (isFullscreen) 0.35f else 1f
 
     Box(Modifier.fillMaxSize()) {
         // Falling pieces background
@@ -1375,25 +1511,25 @@ fun GameScreen(
         }
 
         Row(Modifier.fillMaxSize().padding(horizontal = 4.dp, vertical = 2.dp)) {
-            // LEFT side — DPad or Buttons (handedness)
-            Box(Modifier.fillMaxHeight().width(90.dp), Alignment.Center) {
-                if (!lh) dpadBlock() else buttonsBlock()
+            // LEFT — DPad or Buttons
+            Box(Modifier.fillMaxHeight().width(90.dp).alpha(controlAlpha), Alignment.Center) {
+                if (isFullscreen) CompositionLocalProvider(LocalButtonShape provides ButtonShape.OUTLINE) {
+                    if (!lh) dpadBlock() else buttonsBlock()
+                } else { if (!lh) dpadBlock() else buttonsBlock() }
             }
 
-            // CENTER — Info bar on top + Board below
+            // CENTER — Info bar on top + Board
             Column(Modifier.weight(1f).fillMaxHeight()) {
-                // Split info bar — HOLD left, stats center, NEXT right
+                // Info bar — HOLD | LVL SCORE LINES | NEXT
                 Row(Modifier.fillMaxWidth()
                     .background((if (isDark) Color.Black else Color.White).copy(0.5f), RoundedCornerShape(6.dp))
                     .padding(horizontal = 6.dp, vertical = 2.dp),
                     verticalAlignment = Alignment.CenterVertically) {
-                    // HOLD
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text("HOLD", fontSize = 5.sp, color = textColor.copy(0.4f), fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
                         HoldPiecePreview(gs.holdPiece?.shape, gs.holdUsed, Modifier.size(24.dp))
                     }
                     Spacer(Modifier.width(4.dp))
-                    // Stats
                     Row(Modifier.weight(1f), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text("LVL", fontSize = 5.sp, color = textColor.copy(0.4f), fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
@@ -1411,11 +1547,10 @@ fun GameScreen(
                         }
                     }
                     Spacer(Modifier.width(4.dp))
-                    // NEXT
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text("NEXT", fontSize = 5.sp, color = textColor.copy(0.4f), fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
                         Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                            gs.nextPieces.take(3).forEachIndexed { i, p ->
+                            gs.nextPieces.take(nextCount.coerceAtMost(3)).forEachIndexed { i, p ->
                                 NextPiecePreview(p.shape, Modifier.size(if (i == 0) 24.dp else 18.dp), if (i == 0) 1f else 0.5f)
                             }
                         }
@@ -1425,7 +1560,7 @@ fun GameScreen(
                 // Board with shake + effects
                 Box(Modifier.weight(1f).fillMaxWidth().padding(top = 2.dp)
                     .graphicsLayer { translationX = screenShakeX; translationY = screenShakeY }) {
-                    GameBoard(gs.board, Modifier.fillMaxSize(), gs.currentPiece, gs.ghostY, ghost,
+                    GameBoard(gs.board, Modifier.fillMaxSize().alpha(boardDimAlpha), gs.currentPiece, gs.ghostY, ghost,
                         gs.clearedLineRows, anim, ad, multiColor = LocalMultiColor.current,
                         hardDropTrail = gs.hardDropTrail, lockEvent = gs.lockEvent,
                         pieceMaterial = LocalPieceMaterial.current, highContrast = LocalHighContrast.current,
@@ -1451,9 +1586,11 @@ fun GameScreen(
                 }
             }
 
-            // RIGHT side — Buttons or DPad (handedness)
-            Box(Modifier.fillMaxHeight().width(90.dp), Alignment.Center) {
-                if (!lh) buttonsBlock() else dpadBlock()
+            // RIGHT — Buttons or DPad
+            Box(Modifier.fillMaxHeight().width(90.dp).alpha(controlAlpha), Alignment.Center) {
+                if (isFullscreen) CompositionLocalProvider(LocalButtonShape provides ButtonShape.OUTLINE) {
+                    if (!lh) buttonsBlock() else dpadBlock()
+                } else { if (!lh) buttonsBlock() else dpadBlock() }
             }
         }
     }

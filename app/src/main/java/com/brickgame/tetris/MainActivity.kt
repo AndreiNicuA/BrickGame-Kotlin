@@ -436,6 +436,7 @@ class MainActivity : ComponentActivity() {
                                 highContrast = highContrast,
                                 uiScale = uiScale,
                                 leftHanded = leftHanded,
+                                portraitLayout = portraitLayout,
                                 onCloseApp = { this@MainActivity.finishAndRemoveTask() },
                                 showOnboarding = showOnboarding,
                                 onDismissOnboarding = vm::dismissOnboarding,
