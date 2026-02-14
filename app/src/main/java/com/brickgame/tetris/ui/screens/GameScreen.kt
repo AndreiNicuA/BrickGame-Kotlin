@@ -1372,12 +1372,13 @@ fun GameScreen(
             if (!lh) dpadBlock() else buttonsBlock()
         }
 
-        // CENTER — Classic LCD bezel: board + info panel (same as portrait)
-        Row(Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(8.dp))
-            .background(lcdBg).border(3.dp, bezelColor, RoundedCornerShape(8.dp)).padding(4.dp)) {
+        // CENTER — Classic LCD bezel: board + info panel, centered with proper aspect ratio
+        Box(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.Center) {
+            Row(Modifier.fillMaxHeight().clip(RoundedCornerShape(8.dp))
+                .background(lcdBg).border(3.dp, bezelColor, RoundedCornerShape(8.dp)).padding(4.dp)) {
 
-            // Board — classic LCD
-            GameBoard(gs.board, Modifier.weight(1f).fillMaxHeight().alpha(boardDimAlpha),
+                // Board — classic LCD, constrained to 10:20 aspect ratio
+                GameBoard(gs.board, Modifier.fillMaxHeight().aspectRatio(0.5f).alpha(boardDimAlpha),
                 gs.currentPiece, gs.ghostY, classicGhost, gs.clearedLineRows, classicAnim, ad,
                 multiColor = false, classicLCD = true)
 
@@ -1426,6 +1427,7 @@ fun GameScreen(
                     }
                 }
             }
+        }
         }
 
         // RIGHT — Buttons or DPad
