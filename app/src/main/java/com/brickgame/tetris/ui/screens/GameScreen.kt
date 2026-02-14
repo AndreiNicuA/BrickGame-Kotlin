@@ -1522,47 +1522,10 @@ fun GameScreen(
                 } else { if (!lh) dpadBlock() else buttonsBlock() }
             }
 
-            // CENTER — Info bar on top + Board
-            Column(Modifier.weight(1f).fillMaxHeight()) {
-                // Info bar — HOLD | LVL SCORE LINES | NEXT
-                Row(Modifier.fillMaxWidth()
-                    .background((if (isDark) Color.Black else Color.White).copy(0.5f), RoundedCornerShape(6.dp))
-                    .padding(horizontal = 6.dp, vertical = 2.dp),
-                    verticalAlignment = Alignment.CenterVertically) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("HOLD", fontSize = 5.sp, color = textColor.copy(0.4f), fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
-                        HoldPiecePreview(gs.holdPiece?.shape, gs.holdUsed, Modifier.size(24.dp))
-                    }
-                    Spacer(Modifier.width(4.dp))
-                    Row(Modifier.weight(1f), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("LVL", fontSize = 5.sp, color = textColor.copy(0.4f), fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
-                            Text("${gs.level}", fontSize = 13.sp, fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace, color = theme.accentColor)
-                        }
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("SCORE", fontSize = 5.sp, color = textColor.copy(0.4f), fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
-                            Text(animatedScore.toString().padStart(7, '0'), fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace,
-                                color = textColor.copy(0.9f), letterSpacing = 1.sp)
-                        }
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("LINES", fontSize = 5.sp, color = textColor.copy(0.4f), fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
-                            Text("${gs.lines}", fontSize = 13.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, color = textColor.copy(0.7f))
-                        }
-                    }
-                    Spacer(Modifier.width(4.dp))
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("NEXT", fontSize = 5.sp, color = textColor.copy(0.4f), fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
-                        Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                            gs.nextPieces.take(nextCount.coerceAtMost(3)).forEachIndexed { i, p ->
-                                NextPiecePreview(p.shape, Modifier.size(if (i == 0) 24.dp else 18.dp), if (i == 0) 1f else 0.5f)
-                            }
-                        }
-                    }
-                }
-
-                // Board with shake + effects
-                Box(Modifier.weight(1f).fillMaxWidth().padding(top = 2.dp)
+            // CENTER — Board (full height) + vertical info panel
+            Row(Modifier.weight(1f).fillMaxHeight()) {
+                // Board with shake + effects — fills full height
+                Box(Modifier.weight(1f).fillMaxHeight()
                     .graphicsLayer { translationX = screenShakeX; translationY = screenShakeY }) {
                     GameBoard(gs.board, Modifier.fillMaxSize().alpha(boardDimAlpha), gs.currentPiece, gs.ghostY, ghost,
                         gs.clearedLineRows, anim, ad, multiColor = LocalMultiColor.current,
@@ -1585,6 +1548,44 @@ fun GameScreen(
                             drawRect(Brush.horizontalGradient(listOf(Color.Transparent, flashColor.copy(a))), Offset(size.width - edgeW, 0f), Size(edgeW, size.height))
                             drawRect(Brush.verticalGradient(listOf(flashColor.copy(a * 0.7f), Color.Transparent)), Offset.Zero, Size(size.width, edgeH))
                             drawRect(Brush.verticalGradient(listOf(Color.Transparent, flashColor.copy(a * 0.7f))), Offset(0f, size.height - edgeH), Size(size.width, edgeH))
+                        }
+                    }
+                }
+
+                // Vertical info panel
+                Column(Modifier.fillMaxHeight().width(56.dp)
+                    .background((if (isDark) Color.Black else Color.White).copy(0.45f), RoundedCornerShape(6.dp))
+                    .padding(horizontal = 4.dp, vertical = 6.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.SpaceEvenly) {
+                    // HOLD
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("HOLD", fontSize = 6.sp, color = textColor.copy(0.45f), fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                        HoldPiecePreview(gs.holdPiece?.shape, gs.holdUsed, Modifier.size(30.dp))
+                    }
+                    // LVL
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("LVL", fontSize = 6.sp, color = textColor.copy(0.4f), fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                        Text("${gs.level}", fontSize = 16.sp, fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace, color = theme.accentColor)
+                    }
+                    // SCORE
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("SCORE", fontSize = 5.sp, color = textColor.copy(0.4f), fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                        Text(animatedScore.toString().padStart(7, '0'), fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace,
+                            color = textColor.copy(0.9f), letterSpacing = 0.5.sp)
+                    }
+                    // LINES
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("LINES", fontSize = 6.sp, color = textColor.copy(0.4f), fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                        Text("${gs.lines}", fontSize = 14.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, color = textColor.copy(0.7f))
+                    }
+                    // NEXT
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("NEXT", fontSize = 6.sp, color = textColor.copy(0.45f), fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                        Spacer(Modifier.height(2.dp))
+                        gs.nextPieces.take(nextCount.coerceAtMost(3)).forEachIndexed { i, p ->
+                            NextPiecePreview(p.shape, Modifier.size(if (i == 0) 28.dp else 20.dp).padding(1.dp), if (i == 0) 1f else 0.5f)
                         }
                     }
                 }
