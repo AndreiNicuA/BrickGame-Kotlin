@@ -1352,14 +1352,12 @@ fun GameScreen(
                 onLeftPress = onLP, onLeftRelease = onLR, onRightPress = onRP, onRightRelease = onRR, onRotate = onRotate)
         }
     }
-    // Buttons block (rotate + pause + settings)
+    // Buttons block — Rotate center-aligned with DPad, PAUSE+menu below
     val buttonsBlock: @Composable () -> Unit = {
         Column(Modifier.fillMaxHeight().padding(4.dp),
             horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-            if (dp == DPadStyle.STANDARD) {
-                RotateButton(onRotate, 68.dp)
-                Spacer(Modifier.height(8.dp))
-            }
+            if (dp == DPadStyle.STANDARD) RotateButton(onRotate, 68.dp)
+            Spacer(Modifier.height(8.dp))
             ActionButton(if (gs.status == GameStatus.MENU) "START" else "PAUSE",
                 { if (gs.status == GameStatus.MENU) onStart() else onPause() },
                 width = 78.dp, height = 34.dp)
@@ -1486,16 +1484,14 @@ fun GameScreen(
                 onLeftPress = onLP, onLeftRelease = onLR, onRightPress = onRP, onRightRelease = onRR, onRotate = onRotate)
         }
     }
-    // Buttons block
+    // Buttons block — HOLD above, Rotate center-aligned with DPad, PAUSE+menu below
     val buttonsBlock: @Composable () -> Unit = {
         Column(Modifier.fillMaxHeight().padding(4.dp),
             horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-            if (dp == DPadStyle.STANDARD) {
-                RotateButton(onRotate, 68.dp)
-                Spacer(Modifier.height(8.dp))
-            }
             ActionButton("HOLD", onHold, width = 78.dp, height = 34.dp)
-            Spacer(Modifier.height(6.dp))
+            Spacer(Modifier.height(8.dp))
+            if (dp == DPadStyle.STANDARD) RotateButton(onRotate, 68.dp)
+            Spacer(Modifier.height(8.dp))
             ActionButton(if (gs.status == GameStatus.MENU) "START" else "PAUSE",
                 { if (gs.status == GameStatus.MENU) onStart() else onPause() },
                 width = 78.dp, height = 34.dp)
@@ -1553,7 +1549,7 @@ fun GameScreen(
                 }
 
                 // Vertical info panel — flush against board
-                Column(Modifier.fillMaxHeight().width(80.dp)
+                Column(Modifier.fillMaxHeight().width(90.dp)
                     .background((if (isDark) Color.Black else Color.White).copy(0.45f), RoundedCornerShape(topEnd = 6.dp, bottomEnd = 6.dp))
                     .padding(horizontal = 6.dp, vertical = 6.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
@@ -1561,11 +1557,11 @@ fun GameScreen(
                     // HOLD
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text("HOLD", fontSize = 7.sp, color = textColor.copy(0.45f), fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
-                        HoldPiecePreview(gs.holdPiece?.shape, gs.holdUsed, Modifier.size(34.dp))
+                        HoldPiecePreview(gs.holdPiece?.shape, gs.holdUsed, Modifier.size(32.dp))
                     }
                     // LVL
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("LVL", fontSize = 7.sp, color = textColor.copy(0.4f), fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
+                        Text("LVL ", fontSize = 7.sp, color = textColor.copy(0.4f), fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
                         Text("${gs.level}", fontSize = 18.sp, fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace, color = theme.accentColor)
                     }
                     // SCORE
@@ -1576,16 +1572,18 @@ fun GameScreen(
                             color = textColor.copy(0.9f), letterSpacing = 0.5.sp)
                     }
                     // LINES
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("LINES", fontSize = 7.sp, color = textColor.copy(0.4f), fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
+                        Text("LNS ", fontSize = 7.sp, color = textColor.copy(0.4f), fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
                         Text("${gs.lines}", fontSize = 16.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, color = textColor.copy(0.7f))
                     }
-                    // NEXT
+                    // NEXT — horizontal row
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text("NEXT", fontSize = 7.sp, color = textColor.copy(0.45f), fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
                         Spacer(Modifier.height(2.dp))
-                        gs.nextPieces.take(nextCount.coerceAtMost(3)).forEachIndexed { i, p ->
-                            NextPiecePreview(p.shape, Modifier.size(if (i == 0) 32.dp else 22.dp).padding(1.dp), if (i == 0) 1f else 0.5f)
+                        Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                            gs.nextPieces.take(nextCount.coerceAtMost(3)).forEachIndexed { i, p ->
+                                NextPiecePreview(p.shape, Modifier.size(if (i == 0) 26.dp else 20.dp), if (i == 0) 1f else 0.5f)
+                            }
                         }
                     }
                 }
