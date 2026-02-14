@@ -1438,7 +1438,7 @@ fun GameScreen(
     }
 }
 
-// --- LANDSCAPE FULLSCREEN: Board rotated 90° CW — pieces fall left→right, ghost overlay controls ---
+// --- LANDSCAPE FULLSCREEN: Board optionally rotated 90° CW, ghost overlay controls ---
 @Composable private fun LandscapeFullscreen(
     gs: GameState, dp: DPadStyle, ghost: Boolean, anim: AnimationStyle, ad: Float,
     onRotate: () -> Unit, onHD: () -> Unit, onHold: () -> Unit,
@@ -1452,7 +1452,12 @@ fun GameScreen(
     val animatedScore by animateIntAsState(gs.score, animationSpec = tween(300), label = "fslsscore")
     val textColor = if (isDark) Color.White else Color.Black
 
-    // Screen shake — rotated: game-X becomes visual-Y, game-Y becomes visual-X
+    // Board rotation state: 0° = normal vertical, -90° = horizontal (pieces fall L→R)
+    var boardRotation by remember { mutableFloatStateOf(-90f) }
+    val isRotated = boardRotation != 0f
+    val animatedRotation by animateFloatAsState(boardRotation, animationSpec = tween(400), label = "brot")
+
+    // Screen shake
     var screenShakeX by remember { mutableFloatStateOf(0f) }
     var screenShakeY by remember { mutableFloatStateOf(0f) }
     var clearFlashAlpha by remember { mutableFloatStateOf(0f) }
@@ -1476,13 +1481,6 @@ fun GameScreen(
 
     val bgSpeed = if (gs.level >= 10) 1f + (gs.level - 10) * 0.15f else 1f
 
-    // === Input remapping for 90° CW rotation ===
-    // Visual DPad Up → game Left (piece moves "up" on screen = left in game)
-    // Visual DPad Down → game Right (piece moves "down" on screen = right in game)
-    // Visual DPad Left → soft drop (piece moves "left" = toward stack = down in game)
-    // Visual DPad Right → hard drop (piece slams "right" = away from stack = up/harddrop in game)
-    // Hard drop (DPad top/up) → remapped to visual right = game hard drop
-
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val screenW = maxWidth
         val screenH = maxHeight
@@ -1492,29 +1490,39 @@ fun GameScreen(
             FallingPiecesBackground(theme, isDark, bgSpeed)
         }
 
-        // Rotated board — we render a tall board then rotate it -90°
-        // The board thinks it's rendering in (screenH wide × screenW tall) space
-        // After -90° CW rotation, it fills the screen horizontally
+        // Board — rotated or normal, fills entire screen
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Box(Modifier
-                .width(screenH)  // board's "width" = screen height
-                .height(screenW) // board's "height" = screen width
-                .graphicsLayer {
-                    rotationZ = -90f
-                    // Shake: rotate the shake vector too
-                    translationX = screenShakeY
-                    translationY = -screenShakeX
+            if (isRotated) {
+                // Rotated: swap dimensions so board fills screen horizontally
+                Box(Modifier
+                    .width(screenH).height(screenW)
+                    .graphicsLayer {
+                        rotationZ = animatedRotation
+                        translationX = screenShakeY
+                        translationY = -screenShakeX
+                    }
+                ) {
+                    GameBoard(gs.board, Modifier.fillMaxSize().alpha(boardDimAlpha), gs.currentPiece, gs.ghostY, ghost,
+                        gs.clearedLineRows, anim, ad, multiColor = LocalMultiColor.current,
+                        hardDropTrail = gs.hardDropTrail, lockEvent = gs.lockEvent,
+                        pieceMaterial = LocalPieceMaterial.current, highContrast = LocalHighContrast.current,
+                        boardOpacity = if (isDark) 0.10f else 0.15f, gameLevel = gs.level)
                 }
-            ) {
-                GameBoard(gs.board, Modifier.fillMaxSize().alpha(boardDimAlpha), gs.currentPiece, gs.ghostY, ghost,
-                    gs.clearedLineRows, anim, ad, multiColor = LocalMultiColor.current,
-                    hardDropTrail = gs.hardDropTrail, lockEvent = gs.lockEvent,
-                    pieceMaterial = LocalPieceMaterial.current, highContrast = LocalHighContrast.current,
-                    boardOpacity = if (isDark) 0.10f else 0.15f, gameLevel = gs.level)
+            } else {
+                // Normal orientation: standard vertical board filling screen
+                Box(Modifier.fillMaxSize()
+                    .graphicsLayer { translationX = screenShakeX; translationY = screenShakeY }
+                ) {
+                    GameBoard(gs.board, Modifier.fillMaxSize().alpha(boardDimAlpha), gs.currentPiece, gs.ghostY, ghost,
+                        gs.clearedLineRows, anim, ad, multiColor = LocalMultiColor.current,
+                        hardDropTrail = gs.hardDropTrail, lockEvent = gs.lockEvent,
+                        pieceMaterial = LocalPieceMaterial.current, highContrast = LocalHighContrast.current,
+                        boardOpacity = if (isDark) 0.10f else 0.15f, gameLevel = gs.level)
+                }
             }
         }
 
-        // Edge glow on line clears — rendered in screen space (not rotated)
+        // Edge glow on line clears
         if (clearFlashAlpha > 0.01f) {
             val flashColor = when {
                 clearSize.intValue >= 4 -> Color(0xFFF4D03F)
@@ -1524,16 +1532,22 @@ fun GameScreen(
             }
             Canvas(Modifier.matchParentSize()) {
                 val a = clearFlashAlpha.coerceIn(0f, 1f)
-                // For rotated board: "bottom" (stack) is on the RIGHT side
                 val edgeW = size.width * 0.08f; val edgeH = size.height * 0.06f
-                drawRect(Brush.horizontalGradient(listOf(flashColor.copy(a * 0.5f), Color.Transparent)), Offset.Zero, Size(edgeW, size.height))
-                drawRect(Brush.horizontalGradient(listOf(Color.Transparent, flashColor.copy(a))), Offset(size.width - edgeW, 0f), Size(edgeW, size.height))
-                drawRect(Brush.verticalGradient(listOf(flashColor.copy(a * 0.5f), Color.Transparent)), Offset.Zero, Size(size.width, edgeH))
-                drawRect(Brush.verticalGradient(listOf(Color.Transparent, flashColor.copy(a * 0.5f))), Offset(0f, size.height - edgeH), Size(size.width, edgeH))
+                if (isRotated) {
+                    // Stack is on the RIGHT when rotated
+                    drawRect(Brush.horizontalGradient(listOf(flashColor.copy(a * 0.4f), Color.Transparent)), Offset.Zero, Size(edgeW, size.height))
+                    drawRect(Brush.horizontalGradient(listOf(Color.Transparent, flashColor.copy(a))), Offset(size.width - edgeW, 0f), Size(edgeW, size.height))
+                } else {
+                    // Stack is on the BOTTOM when normal
+                    drawRect(Brush.verticalGradient(listOf(flashColor.copy(a * 0.4f), Color.Transparent)), Offset.Zero, Size(size.width, edgeH))
+                    drawRect(Brush.verticalGradient(listOf(Color.Transparent, flashColor.copy(a))), Offset(0f, size.height - edgeH), Size(size.width, edgeH))
+                }
+                drawRect(Brush.verticalGradient(listOf(flashColor.copy(a * 0.3f), Color.Transparent)), Offset.Zero, Size(size.width, edgeH))
+                drawRect(Brush.verticalGradient(listOf(Color.Transparent, flashColor.copy(a * 0.3f))), Offset(0f, size.height - edgeH), Size(size.width, edgeH))
             }
         }
 
-        // Floating info strip — thin bar at top, very transparent
+        // Floating info strip — thin bar at top
         Row(Modifier.fillMaxWidth().align(Alignment.TopCenter)
             .background((if (isDark) Color.Black else Color.White).copy(0.20f))
             .padding(horizontal = 8.dp, vertical = 2.dp),
@@ -1560,32 +1574,33 @@ fun GameScreen(
             }
         }
 
-        // Ghost outline controls — remapped for -90° CW rotated board
-        // Board rotated -90° CW means:
-        //   Game down (gravity) → visually LEFT to RIGHT on screen
-        //   Game left → visually DOWN on screen
-        //   Game right → visually UP on screen
-        // DPad remapping for intuitive control:
-        //   Visual Up → game Right (piece moves up on screen)
-        //   Visual Down → game Left (piece moves down on screen)
-        //   Visual Right → game Down = soft drop (piece drops toward right/stack)
-        //   DPad top button → hard drop (slam piece to stack)
+        // Ghost outline controls — DPad remapped based on rotation
         CompositionLocalProvider(LocalButtonShape provides ButtonShape.OUTLINE) {
-            // Left side — DPad with remapped directions
+            // Left side — DPad
             Box(Modifier.align(if (!lh) Alignment.CenterStart else Alignment.CenterEnd)
                 .padding(horizontal = 8.dp).alpha(0.25f)) {
-                DPad(58.dp, rotateInCenter = dp == DPadStyle.ROTATE_CENTRE,
-                    onUpPress = onHD,       // DPad top → hard drop (slam to stack)
-                    onDownPress = onDP,     // visual Down → soft drop (game down press)
-                    onDownRelease = onDR,   // visual Down release → game down release
-                    onLeftPress = onLP,     // visual Left → game Left press (piece moves left = down on screen... wait)
-                    onLeftRelease = onLR,   // visual Left release → game Left release
-                    onRightPress = onRP,    // visual Right → game Right press
-                    onRightRelease = onRR,  // visual Right release → game Right release
-                    onRotate = onRotate)
+                if (isRotated) {
+                    // Rotated -90°: game-left=visual-down, game-right=visual-up
+                    // game-down(soft drop)=visual-right, hard drop=DPad top
+                    DPad(58.dp, rotateInCenter = dp == DPadStyle.ROTATE_CENTRE,
+                        onUpPress = onRP,       // visual Up → game Right (piece moves up on screen)
+                        onDownPress = onLP,     // visual Down → game Left (piece moves down on screen)
+                        onDownRelease = onLR,   // release
+                        onLeftPress = onHD,     // visual Left → hard drop (slam toward stack = rightward)
+                        onLeftRelease = { },
+                        onRightPress = onDP,    // visual Right → soft drop (game down)
+                        onRightRelease = onDR,
+                        onRotate = onRotate)
+                } else {
+                    // Normal: standard mapping
+                    DPad(58.dp, rotateInCenter = dp == DPadStyle.ROTATE_CENTRE,
+                        onUpPress = onHD, onDownPress = onDP, onDownRelease = onDR,
+                        onLeftPress = onLP, onLeftRelease = onLR, onRightPress = onRP, onRightRelease = onRR,
+                        onRotate = onRotate)
+                }
             }
 
-            // Right side — HOLD, Rotate, PAUSE, menu
+            // Right side — HOLD, Rotate, PAUSE, rotation toggle, menu
             Column(Modifier.align(if (!lh) Alignment.CenterEnd else Alignment.CenterStart)
                 .padding(horizontal = 8.dp).alpha(0.25f),
                 horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
@@ -1601,11 +1616,12 @@ fun GameScreen(
             }
         }
 
-        // Hard drop button — floating on the right edge, larger touch target
+        // Board rotation toggle button — bottom center, ghost outline
         CompositionLocalProvider(LocalButtonShape provides ButtonShape.OUTLINE) {
-            Box(Modifier.align(if (!lh) Alignment.CenterEnd else Alignment.CenterStart)
-                .padding(bottom = 140.dp, end = 8.dp, start = 8.dp).alpha(0.20f)) {
-                // Hard drop arrow pointing right (→) for rotated board
+            Box(Modifier.align(Alignment.BottomCenter).padding(bottom = 8.dp).alpha(0.30f)) {
+                ActionButton(if (isRotated) "↻" else "↺",
+                    { boardRotation = if (isRotated) 0f else -90f },
+                    width = 44.dp, height = 28.dp, backgroundColor = theme.buttonSecondary)
             }
         }
     }
