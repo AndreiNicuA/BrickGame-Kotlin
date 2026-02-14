@@ -206,8 +206,10 @@ fun GameScreen(
                     GameOverOverlay(gameState.score, gameState.level, gameState.lines, onStartGame, onOpenSettings, onQuit)
             }
         }
-        // Modern notifications — hidden in Classic layout to maintain authentic LCD feel
-        if (layoutPreset != LayoutPreset.PORTRAIT_CLASSIC) {
+        // Modern notifications — hidden in Classic layout (portrait and landscape) to maintain authentic LCD feel
+        val isClassicStyle = layoutPreset == LayoutPreset.PORTRAIT_CLASSIC ||
+            (layoutPreset.isLandscape && portraitLayout == LayoutPreset.PORTRAIT_CLASSIC)
+        if (!isClassicStyle) {
             ActionPopup(gameState.lastActionLabel, gameState.linesCleared)
             // Combo counter display (top of screen)
             if (gameState.comboCount >= 2 && gameState.status == GameStatus.PLAYING) {
@@ -1367,9 +1369,9 @@ fun GameScreen(
     }
 
     Row(Modifier.fillMaxSize().padding(horizontal = 2.dp, vertical = 4.dp),
-        horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
-        // LEFT — DPad or Buttons, hugs the LCD
-        Box(Modifier.fillMaxHeight().padding(end = 4.dp), Alignment.Center) {
+        verticalAlignment = Alignment.CenterVertically) {
+        // LEFT — DPad or Buttons, centered in outer third
+        Box(Modifier.weight(1f).fillMaxHeight(), Alignment.Center) {
             if (!lh) dpadBlock() else buttonsBlock()
         }
 
@@ -1429,8 +1431,8 @@ fun GameScreen(
             }
         }
 
-        // RIGHT — Buttons or DPad, hugs the LCD
-        Box(Modifier.fillMaxHeight().padding(start = 4.dp), Alignment.Center) {
+        // RIGHT — Buttons or DPad, centered in outer third
+        Box(Modifier.weight(1f).fillMaxHeight(), Alignment.Center) {
             if (!lh) buttonsBlock() else dpadBlock()
         }
     }
@@ -1513,8 +1515,8 @@ fun GameScreen(
 
         Row(Modifier.fillMaxSize().padding(horizontal = 2.dp, vertical = 2.dp),
             verticalAlignment = Alignment.CenterVertically) {
-            // LEFT — DPad or Buttons
-            Box(Modifier.fillMaxHeight().padding(end = 4.dp).alpha(controlAlpha), Alignment.Center) {
+            // LEFT — DPad or Buttons, centered in outer third
+            Box(Modifier.weight(1f).fillMaxHeight().alpha(controlAlpha), Alignment.Center) {
                 if (isFullscreen) CompositionLocalProvider(LocalButtonShape provides ButtonShape.OUTLINE) {
                     if (!lh) dpadBlock() else buttonsBlock()
                 } else { if (!lh) dpadBlock() else buttonsBlock() }
@@ -1588,8 +1590,8 @@ fun GameScreen(
                 }
             }
 
-            // RIGHT — Buttons or DPad
-            Box(Modifier.fillMaxHeight().padding(start = 4.dp).alpha(controlAlpha), Alignment.Center) {
+            // RIGHT — Buttons or DPad, centered in outer third
+            Box(Modifier.weight(1f).fillMaxHeight().alpha(controlAlpha), Alignment.Center) {
                 if (isFullscreen) CompositionLocalProvider(LocalButtonShape provides ButtonShape.OUTLINE) {
                     if (!lh) buttonsBlock() else dpadBlock()
                 } else { if (!lh) buttonsBlock() else dpadBlock() }
