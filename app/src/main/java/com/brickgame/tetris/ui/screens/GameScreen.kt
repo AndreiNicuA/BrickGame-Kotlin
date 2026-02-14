@@ -1320,8 +1320,10 @@ fun GameScreen(
     val isFullscreen = portraitStyle == LayoutPreset.PORTRAIT_FULLSCREEN
     if (isClassic) {
         LandscapeClassic(gs, dp, anim, ad, onRotate, onHD, onLP, onLR, onRP, onRR, onDP, onDR, onPause, onSet, onStart, boardDimAlpha, nextCount)
+    } else if (isFullscreen) {
+        LandscapeFullscreen(gs, dp, ghost, anim, ad, onRotate, onHD, onHold, onLP, onLR, onRP, onRR, onDP, onDR, onPause, onSet, onStart, boardDimAlpha, nextCount)
     } else {
-        LandscapeModern(gs, dp, ghost, anim, ad, onRotate, onHD, onHold, onLP, onLR, onRP, onRR, onDP, onDR, onPause, onSet, onStart, isFullscreen, boardDimAlpha, nextCount)
+        LandscapeModern(gs, dp, ghost, anim, ad, onRotate, onHD, onHold, onLP, onLR, onRP, onRR, onDP, onDR, onPause, onSet, onStart, boardDimAlpha, nextCount)
     }
 }
 
@@ -1436,13 +1438,142 @@ fun GameScreen(
     }
 }
 
-// --- LANDSCAPE MODERN/FULLSCREEN: Transparent board, falling bg, effects ---
+// --- LANDSCAPE FULLSCREEN: Board fills entire screen, ghost overlay controls ---
+@Composable private fun LandscapeFullscreen(
+    gs: GameState, dp: DPadStyle, ghost: Boolean, anim: AnimationStyle, ad: Float,
+    onRotate: () -> Unit, onHD: () -> Unit, onHold: () -> Unit,
+    onLP: () -> Unit, onLR: () -> Unit, onRP: () -> Unit, onRR: () -> Unit,
+    onDP: () -> Unit, onDR: () -> Unit, onPause: () -> Unit, onSet: () -> Unit, onStart: () -> Unit,
+    boardDimAlpha: Float = 1f, nextCount: Int = 3
+) {
+    val theme = LocalGameTheme.current
+    val isDark = com.brickgame.tetris.ui.theme.LocalIsDarkMode.current
+    val lh = LocalLeftHanded.current
+    val animatedScore by animateIntAsState(gs.score, animationSpec = tween(300), label = "fslsscore")
+    val textColor = if (isDark) Color.White else Color.Black
+
+    // Screen shake
+    var screenShakeX by remember { mutableFloatStateOf(0f) }
+    var screenShakeY by remember { mutableFloatStateOf(0f) }
+    var clearFlashAlpha by remember { mutableFloatStateOf(0f) }
+    val clearSize = remember { mutableIntStateOf(0) }
+    LaunchedEffect(gs.clearedLineRows) {
+        if (gs.clearedLineRows.isNotEmpty()) {
+            clearSize.intValue = gs.clearedLineRows.size
+            clearFlashAlpha = when (gs.clearedLineRows.size) { 4 -> 0.7f; 3 -> 0.45f; 2 -> 0.3f; else -> 0.15f }
+            val shakeIntensity = when (gs.clearedLineRows.size) { 4 -> 20f; 3 -> 14f; 2 -> 8f; else -> 4f }
+            val rng = java.util.Random()
+            repeat(18) { i ->
+                val decay = 1f - i / 18f
+                screenShakeX = (rng.nextFloat() - 0.5f) * shakeIntensity * decay * 2f
+                screenShakeY = (rng.nextFloat() - 0.5f) * shakeIntensity * decay * 2f
+                clearFlashAlpha *= 0.82f
+                delay(20)
+            }
+            screenShakeX = 0f; screenShakeY = 0f; clearFlashAlpha = 0f
+        }
+    }
+
+    val bgSpeed = if (gs.level >= 10) 1f + (gs.level - 10) * 0.15f else 1f
+
+    Box(Modifier.fillMaxSize()) {
+        // Falling pieces background — full screen
+        Box(Modifier.matchParentSize().alpha(if (isDark) 0.25f else 0.15f)) {
+            FallingPiecesBackground(theme, isDark, bgSpeed)
+        }
+
+        // Board fills ENTIRE screen with shake
+        Box(Modifier.fillMaxSize()
+            .graphicsLayer { translationX = screenShakeX; translationY = screenShakeY }) {
+            GameBoard(gs.board, Modifier.fillMaxSize().alpha(boardDimAlpha), gs.currentPiece, gs.ghostY, ghost,
+                gs.clearedLineRows, anim, ad, multiColor = LocalMultiColor.current,
+                hardDropTrail = gs.hardDropTrail, lockEvent = gs.lockEvent,
+                pieceMaterial = LocalPieceMaterial.current, highContrast = LocalHighContrast.current,
+                boardOpacity = if (isDark) 0.10f else 0.15f, gameLevel = gs.level)
+
+            // Edge glow on line clears
+            if (clearFlashAlpha > 0.01f) {
+                val flashColor = when {
+                    clearSize.intValue >= 4 -> Color(0xFFF4D03F)
+                    clearSize.intValue >= 3 -> Color(0xFFFF9F43)
+                    clearSize.intValue >= 2 -> Color(0xFF4ECDC4)
+                    else -> Color.White
+                }
+                Canvas(Modifier.matchParentSize()) {
+                    val a = clearFlashAlpha.coerceIn(0f, 1f)
+                    val edgeW = size.width * 0.08f; val edgeH = size.height * 0.06f
+                    drawRect(Brush.horizontalGradient(listOf(flashColor.copy(a), Color.Transparent)), Offset.Zero, Size(edgeW, size.height))
+                    drawRect(Brush.horizontalGradient(listOf(Color.Transparent, flashColor.copy(a))), Offset(size.width - edgeW, 0f), Size(edgeW, size.height))
+                    drawRect(Brush.verticalGradient(listOf(flashColor.copy(a * 0.7f), Color.Transparent)), Offset.Zero, Size(size.width, edgeH))
+                    drawRect(Brush.verticalGradient(listOf(Color.Transparent, flashColor.copy(a * 0.7f))), Offset(0f, size.height - edgeH), Size(size.width, edgeH))
+                }
+            }
+        }
+
+        // Floating info strip — thin bar at top, very transparent
+        Row(Modifier.fillMaxWidth().align(Alignment.TopCenter)
+            .background((if (isDark) Color.Black else Color.White).copy(0.20f))
+            .padding(horizontal = 8.dp, vertical = 2.dp),
+            verticalAlignment = Alignment.CenterVertically) {
+            // HOLD
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("HOLD", fontSize = 5.sp, color = textColor.copy(0.35f), fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                HoldPiecePreview(gs.holdPiece?.shape, gs.holdUsed, Modifier.size(22.dp))
+            }
+            Spacer(Modifier.width(6.dp))
+            // Stats inline
+            Row(Modifier.weight(1f), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
+                Text("LVL ${gs.level}", fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace, color = theme.accentColor.copy(0.7f))
+                Text(animatedScore.toString().padStart(7, '0'), fontSize = 11.sp, fontWeight = FontWeight.Bold,
+                    fontFamily = FontFamily.Monospace, color = textColor.copy(0.6f), letterSpacing = 0.5.sp)
+                Text("LNS ${gs.lines}", fontSize = 11.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, color = textColor.copy(0.5f))
+            }
+            Spacer(Modifier.width(6.dp))
+            // NEXT — horizontal
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("NEXT", fontSize = 5.sp, color = textColor.copy(0.35f), fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                    gs.nextPieces.take(nextCount.coerceAtMost(3)).forEachIndexed { i, p ->
+                        NextPiecePreview(p.shape, Modifier.size(if (i == 0) 22.dp else 16.dp), if (i == 0) 0.8f else 0.4f)
+                    }
+                }
+            }
+        }
+
+        // Ghost outline controls — overlaid on the board
+        CompositionLocalProvider(LocalButtonShape provides ButtonShape.OUTLINE) {
+            // Left side — DPad
+            Box(Modifier.align(if (!lh) Alignment.CenterStart else Alignment.CenterEnd)
+                .padding(horizontal = 8.dp).alpha(0.25f)) {
+                DPad(58.dp, rotateInCenter = dp == DPadStyle.ROTATE_CENTRE,
+                    onUpPress = onHD, onDownPress = onDP, onDownRelease = onDR,
+                    onLeftPress = onLP, onLeftRelease = onLR, onRightPress = onRP, onRightRelease = onRR, onRotate = onRotate)
+            }
+
+            // Right side — HOLD, Rotate, PAUSE, menu
+            Column(Modifier.align(if (!lh) Alignment.CenterEnd else Alignment.CenterStart)
+                .padding(horizontal = 8.dp).alpha(0.25f),
+                horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                ActionButton("HOLD", onHold, width = 78.dp, height = 34.dp)
+                Spacer(Modifier.height(6.dp))
+                if (dp == DPadStyle.STANDARD) RotateButton(onRotate, 68.dp)
+                Spacer(Modifier.height(6.dp))
+                ActionButton(if (gs.status == GameStatus.MENU) "START" else "PAUSE",
+                    { if (gs.status == GameStatus.MENU) onStart() else onPause() },
+                    width = 78.dp, height = 34.dp)
+                Spacer(Modifier.height(4.dp))
+                ActionButton("···", onSet, width = 48.dp, height = 24.dp, backgroundColor = theme.buttonSecondary)
+            }
+        }
+    }
+}
+
+// --- LANDSCAPE MODERN: Transparent board, falling bg, effects ---
 @Composable private fun LandscapeModern(
     gs: GameState, dp: DPadStyle, ghost: Boolean, anim: AnimationStyle, ad: Float,
     onRotate: () -> Unit, onHD: () -> Unit, onHold: () -> Unit,
     onLP: () -> Unit, onLR: () -> Unit, onRP: () -> Unit, onRR: () -> Unit,
     onDP: () -> Unit, onDR: () -> Unit, onPause: () -> Unit, onSet: () -> Unit, onStart: () -> Unit,
-    isFullscreen: Boolean = false,
     boardDimAlpha: Float = 1f, nextCount: Int = 3
 ) {
     val theme = LocalGameTheme.current
@@ -1500,9 +1631,6 @@ fun GameScreen(
         }
     }
 
-    // For fullscreen: ghost outline controls
-    val controlAlpha = if (isFullscreen) 0.35f else 1f
-
     Box(Modifier.fillMaxSize()) {
         // Falling pieces background
         Box(Modifier.matchParentSize().alpha(if (isDark) 0.25f else 0.15f)) {
@@ -1512,10 +1640,8 @@ fun GameScreen(
         Row(Modifier.fillMaxSize().padding(horizontal = 2.dp, vertical = 2.dp),
             verticalAlignment = Alignment.CenterVertically) {
             // LEFT — DPad or Buttons, centered in outer third
-            Box(Modifier.weight(1f).fillMaxHeight().alpha(controlAlpha), Alignment.Center) {
-                if (isFullscreen) CompositionLocalProvider(LocalButtonShape provides ButtonShape.OUTLINE) {
-                    if (!lh) dpadBlock() else buttonsBlock()
-                } else { if (!lh) dpadBlock() else buttonsBlock() }
+            Box(Modifier.weight(1f).fillMaxHeight(), Alignment.Center) {
+                if (!lh) dpadBlock() else buttonsBlock()
             }
 
             // CENTER — Board (full height) + vertical info panel
@@ -1590,10 +1716,8 @@ fun GameScreen(
             }
 
             // RIGHT — Buttons or DPad, centered in outer third
-            Box(Modifier.weight(1f).fillMaxHeight().alpha(controlAlpha), Alignment.Center) {
-                if (isFullscreen) CompositionLocalProvider(LocalButtonShape provides ButtonShape.OUTLINE) {
-                    if (!lh) buttonsBlock() else dpadBlock()
-                } else { if (!lh) buttonsBlock() else dpadBlock() }
+            Box(Modifier.weight(1f).fillMaxHeight(), Alignment.Center) {
+                if (!lh) buttonsBlock() else dpadBlock()
             }
         }
     }
