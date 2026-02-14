@@ -96,6 +96,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     val buttonStyle: StateFlow<String> = _buttonStyle.asStateFlow()
     private val _controllerLayout = MutableStateFlow("auto")
     val controllerLayout: StateFlow<String> = _controllerLayout.asStateFlow()
+    private val _leftHanded = MutableStateFlow(false)
+    val leftHanded: StateFlow<Boolean> = _leftHanded.asStateFlow()
     private val _infinityTimer = MutableStateFlow(0)
     val infinityTimer: StateFlow<Int> = _infinityTimer.asStateFlow()
     private val _infinityTimerEnabled = MutableStateFlow(false)
@@ -183,6 +185,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch { settingsRepo.levelEventsEnabled.collect { _levelEventsEnabled.value = it } }
         viewModelScope.launch { settingsRepo.buttonStyle.collect { _buttonStyle.value = it } }
         viewModelScope.launch { settingsRepo.controllerLayout.collect { _controllerLayout.value = it } }
+        viewModelScope.launch { settingsRepo.leftHanded.collect { _leftHanded.value = it } }
         viewModelScope.launch { settingsRepo.gameMode.collect { name -> _gameMode.value = GameMode.entries.find { it.name == name } ?: GameMode.MARATHON; game.setGameMode(_gameMode.value) } }
         viewModelScope.launch { settingsRepo.infinityTimer.collect { _infinityTimer.value = it } }
         viewModelScope.launch { settingsRepo.infinityTimerEnabled.collect { _infinityTimerEnabled.value = it } }
@@ -297,6 +300,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     fun setLevelEventsEnabled(v: Boolean) { _levelEventsEnabled.value = v; viewModelScope.launch { settingsRepo.setLevelEventsEnabled(v) } }
     fun setButtonStyle(v: String) { _buttonStyle.value = v; viewModelScope.launch { settingsRepo.setButtonStyle(v) } }
     fun setControllerLayout(v: String) { _controllerLayout.value = v; viewModelScope.launch { settingsRepo.setControllerLayout(v) } }
+    fun setLeftHanded(v: Boolean) { _leftHanded.value = v; viewModelScope.launch { settingsRepo.setLeftHanded(v) } }
     fun setInfinityTimer(v: Int) { _infinityTimer.value = v; viewModelScope.launch { settingsRepo.setInfinityTimer(v) } }
     fun dismissOnboarding() { _showOnboarding.value = false; viewModelScope.launch { settingsRepo.setOnboardingComplete(true) } }
 

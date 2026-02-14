@@ -59,6 +59,7 @@ val LocalMultiColor = compositionLocalOf { false }
 val LocalPieceMaterial = compositionLocalOf { "CLASSIC" }
 val LocalHighContrast = compositionLocalOf { false }
 val LocalUiScale = compositionLocalOf { 1.0f }
+val LocalLeftHanded = compositionLocalOf { false }
 
 @Composable
 fun GameScreen(
@@ -83,6 +84,7 @@ fun GameScreen(
     pieceMaterial: String = "CLASSIC",
     highContrast: Boolean = false,
     uiScale: Float = 1.0f,
+    leftHanded: Boolean = false,
     onCloseApp: () -> Unit = {},
     showOnboarding: Boolean = false,
     onDismissOnboarding: () -> Unit = {},
@@ -138,6 +140,7 @@ fun GameScreen(
         LocalHighContrast provides highContrast,
         LocalUiScale provides uiScale,
         LocalButtonShape provides btnShape,
+        LocalLeftHanded provides leftHanded,
         LocalDensity provides scaledDensity
     ) {
     val isMenu = gameState.status == GameStatus.MENU
@@ -1117,18 +1120,28 @@ fun GameScreen(
                 }
             }
 
-            // Controls — same Compact style DPad layout
+            // Controls — same Compact style DPad layout, respects handedness
+            val lh = LocalLeftHanded.current
             Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), Arrangement.SpaceBetween, Alignment.CenterVertically) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    ActionButton("HOLD", onHold, width = 64.dp, height = 30.dp)
-                    ActionButton(if (gs.status == GameStatus.MENU) "START" else "PAUSE",
-                        { if (gs.status == GameStatus.MENU) onStart() else onPause() }, width = 64.dp, height = 30.dp)
-                    ActionButton("···", onSet, width = 44.dp, height = 24.dp, backgroundColor = LocalGameTheme.current.buttonSecondary)
-                }
+                if (!lh) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        ActionButton("HOLD", onHold, width = 64.dp, height = 30.dp)
+                        ActionButton(if (gs.status == GameStatus.MENU) "START" else "PAUSE",
+                            { if (gs.status == GameStatus.MENU) onStart() else onPause() }, width = 64.dp, height = 30.dp)
+                        ActionButton("···", onSet, width = 44.dp, height = 24.dp, backgroundColor = LocalGameTheme.current.buttonSecondary)
+                    }
+                } else { Spacer(Modifier.width(64.dp)) }
                 DPad(64.dp, rotateInCenter = true, horizontalSpread = 18.dp,
                     onUpPress = onHD, onDownPress = onDP, onDownRelease = onDR,
                     onLeftPress = onLP, onLeftRelease = onLR, onRightPress = onRP, onRightRelease = onRR, onRotate = onRotate)
-                Spacer(Modifier.width(64.dp))
+                if (lh) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        ActionButton("HOLD", onHold, width = 64.dp, height = 30.dp)
+                        ActionButton(if (gs.status == GameStatus.MENU) "START" else "PAUSE",
+                            { if (gs.status == GameStatus.MENU) onStart() else onPause() }, width = 64.dp, height = 30.dp)
+                        ActionButton("···", onSet, width = 44.dp, height = 24.dp, backgroundColor = LocalGameTheme.current.buttonSecondary)
+                    }
+                } else { Spacer(Modifier.width(64.dp)) }
             }
         }
     }
@@ -1291,43 +1304,149 @@ fun GameScreen(
     }
 }
 
-// === LANDSCAPE ===
+// === LANDSCAPE: Controls left, Board center, Info right (swaps with handedness) ===
 @Composable private fun LandscapeLayout(
     gs: GameState, dp: DPadStyle, ghost: Boolean, anim: AnimationStyle, ad: Float,
     onRotate: () -> Unit, onHD: () -> Unit, onHold: () -> Unit,
     onLP: () -> Unit, onLR: () -> Unit, onRP: () -> Unit, onRR: () -> Unit,
     onDP: () -> Unit, onDR: () -> Unit, onPause: () -> Unit, onSet: () -> Unit, lefty: Boolean
 ) {
-    Row(Modifier.fillMaxSize().padding(6.dp)) {
-        Box(Modifier.weight(1f).fillMaxHeight(), Alignment.Center) { if (lefty) LandInfo(gs, onPause, onSet) else LandCtrl(dp, onHD, onHold, onLP, onLR, onRP, onRR, onDP, onDR, onRotate, onPause) }
-        GameBoard(gs.board, Modifier.fillMaxHeight().aspectRatio(0.5f).padding(horizontal = 6.dp), gs.currentPiece, gs.ghostY, ghost, gs.clearedLineRows, anim, ad, multiColor = LocalMultiColor.current, pieceMaterial = LocalPieceMaterial.current, highContrast = LocalHighContrast.current)
-        Box(Modifier.weight(1f).fillMaxHeight(), Alignment.Center) { if (lefty) LandCtrl(dp, onHD, onHold, onLP, onLR, onRP, onRR, onDP, onDR, onRotate, onPause) else LandInfo(gs, onPause, onSet) }
+    val theme = LocalGameTheme.current
+    val isDark = com.brickgame.tetris.ui.theme.LocalIsDarkMode.current
+    val lh = LocalLeftHanded.current
+    val animatedScore by animateIntAsState(gs.score, animationSpec = tween(300), label = "lsscore")
+
+    // Screen shake
+    var screenShakeX by remember { mutableFloatStateOf(0f) }
+    var screenShakeY by remember { mutableFloatStateOf(0f) }
+    var clearFlashAlpha by remember { mutableFloatStateOf(0f) }
+    val clearSize = remember { mutableIntStateOf(0) }
+    LaunchedEffect(gs.clearedLineRows) {
+        if (gs.clearedLineRows.isNotEmpty()) {
+            clearSize.intValue = gs.clearedLineRows.size
+            clearFlashAlpha = when (gs.clearedLineRows.size) { 4 -> 0.6f; 3 -> 0.4f; 2 -> 0.25f; else -> 0.12f }
+            val shakeIntensity = when (gs.clearedLineRows.size) { 4 -> 14f; 3 -> 9f; 2 -> 5f; else -> 2f }
+            val rng = java.util.Random()
+            repeat(14) { i ->
+                val decay = 1f - i / 14f
+                screenShakeX = (rng.nextFloat() - 0.5f) * shakeIntensity * decay * 2f
+                screenShakeY = (rng.nextFloat() - 0.5f) * shakeIntensity * decay * 2f
+                clearFlashAlpha *= 0.82f
+                delay(20)
+            }
+            screenShakeX = 0f; screenShakeY = 0f; clearFlashAlpha = 0f
+        }
+    }
+
+    val bgSpeed = if (gs.level >= 10) 1f + (gs.level - 10) * 0.15f else 1f
+
+    Box(Modifier.fillMaxSize()) {
+        // Falling pieces background
+        Box(Modifier.matchParentSize().alpha(if (isDark) 0.25f else 0.15f)) {
+            FallingPiecesBackground(theme, isDark, bgSpeed)
+        }
+
+        Row(Modifier.fillMaxSize().padding(6.dp)) {
+            // Left panel — Controls or Info based on handedness
+            Box(Modifier.weight(1f).fillMaxHeight(), Alignment.Center) {
+                if (!lh) LandCtrl(dp, isDark, onHD, onHold, onLP, onLR, onRP, onRR, onDP, onDR, onRotate, onPause, onSet)
+                else LandInfo(gs, animatedScore, isDark, onPause, onSet)
+            }
+
+            // Board — transparent with shake + effects
+            Box(Modifier.fillMaxHeight().aspectRatio(0.5f).padding(horizontal = 4.dp)
+                .graphicsLayer { translationX = screenShakeX; translationY = screenShakeY }) {
+                GameBoard(gs.board, Modifier.fillMaxSize(), gs.currentPiece, gs.ghostY, ghost,
+                    gs.clearedLineRows, anim, ad, multiColor = LocalMultiColor.current,
+                    hardDropTrail = gs.hardDropTrail, lockEvent = gs.lockEvent,
+                    pieceMaterial = LocalPieceMaterial.current, highContrast = LocalHighContrast.current,
+                    boardOpacity = if (isDark) 0.12f else 0.18f, gameLevel = gs.level)
+
+                // Edge glow on line clears
+                if (clearFlashAlpha > 0.01f) {
+                    val flashColor = when {
+                        clearSize.intValue >= 4 -> Color(0xFFF4D03F)
+                        clearSize.intValue >= 3 -> Color(0xFFFF9F43)
+                        clearSize.intValue >= 2 -> Color(0xFF4ECDC4)
+                        else -> Color.White
+                    }
+                    Canvas(Modifier.matchParentSize()) {
+                        val a = clearFlashAlpha.coerceIn(0f, 1f)
+                        val edgeW = size.width * 0.12f; val edgeH = size.height * 0.06f
+                        drawRect(Brush.horizontalGradient(listOf(flashColor.copy(a), Color.Transparent)), Offset.Zero, Size(edgeW, size.height))
+                        drawRect(Brush.horizontalGradient(listOf(Color.Transparent, flashColor.copy(a))), Offset(size.width - edgeW, 0f), Size(edgeW, size.height))
+                        drawRect(Brush.verticalGradient(listOf(flashColor.copy(a * 0.7f), Color.Transparent)), Offset.Zero, Size(size.width, edgeH))
+                        drawRect(Brush.verticalGradient(listOf(Color.Transparent, flashColor.copy(a * 0.7f))), Offset(0f, size.height - edgeH), Size(size.width, edgeH))
+                    }
+                }
+            }
+
+            // Right panel — Info or Controls based on handedness
+            Box(Modifier.weight(1f).fillMaxHeight(), Alignment.Center) {
+                if (!lh) LandInfo(gs, animatedScore, isDark, onPause, onSet)
+                else LandCtrl(dp, isDark, onHD, onHold, onLP, onLR, onRP, onRR, onDP, onDR, onRotate, onPause, onSet)
+            }
+        }
     }
 }
 
-@Composable private fun LandInfo(gs: GameState, onPause: () -> Unit, onSet: () -> Unit) {
+@Composable private fun LandInfo(gs: GameState, animatedScore: Int, isDark: Boolean, onPause: () -> Unit, onSet: () -> Unit) {
     val theme = LocalGameTheme.current
-    Column(Modifier.fillMaxHeight().padding(4.dp), Arrangement.SpaceEvenly, Alignment.CenterHorizontally) {
-        ScoreBlock(gs.score, gs.level, gs.lines)
-        Column(horizontalAlignment = Alignment.CenterHorizontally) { Tag("HOLD"); HoldPiecePreview(gs.holdPiece?.shape, gs.holdUsed, Modifier.size(44.dp)) }
+    val textColor = if (isDark) Color.White else Color.Black
+    Column(Modifier.fillMaxHeight()
+        .background((if (isDark) Color.Black else Color.White).copy(0.3f), RoundedCornerShape(12.dp))
+        .padding(8.dp),
+        Arrangement.SpaceEvenly, Alignment.CenterHorizontally) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Tag("NEXT")
-            gs.nextPieces.take(3).forEachIndexed { i, p -> NextPiecePreview(p.shape, Modifier.size(when(i){0->40.dp;1->32.dp;else->26.dp}), when(i){0->1f;1->0.6f;else->0.35f}) }
+            Text("SCORE", fontSize = 7.sp, color = textColor.copy(0.4f), fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+            Text(animatedScore.toString().padStart(7, '0'), fontSize = 16.sp, fontWeight = FontWeight.Bold,
+                fontFamily = FontFamily.Monospace, color = theme.accentColor, letterSpacing = 1.sp)
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) { ActionButton("PAUSE", onPause, width = 64.dp, height = 28.dp); ActionButton("...", onSet, width = 36.dp, height = 28.dp, backgroundColor = LocalGameTheme.current.buttonSecondary) }
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("LVL", fontSize = 7.sp, color = textColor.copy(0.4f), fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                Text("${gs.level}", fontSize = 18.sp, fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace, color = theme.accentColor)
+            }
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("LINES", fontSize = 7.sp, color = textColor.copy(0.4f), fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                Text("${gs.lines}", fontSize = 18.sp, fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace, color = textColor.copy(0.7f))
+            }
+        }
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text("HOLD", fontSize = 7.sp, color = textColor.copy(0.45f), fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+            HoldPiecePreview(gs.holdPiece?.shape, gs.holdUsed, Modifier.size(48.dp))
+        }
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text("NEXT", fontSize = 7.sp, color = textColor.copy(0.45f), fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+            Spacer(Modifier.height(2.dp))
+            gs.nextPieces.take(3).forEachIndexed { i, p ->
+                NextPiecePreview(p.shape, Modifier.size(when(i){0->44.dp;1->34.dp;else->28.dp}).padding(1.dp),
+                    when(i){0->1f;1->0.6f;else->0.35f})
+            }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            ActionButton("PAUSE", onPause, width = 68.dp, height = 30.dp)
+            ActionButton("...", onSet, width = 38.dp, height = 30.dp, backgroundColor = LocalGameTheme.current.buttonSecondary)
+        }
     }
 }
 
 @Composable private fun LandCtrl(
-    dp: DPadStyle, onHD: () -> Unit, onHold: () -> Unit,
+    dp: DPadStyle, isDark: Boolean, onHD: () -> Unit, onHold: () -> Unit,
     onLP: () -> Unit, onLR: () -> Unit, onRP: () -> Unit, onRR: () -> Unit,
-    onDP: () -> Unit, onDR: () -> Unit, onRotate: () -> Unit, onPause: () -> Unit
+    onDP: () -> Unit, onDR: () -> Unit, onRotate: () -> Unit, onPause: () -> Unit, onSet: () -> Unit
 ) {
-    Column(Modifier.fillMaxHeight().padding(4.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.SpaceEvenly) {
-        ActionButton("HOLD", onHold, width = 80.dp, height = 34.dp)
-        DPad(54.dp, rotateInCenter = dp == DPadStyle.ROTATE_CENTRE, onUpPress = onHD, onDownPress = onDP, onDownRelease = onDR, onLeftPress = onLP, onLeftRelease = onLR, onRightPress = onRP, onRightRelease = onRR, onRotate = onRotate)
-        if (dp == DPadStyle.STANDARD) RotateButton(onRotate, 64.dp)
-        ActionButton("PAUSE", onPause, width = 80.dp, height = 34.dp)
+    Column(Modifier.fillMaxHeight()
+        .background((if (isDark) Color.Black else Color.White).copy(0.2f), RoundedCornerShape(12.dp))
+        .padding(8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.SpaceEvenly) {
+        ActionButton("HOLD", onHold, width = 84.dp, height = 36.dp)
+        DPad(58.dp, rotateInCenter = dp == DPadStyle.ROTATE_CENTRE, onUpPress = onHD, onDownPress = onDP, onDownRelease = onDR, onLeftPress = onLP, onLeftRelease = onLR, onRightPress = onRP, onRightRelease = onRR, onRotate = onRotate)
+        if (dp == DPadStyle.STANDARD) RotateButton(onRotate, 68.dp)
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            ActionButton("PAUSE", onPause, width = 68.dp, height = 30.dp)
+            ActionButton("...", onSet, width = 38.dp, height = 30.dp, backgroundColor = LocalGameTheme.current.buttonSecondary)
+        }
     }
 }
 
@@ -1338,18 +1457,26 @@ fun GameScreen(
     onDP: () -> Unit, onDR: () -> Unit, onRotate: () -> Unit,
     onPause: () -> Unit, onSet: () -> Unit, onStart: () -> Unit, status: GameStatus
 ) {
+    val lh = LocalLeftHanded.current
     Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), Arrangement.SpaceBetween, Alignment.CenterVertically) {
-        // Left side: DPad with HOLD button tucked in upper-right
-        Box {
-            DPad(56.dp, rotateInCenter = dp == DPadStyle.ROTATE_CENTRE,
-                onUpPress = onHD, onDownPress = onDP, onDownRelease = onDR,
-                onLeftPress = onLP, onLeftRelease = onLR, onRightPress = onRP, onRightRelease = onRR, onRotate = onRotate)
-            // HOLD button — between UP and RIGHT
-            Box(Modifier.align(Alignment.TopEnd).offset(x = 8.dp, y = (-2).dp)) {
+        // Left side: DPad (or Rotate if left-handed)
+        if (!lh) {
+            Box {
+                DPad(56.dp, rotateInCenter = dp == DPadStyle.ROTATE_CENTRE,
+                    onUpPress = onHD, onDownPress = onDP, onDownRelease = onDR,
+                    onLeftPress = onLP, onLeftRelease = onLR, onRightPress = onRP, onRightRelease = onRR, onRotate = onRotate)
+                Box(Modifier.align(Alignment.TopEnd).offset(x = 8.dp, y = (-2).dp)) {
+                    ActionButton("HOLD", onHold, width = 52.dp, height = 26.dp)
+                }
+            }
+        } else {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                if (dp == DPadStyle.STANDARD) RotateButton(onRotate, 72.dp) else Spacer(Modifier.size(72.dp))
+                Spacer(Modifier.height(2.dp))
                 ActionButton("HOLD", onHold, width = 52.dp, height = 26.dp)
             }
         }
-        // Centre: PAUSE + menu only
+        // Centre: PAUSE + menu
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
             ActionButton(
                 if (status == GameStatus.MENU) "START" else "PAUSE",
@@ -1358,8 +1485,14 @@ fun GameScreen(
             )
             ActionButton("...", onSet, width = 48.dp, height = 24.dp, backgroundColor = LocalGameTheme.current.buttonSecondary)
         }
-        // Rotate — bigger
-        if (dp == DPadStyle.STANDARD) RotateButton(onRotate, 72.dp) else Spacer(Modifier.size(72.dp))
+        // Right side: Rotate (or DPad if left-handed)
+        if (!lh) {
+            if (dp == DPadStyle.STANDARD) RotateButton(onRotate, 72.dp) else Spacer(Modifier.size(72.dp))
+        } else {
+            DPad(56.dp, rotateInCenter = dp == DPadStyle.ROTATE_CENTRE,
+                onUpPress = onHD, onDownPress = onDP, onDownRelease = onDR,
+                onLeftPress = onLP, onLeftRelease = onLR, onRightPress = onRP, onRightRelease = onRR, onRotate = onRotate)
+        }
     }
 }
 
@@ -1370,10 +1503,16 @@ fun GameScreen(
     onDP: () -> Unit, onDR: () -> Unit, onRotate: () -> Unit,
     onPause: () -> Unit, onSet: () -> Unit, onStart: () -> Unit, status: GameStatus
 ) {
+    val lh = LocalLeftHanded.current
     Row(Modifier.fillMaxWidth().padding(horizontal = 2.dp, vertical = 2.dp), Arrangement.SpaceBetween, Alignment.CenterVertically) {
-        DPad(50.dp, rotateInCenter = dp == DPadStyle.ROTATE_CENTRE,
-            onUpPress = onHD, onDownPress = onDP, onDownRelease = onDR,
-            onLeftPress = onLP, onLeftRelease = onLR, onRightPress = onRP, onRightRelease = onRR, onRotate = onRotate)
+        // Left side
+        if (!lh) {
+            DPad(50.dp, rotateInCenter = dp == DPadStyle.ROTATE_CENTRE,
+                onUpPress = onHD, onDownPress = onDP, onDownRelease = onDR,
+                onLeftPress = onLP, onLeftRelease = onLR, onRightPress = onRP, onRightRelease = onRR, onRotate = onRotate)
+        } else {
+            if (dp == DPadStyle.STANDARD) RotateButton(onRotate, 60.dp) else Spacer(Modifier.size(60.dp))
+        }
         // Centre: PAUSE/START + SETTINGS only (no HOLD)
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
             ActionButton(
@@ -1383,8 +1522,14 @@ fun GameScreen(
             )
             ActionButton("...", onSet, width = 42.dp, height = 22.dp, backgroundColor = LocalGameTheme.current.buttonSecondary)
         }
-        // Rotate
-        if (dp == DPadStyle.STANDARD) RotateButton(onRotate, 60.dp) else Spacer(Modifier.size(60.dp))
+        // Right side
+        if (!lh) {
+            if (dp == DPadStyle.STANDARD) RotateButton(onRotate, 60.dp) else Spacer(Modifier.size(60.dp))
+        } else {
+            DPad(50.dp, rotateInCenter = dp == DPadStyle.ROTATE_CENTRE,
+                onUpPress = onHD, onDownPress = onDP, onDownRelease = onDR,
+                onLeftPress = onLP, onLeftRelease = onLR, onRightPress = onRP, onRightRelease = onRR, onRotate = onRotate)
+        }
     }
 }
 

@@ -106,7 +106,9 @@ fun SettingsScreen(
     infinityTimer: Int = 0,
     onSetInfinityTimer: (Int) -> Unit = {},
     infinityTimerEnabled: Boolean = false,
-    onSetInfinityTimerEnabled: (Boolean) -> Unit = {}
+    onSetInfinityTimerEnabled: (Boolean) -> Unit = {},
+    leftHanded: Boolean = false,
+    onSetLeftHanded: (Boolean) -> Unit = {}
 ) {
     Box(Modifier.fillMaxSize().background(bg()).systemBarsPadding()) {
         when (page) {
@@ -115,7 +117,7 @@ fun SettingsScreen(
             GameViewModel.SettingsPage.PROFILE -> ProfilePage(playerName, highScore, scoreHistory, onSetPlayerName, onClearHistory) { onNavigate(GameViewModel.SettingsPage.MAIN) }
             GameViewModel.SettingsPage.THEME -> ThemePage(currentTheme, customThemes, multiColorEnabled, pieceMaterial, onSetTheme, onSetMultiColorEnabled, onSetPieceMaterial, onNewTheme, onEditTheme, onDeleteTheme) { onNavigate(GameViewModel.SettingsPage.MAIN) }
             GameViewModel.SettingsPage.THEME_EDITOR -> if (editingTheme != null) ThemeEditorScreen(editingTheme, onUpdateEditingTheme, onSaveTheme) { onNavigate(GameViewModel.SettingsPage.THEME) }
-            GameViewModel.SettingsPage.LAYOUT -> LayoutPage(portraitLayout, landscapeLayout, dpadStyle, buttonStyle, customLayouts, activeCustomLayout, onSetPortraitLayout, onSetLandscapeLayout, onSetDPadStyle, onSetButtonStyle, onNewLayout, onEditLayout, onSelectCustomLayout, onClearCustomLayout, onDeleteLayout, onEditFreeform = { onEditFreeform() }) { onNavigate(GameViewModel.SettingsPage.MAIN) }
+            GameViewModel.SettingsPage.LAYOUT -> LayoutPage(portraitLayout, landscapeLayout, dpadStyle, buttonStyle, customLayouts, activeCustomLayout, onSetPortraitLayout, onSetLandscapeLayout, onSetDPadStyle, onSetButtonStyle, onNewLayout, onEditLayout, onSelectCustomLayout, onClearCustomLayout, onDeleteLayout, leftHanded = leftHanded, onSetLeftHanded = onSetLeftHanded, onEditFreeform = { onEditFreeform() }) { onNavigate(GameViewModel.SettingsPage.MAIN) }
             GameViewModel.SettingsPage.LAYOUT_EDITOR -> if (editingLayout != null) LayoutEditorScreen(editingLayout, currentTheme, portraitLayout, dpadStyle, onUpdateEditingLayout, onSaveLayout) { onNavigate(GameViewModel.SettingsPage.LAYOUT) }
             GameViewModel.SettingsPage.GAMEPLAY -> GameplayPage(difficulty, gameMode, ghostEnabled, levelEventsEnabled, infinityTimer, infinityTimerEnabled, onSetDifficulty, onSetGameMode, onSetGhostEnabled, onSetLevelEventsEnabled, onSetInfinityTimer, onSetInfinityTimerEnabled) { onNavigate(GameViewModel.SettingsPage.MAIN) }
             GameViewModel.SettingsPage.EXPERIENCE -> ExperiencePage(animationStyle, animationDuration, soundEnabled, soundVolume, soundStyle, vibrationEnabled, vibrationIntensity, vibrationStyle, onSetAnimationStyle, onSetAnimationDuration, onSetSoundEnabled, onSetSoundVolume, onSetSoundStyle, onSetVibrationEnabled, onSetVibrationIntensity, onSetVibrationStyle) { onNavigate(GameViewModel.SettingsPage.MAIN) }
@@ -408,6 +410,7 @@ fun SettingsScreen(
 @Composable private fun LayoutPage(p: LayoutPreset, l: LayoutPreset, d: DPadStyle, buttonStyle: String, custom: List<CustomLayoutData>, active: CustomLayoutData?,
                                     onP: (LayoutPreset) -> Unit, onL: (LayoutPreset) -> Unit, onD: (DPadStyle) -> Unit, onSetButtonStyle: (String) -> Unit,
                                     onNew: () -> Unit, onEdit: (CustomLayoutData) -> Unit, onSelect: (CustomLayoutData) -> Unit, onClear: () -> Unit, onDelete: (String) -> Unit,
+                                    leftHanded: Boolean = false, onSetLeftHanded: (Boolean) -> Unit = {},
                                     onEditFreeform: () -> Unit = {}, onBack: () -> Unit) {
     LazyColumn(Modifier.fillMaxSize().padding(20.dp)) {
         item { Header("Layout", onBack) }
@@ -427,6 +430,18 @@ fun SettingsScreen(
         }
         item { Lbl("Landscape") }; items(LayoutPreset.landscapePresets().size) { i -> val x = LayoutPreset.landscapePresets()[i]; Sel(x.displayName, x == l) { onL(x) } }
         item { Lbl("D-Pad Style") }; items(DPadStyle.entries.size) { i -> val x = DPadStyle.entries[i]; Sel(x.displayName, x == d) { onD(x) } }
+        item {
+            Card {
+                Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Left-Handed Mode", color = tx(), fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                        Text("Swaps D-Pad and Rotate button positions in all layouts", color = dim(), fontSize = 11.sp)
+                    }
+                    Switch(checked = leftHanded, onCheckedChange = { onSetLeftHanded(it) },
+                        colors = SwitchDefaults.colors(checkedTrackColor = acc()))
+                }
+            }
+        }
     }
 }
 

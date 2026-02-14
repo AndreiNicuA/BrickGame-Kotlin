@@ -177,6 +177,7 @@ class MainActivity : ComponentActivity() {
             val levelEvents by vm.levelEventsEnabled.collectAsState()
             val buttonStyle by vm.buttonStyle.collectAsState()
             val controllerLayoutMode by vm.controllerLayout.collectAsState()
+            val leftHanded by vm.leftHanded.collectAsState()
             val infinityTimer by vm.infinityTimer.collectAsState()
             val infinityTimerEnabled by vm.infinityTimerEnabled.collectAsState()
             val timerExpired by vm.timerExpired.collectAsState()
@@ -394,7 +395,9 @@ class MainActivity : ComponentActivity() {
                             infinityTimer = infinityTimer,
                             onSetInfinityTimer = vm::setInfinityTimer,
                             infinityTimerEnabled = infinityTimerEnabled,
-                            onSetInfinityTimerEnabled = vm::setInfinityTimerEnabled
+                            onSetInfinityTimerEnabled = vm::setInfinityTimerEnabled,
+                            leftHanded = leftHanded,
+                            onSetLeftHanded = vm::setLeftHanded
                         )
                     }
 
@@ -432,6 +435,7 @@ class MainActivity : ComponentActivity() {
                                 pieceMaterial = pieceMaterial,
                                 highContrast = highContrast,
                                 uiScale = uiScale,
+                                leftHanded = leftHanded,
                                 onCloseApp = { this@MainActivity.finishAndRemoveTask() },
                                 showOnboarding = showOnboarding,
                                 onDismissOnboarding = vm::dismissOnboarding,
