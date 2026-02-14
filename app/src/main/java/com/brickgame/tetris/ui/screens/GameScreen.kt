@@ -1493,9 +1493,24 @@ fun GameScreen(
         // Board — rotated or normal, fills entire screen
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             if (isRotated) {
-                // Rotated: swap dimensions so board fills screen horizontally
+                // Rotated: swap dimensions, scale up to fill entire screen
+                // Board aspect ratio is 10:20 (0.5). After rotation it becomes 20:10 (2.0)
+                // Screen aspect ratio is screenW:screenH. We want to fill it completely.
+                val boardAspect = 2f // 20 wide : 10 tall after rotation
+                val screenAspect = screenW / screenH
+                // Use whichever dimension fills the screen
+                val containerW: Dp
+                val containerH: Dp
+                if (screenAspect > boardAspect) {
+                    // Screen is wider than board — fill height, extend width
+                    containerH = screenW  // pre-rotation height = screen width
+                    containerW = screenH  // pre-rotation width = screen height
+                } else {
+                    containerH = screenW
+                    containerW = screenH
+                }
                 Box(Modifier
-                    .width(screenH).height(screenW)
+                    .width(containerW).height(containerH)
                     .graphicsLayer {
                         rotationZ = animatedRotation
                         translationX = screenShakeY
@@ -1613,15 +1628,10 @@ fun GameScreen(
                     width = 78.dp, height = 34.dp)
                 Spacer(Modifier.height(4.dp))
                 ActionButton("···", onSet, width = 48.dp, height = 24.dp, backgroundColor = theme.buttonSecondary)
-            }
-        }
-
-        // Board rotation toggle button — bottom center, ghost outline
-        CompositionLocalProvider(LocalButtonShape provides ButtonShape.OUTLINE) {
-            Box(Modifier.align(Alignment.BottomCenter).padding(bottom = 8.dp).alpha(0.30f)) {
+                Spacer(Modifier.height(4.dp))
                 ActionButton(if (isRotated) "↻" else "↺",
                     { boardRotation = if (isRotated) 0f else -90f },
-                    width = 44.dp, height = 28.dp, backgroundColor = theme.buttonSecondary)
+                    width = 48.dp, height = 28.dp, backgroundColor = Color(0xFFCC3333))
             }
         }
     }
