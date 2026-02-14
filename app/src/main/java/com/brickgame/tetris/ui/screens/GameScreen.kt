@@ -1493,24 +1493,9 @@ fun GameScreen(
         // Board — rotated or normal, fills entire screen
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             if (isRotated) {
-                // Rotated: swap dimensions, scale up to fill entire screen
-                // Board aspect ratio is 10:20 (0.5). After rotation it becomes 20:10 (2.0)
-                // Screen aspect ratio is screenW:screenH. We want to fill it completely.
-                val boardAspect = 2f // 20 wide : 10 tall after rotation
-                val screenAspect = screenW / screenH
-                // Use whichever dimension fills the screen
-                val containerW: Dp
-                val containerH: Dp
-                if (screenAspect > boardAspect) {
-                    // Screen is wider than board — fill height, extend width
-                    containerH = screenW  // pre-rotation height = screen width
-                    containerW = screenH  // pre-rotation width = screen height
-                } else {
-                    containerH = screenW
-                    containerW = screenH
-                }
+                // Rotated: swap dimensions so the tall board fills screen horizontally
                 Box(Modifier
-                    .width(containerW).height(containerH)
+                    .width(screenH).height(screenW)
                     .graphicsLayer {
                         rotationZ = animatedRotation
                         translationX = screenShakeY
