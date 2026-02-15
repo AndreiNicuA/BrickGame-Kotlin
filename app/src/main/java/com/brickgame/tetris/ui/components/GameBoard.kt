@@ -16,6 +16,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
 import com.brickgame.tetris.game.PieceState
 import com.brickgame.tetris.game.TetrisGame
@@ -653,7 +654,18 @@ private fun DrawScope.drawGhost(piece: PieceState, ghostY: Int, cellSize: Float,
 // ===== Piece Previews =====
 @Composable
 fun NextPiecePreview(shape: List<List<Int>>?, modifier: Modifier = Modifier, alpha: Float = 1f) {
-    Box(modifier.clip(RoundedCornerShape(6.dp)).background(Color.White.copy(alpha = 0.08f)).padding(4.dp)) {
+    // Animate piece transitions — slide-in from top + crossfade
+    val shapeKey = shape?.flatten()?.hashCode() ?: 0
+    val transition = updateTransition(targetState = shapeKey, label = "nextPiece")
+    val slideOffset by transition.animateFloat(label = "nSlide",
+        transitionSpec = { tween(180, easing = FastOutSlowInEasing) }) { if (it == shapeKey) 0f else -8f }
+    val fadeAlpha by transition.animateFloat(label = "nFade",
+        transitionSpec = { tween(140) }) { if (it == shapeKey) 1f else 0.3f }
+    val pieceScale by transition.animateFloat(label = "nScale",
+        transitionSpec = { tween(180, easing = FastOutSlowInEasing) }) { if (it == shapeKey) 1f else 0.85f }
+
+    Box(modifier.clip(RoundedCornerShape(6.dp)).background(Color.White.copy(alpha = 0.08f)).padding(4.dp)
+        .graphicsLayer { translationY = slideOffset; scaleX = pieceScale; scaleY = pieceScale; this.alpha = fadeAlpha }) {
         if (shape != null) Canvas(Modifier.fillMaxSize()) {
             val rows = shape.size; val cols = shape.maxOfOrNull { it.size } ?: 0; if (rows == 0 || cols == 0) return@Canvas
             val cs = minOf(size.width / cols, size.height / rows); val ox = (size.width - cs * cols) / 2; val oy = (size.height - cs * rows) / 2; val g = cs * 0.1f; val c = cs * 0.2f
@@ -667,7 +679,16 @@ fun NextPiecePreview(shape: List<List<Int>>?, modifier: Modifier = Modifier, alp
 @Composable
 fun HoldPiecePreview(shape: List<List<Int>>?, isUsed: Boolean = false, modifier: Modifier = Modifier) {
     val a = if (isUsed) 0.3f else 1f
-    Box(modifier.clip(RoundedCornerShape(6.dp)).background(Color.White.copy(alpha = 0.08f)).padding(4.dp)) {
+    // Animate hold swap — scale bounce + crossfade
+    val shapeKey = shape?.flatten()?.hashCode() ?: 0
+    val transition = updateTransition(targetState = shapeKey, label = "holdPiece")
+    val holdScale by transition.animateFloat(label = "hScale",
+        transitionSpec = { tween(200, easing = FastOutSlowInEasing) }) { if (it == shapeKey) 1f else 0.7f }
+    val holdAlpha by transition.animateFloat(label = "hAlpha",
+        transitionSpec = { tween(160) }) { if (it == shapeKey) 1f else 0.2f }
+
+    Box(modifier.clip(RoundedCornerShape(6.dp)).background(Color.White.copy(alpha = 0.08f)).padding(4.dp)
+        .graphicsLayer { scaleX = holdScale; scaleY = holdScale; this.alpha = holdAlpha }) {
         if (shape != null) Canvas(Modifier.fillMaxSize()) {
             val rows = shape.size; val cols = shape.maxOfOrNull { it.size } ?: 0; if (rows == 0 || cols == 0) return@Canvas
             val cs = minOf(size.width / cols, size.height / rows); val ox = (size.width - cs * cols) / 2; val oy = (size.height - cs * rows) / 2; val g = cs * 0.1f; val c = cs * 0.2f

@@ -89,6 +89,9 @@ class GameEffectsState {
     var shockwaveProgress by mutableFloatStateOf(0f)
     var shockwaveY by mutableFloatStateOf(0.5f)
     var shockwaveCount by mutableIntStateOf(0)
+    // Spawn animation — quick scale + fade on new piece
+    var spawnScale by mutableFloatStateOf(1f)
+    var spawnAlpha by mutableFloatStateOf(1f)
 }
 
 /**
@@ -135,6 +138,23 @@ fun rememberGameEffects(
                 delay(shakeDelay)
             }
             state.screenShakeX = 0f; state.screenShakeY = 0f; state.clearFlashAlpha = 0f
+        }
+    }
+
+    // Spawn animation — quick scale-up + fade-in on new piece spawn
+    LaunchedEffect(gs.spawnEvent) {
+        if (gs.spawnEvent > 0) {
+            state.spawnScale = 0.85f
+            state.spawnAlpha = 0.4f
+            val steps = 8
+            repeat(steps) { i ->
+                val t = (i + 1).toFloat() / steps
+                state.spawnScale = 0.85f + t * 0.15f
+                state.spawnAlpha = 0.4f + t * 0.6f
+                delay(18)
+            }
+            state.spawnScale = 1f
+            state.spawnAlpha = 1f
         }
     }
 
@@ -1023,11 +1043,15 @@ fun GameScreen(
             FallingPiecesBackground(theme, isDark, bgSpeed)
         }
 
+        // Dynamic level tint — subtle hue shift
+        val levelHue = (gs.level * 27f) % 360f
+        val tintColor = if (isDark) Color.hsl(levelHue, 0.25f, 0.06f) else Color.hsl(levelHue, 0.1f, 0.92f)
+
         Column(Modifier.fillMaxSize()) {
-            // Info bar — Modern style
+            // Info bar — Modern style with dynamic tint
             Row(Modifier.fillMaxWidth()
                 .shadow(6.dp)
-                .background((if (isDark) Color.Black else Color.White).copy(0.6f))
+                .background(tintColor.copy(0.7f))
                 .padding(horizontal = 6.dp, vertical = 3.dp),
                 verticalAlignment = Alignment.CenterVertically) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -1583,31 +1607,13 @@ fun GameScreen(
     val isDark = com.brickgame.tetris.ui.theme.LocalIsDarkMode.current
     val lh = LocalLeftHanded.current
     val animatedScore by animateIntAsState(gs.score, animationSpec = tween(300), label = "lsscore")
-
-    // Screen shake
-    var screenShakeX by remember { mutableFloatStateOf(0f) }
-    var screenShakeY by remember { mutableFloatStateOf(0f) }
-    var clearFlashAlpha by remember { mutableFloatStateOf(0f) }
-    val clearSize = remember { mutableIntStateOf(0) }
-    LaunchedEffect(gs.clearedLineRows) {
-        if (gs.clearedLineRows.isNotEmpty()) {
-            clearSize.intValue = gs.clearedLineRows.size
-            clearFlashAlpha = when (gs.clearedLineRows.size) { 4 -> 0.6f; 3 -> 0.4f; 2 -> 0.25f; else -> 0.12f }
-            val shakeIntensity = when (gs.clearedLineRows.size) { 4 -> 14f; 3 -> 9f; 2 -> 5f; else -> 2f }
-            val rng = kotlin.random.Random
-            repeat(14) { i ->
-                val decay = 1f - i / 14f
-                screenShakeX = (rng.nextFloat() - 0.5f) * shakeIntensity * decay * 2f
-                screenShakeY = (rng.nextFloat() - 0.5f) * shakeIntensity * decay * 2f
-                clearFlashAlpha *= 0.82f
-                delay(20)
-            }
-            screenShakeX = 0f; screenShakeY = 0f; clearFlashAlpha = 0f
-        }
-    }
+    val fx = rememberGameEffects(gs, shakeSteps = 14, shakeDelay = 20L, shakeMultiplier = 0.7f, flashMultiplier = 0.85f)
 
     val bgSpeed = if (gs.level >= 10) 1f + (gs.level - 10) * 0.15f else 1f
     val textColor = if (isDark) Color.White else Color.Black
+    // Dynamic level tint
+    val levelHue = (gs.level * 27f) % 360f
+    val infoPanelTint = if (isDark) Color.hsl(levelHue, 0.2f, 0.08f) else Color.hsl(levelHue, 0.1f, 0.9f)
 
     // DPad block
     val dpadBlock: @Composable () -> Unit = {
@@ -1651,35 +1657,19 @@ fun GameScreen(
             Row(Modifier.weight(1f).fillMaxHeight()) {
                 // Board with shake + effects — fills full height
                 Box(Modifier.weight(1f).fillMaxHeight()
-                    .graphicsLayer { translationX = screenShakeX; translationY = screenShakeY }) {
+                    .graphicsLayer { translationX = fx.screenShakeX; translationY = fx.screenShakeY }) {
                     GameBoard(gs.board, Modifier.fillMaxSize().alpha(boardDimAlpha), gs.currentPiece, gs.ghostY, ghost,
                         gs.clearedLineRows, anim, ad, multiColor = LocalMultiColor.current,
                         hardDropTrail = gs.hardDropTrail, lockEvent = gs.lockEvent,
                         pieceMaterial = LocalPieceMaterial.current, highContrast = LocalHighContrast.current,
                         boardOpacity = if (isDark) 0.12f else 0.18f, gameLevel = gs.level)
 
-                    // Edge glow on line clears
-                    if (clearFlashAlpha > 0.01f) {
-                        val flashColor = when {
-                            clearSize.intValue >= 4 -> Color(0xFFF4D03F)
-                            clearSize.intValue >= 3 -> Color(0xFFFF9F43)
-                            clearSize.intValue >= 2 -> Color(0xFF4ECDC4)
-                            else -> Color.White
-                        }
-                        Canvas(Modifier.matchParentSize()) {
-                            val a = clearFlashAlpha.coerceIn(0f, 1f)
-                            val edgeW = size.width * 0.10f; val edgeH = size.height * 0.05f
-                            drawRect(Brush.horizontalGradient(listOf(flashColor.copy(a), Color.Transparent)), Offset.Zero, Size(edgeW, size.height))
-                            drawRect(Brush.horizontalGradient(listOf(Color.Transparent, flashColor.copy(a))), Offset(size.width - edgeW, 0f), Size(edgeW, size.height))
-                            drawRect(Brush.verticalGradient(listOf(flashColor.copy(a * 0.7f), Color.Transparent)), Offset.Zero, Size(size.width, edgeH))
-                            drawRect(Brush.verticalGradient(listOf(Color.Transparent, flashColor.copy(a * 0.7f))), Offset(0f, size.height - edgeH), Size(size.width, edgeH))
-                        }
-                    }
+                    GameEffectsLayer(fx, gs, Modifier.matchParentSize())
                 }
 
-                // Vertical info panel — flush against board
+                // Vertical info panel — flush against board, with dynamic level tint
                 Column(Modifier.fillMaxHeight().width(90.dp)
-                    .background((if (isDark) Color.Black else Color.White).copy(0.45f), RoundedCornerShape(topEnd = 6.dp, bottomEnd = 6.dp))
+                    .background(infoPanelTint.copy(0.55f), RoundedCornerShape(topEnd = 6.dp, bottomEnd = 6.dp))
                     .padding(horizontal = 6.dp, vertical = 6.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.SpaceEvenly) {
@@ -2159,8 +2149,16 @@ private fun FallingPiecesBackground(theme: com.brickgame.tetris.ui.theme.GameThe
 }
 
 @Composable private fun PauseOverlay(onResume: () -> Unit, onSet: () -> Unit, onQuit: () -> Unit) {
-    Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.7f)), Alignment.Center) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+    // Entrance animation — fade in + slide up
+    var visible by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { visible = true }
+    val bgAlpha by animateFloatAsState(if (visible) 0.75f else 0f, tween(300), label = "pbg")
+    val contentAlpha by animateFloatAsState(if (visible) 1f else 0f, tween(350, delayMillis = 80), label = "pca")
+    val slideUp by animateFloatAsState(if (visible) 0f else 40f, tween(350, delayMillis = 80, easing = FastOutSlowInEasing), label = "psl")
+
+    Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = bgAlpha)), Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.graphicsLayer { translationY = slideUp; alpha = contentAlpha }) {
             Text("PAUSED", fontSize = 28.sp, fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace, color = Color.White, letterSpacing = 4.sp)
             Spacer(Modifier.height(28.dp)); ActionButton("RESUME", onResume, width = 160.dp, height = 48.dp)
             Spacer(Modifier.height(12.dp)); ActionButton("SETTINGS", onSet, width = 160.dp, height = 42.dp, backgroundColor = LocalGameTheme.current.buttonSecondary)
@@ -2186,29 +2184,52 @@ private fun FallingPiecesBackground(theme: com.brickgame.tetris.ui.theme.GameThe
 
 @Composable private fun GameOverOverlay(score: Int, level: Int, lines: Int, onRestart: () -> Unit, onMenu: () -> Unit, onLeave: () -> Unit) {
     val theme = LocalGameTheme.current
-    // New high score flash
+    // Entrance animation — staggered reveal
+    var visible by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { visible = true }
+    val bgAlpha by animateFloatAsState(if (visible) 0.88f else 0f, tween(400), label = "gobg")
+    val titleAlpha by animateFloatAsState(if (visible) 1f else 0f, tween(350, delayMillis = 100), label = "gotitle")
+    val titleScale by animateFloatAsState(if (visible) 1f else 1.4f, tween(500, delayMillis = 100, easing = FastOutSlowInEasing), label = "gots")
+    val statsAlpha by animateFloatAsState(if (visible) 1f else 0f, tween(300, delayMillis = 350), label = "gostats")
+    val statsSlide by animateFloatAsState(if (visible) 0f else 30f, tween(300, delayMillis = 350, easing = FastOutSlowInEasing), label = "gossl")
+    val buttonsAlpha by animateFloatAsState(if (visible) 1f else 0f, tween(300, delayMillis = 550), label = "gobtn")
+
+    // Title pulse
     val inf = rememberInfiniteTransition(label = "go")
     val titlePulse by inf.animateFloat(0.8f, 1f, infiniteRepeatable(tween(600), RepeatMode.Reverse), label = "gp")
-    Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.85f)), Alignment.Center) {
+    Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = bgAlpha)), Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.verticalScroll(rememberScrollState())) {
-            Text("GAME", fontSize = 34.sp, fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace,
-                color = Color(0xFFFF4444).copy(alpha = titlePulse), letterSpacing = 6.sp)
-            Text("OVER", fontSize = 34.sp, fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace,
-                color = Color(0xFFFF4444).copy(alpha = titlePulse), letterSpacing = 6.sp)
+            // Title with scale entrance
+            Column(horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.graphicsLayer { scaleX = titleScale; scaleY = titleScale; alpha = titleAlpha }) {
+                Text("GAME", fontSize = 34.sp, fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace,
+                    color = Color(0xFFFF4444).copy(alpha = titlePulse), letterSpacing = 6.sp)
+                Text("OVER", fontSize = 34.sp, fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace,
+                    color = Color(0xFFFF4444).copy(alpha = titlePulse), letterSpacing = 6.sp)
+            }
             Spacer(Modifier.height(16.dp))
-            // Score with glow effect
-            Text(score.toString(), fontSize = 32.sp, fontFamily = FontFamily.Monospace, color = theme.accentColor, fontWeight = FontWeight.ExtraBold)
-            Spacer(Modifier.height(8.dp))
-            // Stats breakdown
-            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                StatChip("LEVEL", "$level")
-                StatChip("LINES", "$lines")
-                StatChip("LPM", if (level > 0) "${"%.1f".format(lines.toFloat() / level)}" else "0")
+            // Score + stats with slide-up entrance
+            Column(horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.graphicsLayer { translationY = statsSlide; alpha = statsAlpha }) {
+                // Animated score counter
+                val animatedGoScore by animateIntAsState(if (visible) score else 0, tween(800, delayMillis = 400), label = "gosc")
+                Text(animatedGoScore.toString(), fontSize = 32.sp, fontFamily = FontFamily.Monospace, color = theme.accentColor, fontWeight = FontWeight.ExtraBold)
+                Spacer(Modifier.height(8.dp))
+                // Stats breakdown
+                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    StatChip("LEVEL", "$level")
+                    StatChip("LINES", "$lines")
+                    StatChip("LPM", if (level > 0) "${"%.1f".format(lines.toFloat() / level)}" else "0")
+                }
             }
             Spacer(Modifier.height(24.dp))
-            ActionButton("AGAIN", onRestart, width = 160.dp, height = 48.dp, backgroundColor = theme.accentColor)
-            Spacer(Modifier.height(10.dp))
-            ActionButton("LEAVE", onLeave, width = 160.dp, height = 42.dp, backgroundColor = Color(0xFFB91C1C))
+            // Buttons with fade-in
+            Column(horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.graphicsLayer { alpha = buttonsAlpha }) {
+                ActionButton("AGAIN", onRestart, width = 160.dp, height = 48.dp, backgroundColor = theme.accentColor)
+                Spacer(Modifier.height(10.dp))
+                ActionButton("LEAVE", onLeave, width = 160.dp, height = 42.dp, backgroundColor = Color(0xFFB91C1C))
+            }
             Spacer(Modifier.height(16.dp))
         }
     }
