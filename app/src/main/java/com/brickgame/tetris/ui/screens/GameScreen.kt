@@ -630,7 +630,7 @@ fun GameScreen(
     val classicAnim = AnimationStyle.RETRO
 
     // === Game Over curtain animation ===
-    // When game over: fill board bottom→top, then show overlay
+    // When game over: fill board bottom���top, then show overlay
     var curtainRow by remember { mutableIntStateOf(-1) }
     var showGameOverText by remember { mutableStateOf(false) }
     var curtainPhase by remember { mutableIntStateOf(0) } // 0=idle, 1=filling, 2=clearing, 3=done
@@ -1989,55 +1989,92 @@ fun GameScreen(
 
 // === Overlays ===
 @Composable private fun MenuOverlay(hs: Int, scoreHistory: List<com.brickgame.tetris.data.ScoreEntry>, onStart: () -> Unit, onSet: () -> Unit) {
-    // Enhanced: mini leaderboard below high score
     val theme = LocalGameTheme.current
     val isDark = com.brickgame.tetris.ui.theme.LocalIsDarkMode.current
     val bgColor = if (isDark) theme.backgroundColor else Color(0xFFF2F2F2)
+
+    // Staggered entrance animation
+    var visible by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { visible = true }
+    val titleAlpha by animateFloatAsState(if (visible) 1f else 0f, tween(500), label = "mta")
+    val titleScale by animateFloatAsState(if (visible) 1f else 0.8f, tween(600, easing = FastOutSlowInEasing), label = "mts")
+    val scoreAlpha by animateFloatAsState(if (visible) 1f else 0f, tween(400, delayMillis = 200), label = "msa")
+    val buttonsAlpha by animateFloatAsState(if (visible) 1f else 0f, tween(400, delayMillis = 400), label = "mba")
+    val buttonsSlide by animateFloatAsState(if (visible) 0f else 30f, tween(400, delayMillis = 400, easing = FastOutSlowInEasing), label = "mbs")
+
+    // Pulsing play button glow
+    val inf = rememberInfiniteTransition(label = "menuPulse")
+    val playPulse by inf.animateFloat(1f, 1.06f, infiniteRepeatable(tween(1200, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "pp")
+    val playGlow by inf.animateFloat(0.3f, 0.8f, infiniteRepeatable(tween(1200), RepeatMode.Reverse), label = "pg")
+
     Box(Modifier.fillMaxSize().background(bgColor)) {
-        // Falling tetris pieces background
         FallingPiecesBackground(theme, isDark)
-        // Content
         Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-            Text("BRICK", fontSize = 38.sp, fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace,
-                color = if (isDark) theme.textPrimary.copy(alpha = 0.9f) else Color(0xFF2A2A2A), letterSpacing = 8.sp)
-            Text("GAME", fontSize = 38.sp, fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace,
-                color = if (isDark) theme.accentColor else Color(0xFFB8860B), letterSpacing = 8.sp)
+            // Title with entrance animation
+            Column(horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.graphicsLayer { scaleX = titleScale; scaleY = titleScale; alpha = titleAlpha }) {
+                Text("BRICK", fontSize = 38.sp, fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace,
+                    color = if (isDark) theme.textPrimary.copy(alpha = 0.9f) else Color(0xFF2A2A2A), letterSpacing = 8.sp)
+                Text("GAME", fontSize = 38.sp, fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace,
+                    color = if (isDark) theme.accentColor else Color(0xFFB8860B), letterSpacing = 8.sp)
+            }
             Spacer(Modifier.height(32.dp))
+            // High score with fade-in
             if (hs > 0) {
-                val bestEntry = scoreHistory.maxByOrNull { it.score }
-                Text("$hs", fontSize = 28.sp, fontFamily = FontFamily.Monospace,
-                    color = if (isDark) theme.accentColor else Color(0xFFB8860B), fontWeight = FontWeight.Bold)
-                if (bestEntry != null) {
-                    val sdf = java.text.SimpleDateFormat("dd.MM.yyyy", java.util.Locale.getDefault())
-                    val dateStr = sdf.format(java.util.Date(bestEntry.timestamp))
-                    Text("${bestEntry.playerName} · $dateStr", fontSize = 11.sp, fontFamily = FontFamily.Monospace,
-                        color = if (isDark) theme.textSecondary else Color(0xFF666666))
+                Column(horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.graphicsLayer { alpha = scoreAlpha }) {
+                    val bestEntry = scoreHistory.maxByOrNull { it.score }
+                    Text("$hs", fontSize = 28.sp, fontFamily = FontFamily.Monospace,
+                        color = if (isDark) theme.accentColor else Color(0xFFB8860B), fontWeight = FontWeight.Bold)
+                    if (bestEntry != null) {
+                        val sdf = java.text.SimpleDateFormat("dd.MM.yyyy", java.util.Locale.getDefault())
+                        val dateStr = sdf.format(java.util.Date(bestEntry.timestamp))
+                        Text("${bestEntry.playerName} · $dateStr", fontSize = 11.sp, fontFamily = FontFamily.Monospace,
+                            color = if (isDark) theme.textSecondary else Color(0xFF666666))
+                    }
+                    Spacer(Modifier.height(4.dp))
+                    Text("HIGH SCORE", fontSize = 10.sp, fontFamily = FontFamily.Monospace,
+                        color = if (isDark) theme.textSecondary.copy(alpha = 0.6f) else Color(0xFF999999), letterSpacing = 4.sp)
                 }
-                Spacer(Modifier.height(4.dp))
-                Text("HIGH SCORE", fontSize = 10.sp, fontFamily = FontFamily.Monospace,
-                    color = if (isDark) theme.textSecondary.copy(alpha = 0.6f) else Color(0xFF999999), letterSpacing = 4.sp)
                 Spacer(Modifier.height(32.dp))
             }
-            ActionButton("PLAY", onStart, width = 180.dp, height = 52.dp,
-                backgroundColor = if (isDark) theme.accentColor else Color(0xFFB8860B))
-            Spacer(Modifier.height(12.dp))
-            ActionButton("SETTINGS", onSet, width = 180.dp, height = 44.dp,
-                backgroundColor = if (isDark) theme.buttonSecondary else Color(0xFFE0E0E0))
-            // Mini leaderboard — top 3 scores
+            // Buttons with slide-up entrance + pulsing PLAY button
+            Column(horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.graphicsLayer { translationY = buttonsSlide; alpha = buttonsAlpha }) {
+                // Pulsing PLAY button with subtle glow
+                val playColor = if (isDark) theme.accentColor else Color(0xFFB8860B)
+                Box(contentAlignment = Alignment.Center) {
+                    // Glow layer behind the button
+                    Box(Modifier.matchParentSize()
+                        .graphicsLayer { scaleX = playPulse + 0.08f; scaleY = playPulse + 0.08f; alpha = playGlow * 0.3f }
+                        .background(playColor.copy(alpha = 0.2f), RoundedCornerShape(12.dp)))
+                    Box(Modifier.graphicsLayer { scaleX = playPulse; scaleY = playPulse }) {
+                        ActionButton("PLAY", onStart, width = 180.dp, height = 52.dp, backgroundColor = playColor)
+                    }
+                }
+                Spacer(Modifier.height(12.dp))
+                ActionButton("SETTINGS", onSet, width = 180.dp, height = 44.dp,
+                    backgroundColor = if (isDark) theme.buttonSecondary else Color(0xFFE0E0E0))
+            }
+            // Mini leaderboard
             if (scoreHistory.size > 1) {
                 Spacer(Modifier.height(20.dp))
-                Text("RECENT BEST", fontSize = 9.sp, fontFamily = FontFamily.Monospace,
-                    color = if (isDark) theme.textSecondary.copy(0.5f) else Color(0xFF999999), letterSpacing = 3.sp)
-                Spacer(Modifier.height(6.dp))
-                val top3 = scoreHistory.sortedByDescending { it.score }.take(3)
-                top3.forEachIndexed { i, entry ->
-                    val medal = when (i) { 0 -> "🥇"; 1 -> "🥈"; 2 -> "🥉"; else -> "" }
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text(medal, fontSize = 14.sp)
-                        Text(entry.score.toString(), fontSize = 14.sp, fontFamily = FontFamily.Monospace,
-                            fontWeight = FontWeight.Bold, color = if (isDark) theme.textPrimary.copy(0.7f) else Color(0xFF444444))
-                        Text("Lv${entry.level}", fontSize = 11.sp, fontFamily = FontFamily.Monospace,
-                            color = if (isDark) theme.textSecondary.copy(0.4f) else Color(0xFF888888))
+                Column(horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.graphicsLayer { alpha = buttonsAlpha }) {
+                    Text("RECENT BEST", fontSize = 9.sp, fontFamily = FontFamily.Monospace,
+                        color = if (isDark) theme.textSecondary.copy(0.5f) else Color(0xFF999999), letterSpacing = 3.sp)
+                    Spacer(Modifier.height(6.dp))
+                    val top3 = scoreHistory.sortedByDescending { it.score }.take(3)
+                    top3.forEachIndexed { i, entry ->
+                        val medal = when (i) { 0 -> "#1"; 1 -> "#2"; 2 -> "#3"; else -> "" }
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text(medal, fontSize = 12.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace,
+                                color = if (isDark) theme.accentColor.copy(0.6f) else Color(0xFFB8860B))
+                            Text(entry.score.toString(), fontSize = 14.sp, fontFamily = FontFamily.Monospace,
+                                fontWeight = FontWeight.Bold, color = if (isDark) theme.textPrimary.copy(0.7f) else Color(0xFF444444))
+                            Text("Lv${entry.level}", fontSize = 11.sp, fontFamily = FontFamily.Monospace,
+                                color = if (isDark) theme.textSecondary.copy(0.4f) else Color(0xFF888888))
+                        }
                     }
                 }
             }

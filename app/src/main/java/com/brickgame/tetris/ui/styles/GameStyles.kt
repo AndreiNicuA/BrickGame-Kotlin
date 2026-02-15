@@ -20,7 +20,8 @@ enum class VibrationStyle(val displayName: String, val description: String) {
     CLASSIC("Classic", "Standard pulse"),
     RETRO("Retro", "Double-tap pattern"),
     MODERN("Modern", "Smooth ramping"),
-    HEAVY("Heavy", "Strong feedback")
+    HEAVY("Heavy", "Strong feedback"),
+    ADAPTIVE("Adaptive", "Intensifies with danger")
 }
 
 /**
@@ -66,8 +67,15 @@ enum class StylePreset(
         VibrationStyle.HEAVY,
         SoundStyle.ARCADE
     ),
+    CYBERPUNK_NEON(
+        "Cyberpunk Neon",
+        "Futuristic with adaptive haptics",
+        AnimationStyle.CYBERPUNK,
+        VibrationStyle.ADAPTIVE,
+        SoundStyle.SYNTHWAVE
+    ),
     SILENT(
-        "🔇 Silent",
+        "Silent",
         "No feedback at all",
         AnimationStyle.NONE,
         VibrationStyle.NONE,

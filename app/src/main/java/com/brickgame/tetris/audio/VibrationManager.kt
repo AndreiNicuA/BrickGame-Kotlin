@@ -32,6 +32,13 @@ class VibrationManager(context: Context) {
     private var enabled: Boolean = true
     private var intensity: Float = 0.7f
     private var vibrationStyle: VibrationStyle = VibrationStyle.CLASSIC
+    /** 0f = safe, 1f = board almost full. Used by ADAPTIVE style to scale intensity. */
+    private var dangerLevel: Float = 0f
+
+    /** Call from ViewModel each tick with current board fill ratio (0-1) */
+    fun setDangerLevel(level: Float) {
+        this.dangerLevel = level.coerceIn(0f, 1f)
+    }
     
     fun setEnabled(enabled: Boolean) {
         this.enabled = enabled
@@ -58,6 +65,7 @@ class VibrationManager(context: Context) {
             VibrationStyle.RETRO -> vibratePattern(longArrayOf(0, 8, 30, 8), false) // double tap
             VibrationStyle.MODERN -> vibrateRamp(15, true)
             VibrationStyle.HEAVY -> vibrateSingle(20, 1.0f)
+            VibrationStyle.ADAPTIVE -> vibrateSingle((5 + dangerLevel * 15).toInt(), 0.3f + dangerLevel * 0.7f)
             VibrationStyle.NONE -> {}
         }
     }
@@ -74,6 +82,7 @@ class VibrationManager(context: Context) {
             VibrationStyle.RETRO -> vibratePattern(longArrayOf(0, 10, 20, 10), false)
             VibrationStyle.MODERN -> vibrateRamp(20, true)
             VibrationStyle.HEAVY -> vibrateSingle(25, 1.0f)
+            VibrationStyle.ADAPTIVE -> vibrateSingle((8 + dangerLevel * 17).toInt(), 0.4f + dangerLevel * 0.6f)
             VibrationStyle.NONE -> {}
         }
     }
@@ -90,6 +99,7 @@ class VibrationManager(context: Context) {
             VibrationStyle.RETRO -> vibratePattern(longArrayOf(0, 15, 30, 15, 30, 15), false)
             VibrationStyle.MODERN -> vibrateRamp(40, false)
             VibrationStyle.HEAVY -> vibrateSingle(50, 1.0f)
+            VibrationStyle.ADAPTIVE -> vibrateSingle((15 + dangerLevel * 35).toInt(), 0.5f + dangerLevel * 0.5f)
             VibrationStyle.NONE -> {}
         }
     }
@@ -116,6 +126,11 @@ class VibrationManager(context: Context) {
             }
             VibrationStyle.MODERN -> vibrateRamp(50 * multiplier, false)
             VibrationStyle.HEAVY -> vibrateSingle(80 * multiplier, 1.0f)
+            VibrationStyle.ADAPTIVE -> {
+                // At danger: massive feedback for clears (reward). At safe: moderate.
+                val boost = 0.6f + dangerLevel * 0.4f
+                vibrateSingle((40 * multiplier * boost).toInt(), boost)
+            }
             VibrationStyle.NONE -> {}
         }
     }
@@ -132,6 +147,7 @@ class VibrationManager(context: Context) {
             VibrationStyle.RETRO -> vibratePattern(longArrayOf(0, 80, 80, 80, 80, 80, 80, 80, 80, 80), false)
             VibrationStyle.MODERN -> vibratePattern(longArrayOf(0, 150, 100, 150), false)
             VibrationStyle.HEAVY -> vibratePattern(longArrayOf(0, 200, 100, 200, 100, 300), false)
+            VibrationStyle.ADAPTIVE -> vibratePattern(longArrayOf(0, 200, 100, 200, 100, 300), false) // always strong
             VibrationStyle.NONE -> {}
         }
     }
@@ -148,8 +164,18 @@ class VibrationManager(context: Context) {
             VibrationStyle.RETRO -> vibratePattern(longArrayOf(0, 20, 20, 20, 20, 20, 20, 40), false)
             VibrationStyle.MODERN -> vibratePattern(longArrayOf(0, 40, 60, 60, 60, 80), false)
             VibrationStyle.HEAVY -> vibratePattern(longArrayOf(0, 50, 50, 50, 50, 100), false)
+            VibrationStyle.ADAPTIVE -> vibratePattern(longArrayOf(0, 40, 40, 40, 40, 60), false) // celebratory burst
             VibrationStyle.NONE -> {}
         }
+    }
+
+    /** Heartbeat pulse for danger zone -- called periodically when board is near top */
+    fun vibrateHeartbeat() {
+        if (!enabled || vibrationStyle != VibrationStyle.ADAPTIVE) return
+        if (dangerLevel < 0.6f) return // only pulse in actual danger
+        val beatIntensity = (dangerLevel - 0.6f) / 0.4f  // 0..1
+        val gap = (200 - beatIntensity * 100).toLong().coerceAtLeast(80)
+        vibratePattern(longArrayOf(0, 30, gap, 20), false)
     }
 
     /** Quick double-tap for hold piece */
