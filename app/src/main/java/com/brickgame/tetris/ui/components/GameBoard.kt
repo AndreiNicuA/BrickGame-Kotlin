@@ -16,6 +16,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
 import com.brickgame.tetris.game.PieceState
 import com.brickgame.tetris.game.TetrisGame
@@ -80,6 +81,14 @@ fun GameBoard(
             lockFlashProgress.animateTo(1f, tween(250, easing = FastOutSlowInEasing))
         }
     }
+
+    // Ghost piece pulse animation
+    val ghostPulse = rememberInfiniteTransition(label = "ghostPulse")
+    val ghostPulseAlpha by ghostPulse.animateFloat(
+        0.08f, 0.18f,
+        infiniteRepeatable(tween(1200, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "gpa"
+    )
 
     val progress = clearProgress.value
     val isClearing = clearingLines.isNotEmpty()
@@ -182,10 +191,10 @@ fun GameBoard(
                 }
             }
 
-            // Ghost
+            // Ghost — with pulsing alpha
             if (showGhost && currentPiece != null && ghostY > currentPiece.position.y) {
                 val gc = if (multiColor) PIECE_COLORS.getOrElse(currentPiece.type.ordinal + 1) { theme.pixelOn } else theme.pixelOn
-                drawGhost(currentPiece, ghostY, cellSize, gap, corner, gc)
+                drawGhost(currentPiece, ghostY, cellSize, gap, corner, gc, ghostPulseAlpha, pieceMaterial)
             }
 
             // Hard drop trail — DRAMATIC vertical streaks with glow
@@ -276,7 +285,7 @@ fun GameBoard(
                 // Level 4+: Piece lock sparks — small dots scatter from lock position
                 if (gameLevel >= 4 && lockFlashProgress.value in 0.01f..0.6f) {
                     val sparkAlpha = (0.6f - lockFlashProgress.value) / 0.6f
-                    val rng = java.util.Random(lockEvent.toLong())
+                    val rng = kotlin.random.Random(lockEvent)
                     repeat(12) {
                         val sx = rng.nextFloat() * size.width
                         val sy = size.height * 0.5f + rng.nextFloat() * size.height * 0.5f
@@ -416,6 +425,32 @@ private fun DrawScope.drawPieceMaterial(
             // Inner shadow for depth
             drawRoundRect(Color.Black.copy(alpha = 0.1f), Offset(offset.x, offset.y + cs.height * 0.5f), Size(cs.width, cs.height * 0.5f), CornerRadius(corner))
         }
+        "NEON" -> {
+            // Neon glow: outer bloom aura, bright edge, pulsing inner core
+            val glowSize = gap * 3.5f
+            // Outer bloom — large soft glow
+            drawRoundRect(baseColor.copy(alpha = glowAlpha * 2.5f),
+                Offset(offset.x - glowSize, offset.y - glowSize),
+                Size(cs.width + glowSize * 2, cs.height + glowSize * 2),
+                CornerRadius(corner + glowSize))
+            // Mid bloom
+            val midGlow = gap * 2f
+            drawRoundRect(baseColor.copy(alpha = glowAlpha * 1.8f),
+                Offset(offset.x - midGlow, offset.y - midGlow),
+                Size(cs.width + midGlow * 2, cs.height + midGlow * 2),
+                CornerRadius(corner + midGlow))
+            // Bright neon edge
+            drawRoundRect(Color.White.copy(alpha = 0.5f), offset, cs, CornerRadius(corner), style = Stroke(gap * 0.8f))
+            // Bright core center
+            val coreInset = cs.width * 0.2f
+            drawRoundRect(Color.White.copy(alpha = if (isActive) 0.35f else 0.2f),
+                Offset(offset.x + coreInset, offset.y + coreInset),
+                Size(cs.width - coreInset * 2, cs.height - coreInset * 2),
+                CornerRadius(corner * 0.5f))
+            // Subtle scanline effect
+            val lineY = offset.y + cs.height * 0.45f
+            drawRect(Color.White.copy(alpha = 0.08f), Offset(offset.x, lineY), Size(cs.width, 1f))
+        }
         "CRYSTAL" -> {
             // Maximum shine — prismatic edge glow, bright specular, diamond-like
             val glowSize = gap * 2.5f
@@ -554,24 +589,63 @@ private fun clearingEffect(style: AnimationStyle, progress: Float, x: Int, y: In
         val alpha = if (progress > 0.6f) 1f - ((progress - 0.6f) / 0.4f) else 1f
         colors[idx].copy(alpha = alpha) to (1f + kotlin.math.sin(progress * 12.56f) * 0.1f)
     }
+    AnimationStyle.CYBERPUNK -> {
+        // Neon scanline dissolve: horizontal wipe with glowing edge + chromatic aberration
+        val scanX = progress * 12f // scanline sweeps left to right across 10 cols
+        val distFromScan = kotlin.math.abs(x.toFloat() - scanX)
+        val edgeGlow = (1f - (distFromScan / 2f).coerceIn(0f, 1f))
+        val dissolved = x.toFloat() < scanX - 1f
+        if (dissolved) {
+            // Already passed: phosphor fade with chromatic shift
+            val fadeProgress = ((scanX - x.toFloat() - 1f) / 4f).coerceIn(0f, 1f)
+            val phosphorAlpha = (1f - fadeProgress * fadeProgress).coerceIn(0f, 1f)
+            val hueShift = fadeProgress * 0.3f
+            val r = (baseColor.red * (1f - hueShift) + hueShift).coerceIn(0f, 1f)
+            val g = (baseColor.green * (1f - hueShift * 2f)).coerceIn(0f, 1f)
+            val b = (baseColor.blue + hueShift * 0.5f).coerceIn(0f, 1f)
+            Color(r, g, b, phosphorAlpha * 0.7f) to (1f - fadeProgress * 0.5f).coerceAtLeast(0.1f)
+        } else if (edgeGlow > 0.01f) {
+            // At the scanline edge: bright neon glow
+            val glowColor = Color(
+                (baseColor.red + edgeGlow * 0.5f).coerceIn(0f, 1f),
+                (baseColor.green + edgeGlow * 0.3f).coerceIn(0f, 1f),
+                (baseColor.blue + edgeGlow * 0.5f).coerceIn(0f, 1f),
+                1f
+            )
+            glowColor to (1f + edgeGlow * 0.3f)
+        } else {
+            // Not yet reached
+            baseColor to 1f
+        }
+    }
 }
 
-private fun DrawScope.drawGhost(piece: PieceState, ghostY: Int, cellSize: Float, gap: Float, corner: Float, baseColor: Color) {
-    val gc = baseColor.copy(alpha = 0.12f)
-    val oc = baseColor.copy(alpha = 0.4f)
-    val glowColor = baseColor.copy(alpha = 0.06f)
+private fun DrawScope.drawGhost(piece: PieceState, ghostY: Int, cellSize: Float, gap: Float, corner: Float, baseColor: Color, pulseAlpha: Float = 0.12f, material: String = "CLASSIC") {
+    val isCyberpunk = material == "NEON"
+    val gc = baseColor.copy(alpha = pulseAlpha)
+    val oc = baseColor.copy(alpha = 0.4f + (pulseAlpha - 0.12f) * 2f)
+    val glowColor = baseColor.copy(alpha = pulseAlpha * 0.5f)
     for (py in piece.shape.indices) for (px in piece.shape[py].indices) {
         if (piece.shape[py][px] > 0) {
             val bx = piece.position.x + px; val by = ghostY + py
             if (bx in 0 until TetrisGame.BOARD_WIDTH && by in 0 until TetrisGame.BOARD_HEIGHT) {
                 val o = Offset(bx * cellSize + gap, by * cellSize + gap); val s = Size(cellSize - gap * 2, cellSize - gap * 2)
                 // Outer glow
-                val glowGap = gap * 1.5f
+                val glowGap = gap * (if (isCyberpunk) 2.5f else 1.5f)
                 drawRoundRect(glowColor, Offset(o.x - glowGap, o.y - glowGap),
                     Size(s.width + glowGap * 2, s.height + glowGap * 2), CornerRadius(corner + glowGap))
-                // Fill + outline
-                drawRoundRect(gc, o, s, CornerRadius(corner))
-                drawRoundRect(oc, o, s, CornerRadius(corner), style = Stroke(gap * 0.8f))
+                if (isCyberpunk) {
+                    // Dashed scanline outline for NEON material
+                    drawRoundRect(gc.copy(alpha = gc.alpha * 0.5f), o, s, CornerRadius(corner))
+                    drawRoundRect(oc, o, s, CornerRadius(corner), style = Stroke(gap * 1.2f))
+                    // Horizontal scanline across the cell
+                    val scanY = o.y + s.height * 0.5f
+                    drawRect(baseColor.copy(alpha = oc.alpha * 0.3f), Offset(o.x, scanY), Size(s.width, 1f))
+                } else {
+                    // Standard fill + outline
+                    drawRoundRect(gc, o, s, CornerRadius(corner))
+                    drawRoundRect(oc, o, s, CornerRadius(corner), style = Stroke(gap * 0.8f))
+                }
             }
         }
     }
@@ -580,7 +654,18 @@ private fun DrawScope.drawGhost(piece: PieceState, ghostY: Int, cellSize: Float,
 // ===== Piece Previews =====
 @Composable
 fun NextPiecePreview(shape: List<List<Int>>?, modifier: Modifier = Modifier, alpha: Float = 1f) {
-    Box(modifier.clip(RoundedCornerShape(6.dp)).background(Color.White.copy(alpha = 0.08f)).padding(4.dp)) {
+    // Animate piece transitions — slide-in from top + crossfade
+    val shapeKey = shape?.flatten()?.hashCode() ?: 0
+    val transition = updateTransition(targetState = shapeKey, label = "nextPiece")
+    val slideOffset by transition.animateFloat(label = "nSlide",
+        transitionSpec = { tween(180, easing = FastOutSlowInEasing) }) { if (it == shapeKey) 0f else -8f }
+    val fadeAlpha by transition.animateFloat(label = "nFade",
+        transitionSpec = { tween(140) }) { if (it == shapeKey) 1f else 0.3f }
+    val pieceScale by transition.animateFloat(label = "nScale",
+        transitionSpec = { tween(180, easing = FastOutSlowInEasing) }) { if (it == shapeKey) 1f else 0.85f }
+
+    Box(modifier.clip(RoundedCornerShape(6.dp)).background(Color.White.copy(alpha = 0.08f)).padding(4.dp)
+        .graphicsLayer { translationY = slideOffset; scaleX = pieceScale; scaleY = pieceScale; this.alpha = fadeAlpha }) {
         if (shape != null) Canvas(Modifier.fillMaxSize()) {
             val rows = shape.size; val cols = shape.maxOfOrNull { it.size } ?: 0; if (rows == 0 || cols == 0) return@Canvas
             val cs = minOf(size.width / cols, size.height / rows); val ox = (size.width - cs * cols) / 2; val oy = (size.height - cs * rows) / 2; val g = cs * 0.1f; val c = cs * 0.2f
@@ -594,7 +679,16 @@ fun NextPiecePreview(shape: List<List<Int>>?, modifier: Modifier = Modifier, alp
 @Composable
 fun HoldPiecePreview(shape: List<List<Int>>?, isUsed: Boolean = false, modifier: Modifier = Modifier) {
     val a = if (isUsed) 0.3f else 1f
-    Box(modifier.clip(RoundedCornerShape(6.dp)).background(Color.White.copy(alpha = 0.08f)).padding(4.dp)) {
+    // Animate hold swap — scale bounce + crossfade
+    val shapeKey = shape?.flatten()?.hashCode() ?: 0
+    val transition = updateTransition(targetState = shapeKey, label = "holdPiece")
+    val holdScale by transition.animateFloat(label = "hScale",
+        transitionSpec = { tween(200, easing = FastOutSlowInEasing) }) { if (it == shapeKey) 1f else 0.7f }
+    val holdAlpha by transition.animateFloat(label = "hAlpha",
+        transitionSpec = { tween(160) }) { if (it == shapeKey) 1f else 0.2f }
+
+    Box(modifier.clip(RoundedCornerShape(6.dp)).background(Color.White.copy(alpha = 0.08f)).padding(4.dp)
+        .graphicsLayer { scaleX = holdScale; scaleY = holdScale; this.alpha = holdAlpha }) {
         if (shape != null) Canvas(Modifier.fillMaxSize()) {
             val rows = shape.size; val cols = shape.maxOfOrNull { it.size } ?: 0; if (rows == 0 || cols == 0) return@Canvas
             val cs = minOf(size.width / cols, size.height / rows); val ox = (size.width - cs * cols) / 2; val oy = (size.height - cs * rows) / 2; val g = cs * 0.1f; val c = cs * 0.2f

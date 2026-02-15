@@ -25,6 +25,16 @@ object ScoreCalculator {
     )
     
     /**
+     * Perfect Clear (All-Clear) bonus points by lines cleared (multiplied by level)
+     */
+    private val PERFECT_CLEAR_POINTS = mapOf(
+        1 to 800,    // Single PC
+        2 to 1200,   // Double PC
+        3 to 1800,   // Triple PC
+        4 to 3500    // Tetris PC (the dream)
+    )
+
+    /**
      * Back-to-back multiplier: 1.5x for consecutive "difficult" clears
      * Difficult = Tetris or any T-spin line clear
      */
@@ -44,7 +54,8 @@ object ScoreCalculator {
         tSpinType: TSpinType,
         isBackToBack: Boolean,
         comboCount: Int,
-        difficultyMultiplier: Float = 1.0f
+        difficultyMultiplier: Float = 1.0f,
+        isPerfectClear: Boolean = false
     ): ScoreResult {
         if (linesCleared == 0 && tSpinType == TSpinType.NONE) {
             return ScoreResult(0, false, "")
@@ -59,8 +70,13 @@ object ScoreCalculator {
         
         var points = basePoints * level
         
+        // Perfect Clear bonus — massive reward
+        if (isPerfectClear && linesCleared > 0) {
+            points += (PERFECT_CLEAR_POINTS[linesCleared] ?: 800) * level
+        }
+        
         // Back-to-back bonus
-        val isDifficult = linesCleared == 4 || (tSpinType != TSpinType.NONE && linesCleared > 0)
+        val isDifficult = linesCleared == 4 || (tSpinType != TSpinType.NONE && linesCleared > 0) || isPerfectClear
         if (isBackToBack && isDifficult) {
             points = (points * BACK_TO_BACK_MULTIPLIER).toInt()
         }
@@ -74,7 +90,7 @@ object ScoreCalculator {
         points = (points * difficultyMultiplier).toInt()
         
         // Build action label
-        val label = buildActionLabel(linesCleared, tSpinType, isBackToBack, comboCount)
+        val label = buildActionLabel(linesCleared, tSpinType, isBackToBack, comboCount, isPerfectClear)
         
         return ScoreResult(points, isDifficult, label)
     }
@@ -93,11 +109,16 @@ object ScoreCalculator {
         linesCleared: Int,
         tSpinType: TSpinType,
         isBackToBack: Boolean,
-        comboCount: Int
+        comboCount: Int,
+        isPerfectClear: Boolean = false
     ): String {
         val parts = mutableListOf<String>()
         
-        if (isBackToBack && (linesCleared == 4 || (tSpinType != TSpinType.NONE && linesCleared > 0))) {
+        if (isPerfectClear) {
+            parts.add("PERFECT CLEAR")
+        }
+        
+        if (isBackToBack && (linesCleared == 4 || (tSpinType != TSpinType.NONE && linesCleared > 0) || isPerfectClear)) {
             parts.add("B2B")
         }
         

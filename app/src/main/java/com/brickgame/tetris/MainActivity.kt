@@ -475,7 +475,7 @@ private fun WelcomeScreen(playerName: String, isDark: Boolean = true, modifier: 
 
     data class FP(val col: Float, val speed: Float, val sz: Float, val shape: Int, val colorIdx: Int, val startY: Float)
     val pieces = remember {
-        val rng = java.util.Random(77)
+        val rng = kotlin.random.Random(77)
         (0..120).map { FP(rng.nextFloat(), 0.3f + rng.nextFloat() * 0.8f, 4f + rng.nextFloat() * 6f, it % 7, it % 7, rng.nextFloat() * 8000f) }
     }
     val pieceColors = remember { listOf(Color(0xFFFF4444), Color(0xFF44AAFF), Color(0xFFFFAA00), Color(0xFF44FF44), Color(0xFFFF44FF), Color(0xFF44FFFF), Color(0xFFF4D03F)) }
@@ -543,7 +543,7 @@ private fun SplashScreen(isDark: Boolean = true, modifier: Modifier = Modifier) 
 
     data class FP(val col: Float, val speed: Float, val sz: Float, val shape: Int, val colorIdx: Int, val startY: Float)
     val pieces = remember {
-        val rng = java.util.Random(77)
+        val rng = kotlin.random.Random(77)
         (0..120).map { FP(rng.nextFloat(), 0.3f + rng.nextFloat() * 0.8f, 4f + rng.nextFloat() * 6f, it % 7, it % 7, rng.nextFloat() * 8000f) }
     }
     val fallAnim by inf.animateFloat(0f, 500000f, infiniteRepeatable(tween(750000, easing = LinearEasing)), label = "fall")

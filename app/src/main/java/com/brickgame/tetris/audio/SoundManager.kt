@@ -55,6 +55,7 @@ class SoundManager(@Suppress("unused") private val context: Context) {
             SoundStyle.MODERN_SOFT -> playTone(ToneGenerator.TONE_PROP_BEEP, 20)
             SoundStyle.ARCADE -> playTone(ToneGenerator.TONE_DTMF_5, 40)
             SoundStyle.MECHANICAL -> playTone(ToneGenerator.TONE_CDMA_PIP, 25)
+            SoundStyle.SYNTHWAVE -> playTone(ToneGenerator.TONE_DTMF_2, 25)
             SoundStyle.NONE -> {}
         }
     }
@@ -67,6 +68,7 @@ class SoundManager(@Suppress("unused") private val context: Context) {
             SoundStyle.MODERN_SOFT -> playTone(ToneGenerator.TONE_PROP_BEEP2, 30)
             SoundStyle.ARCADE -> playTone(ToneGenerator.TONE_DTMF_9, 50)
             SoundStyle.MECHANICAL -> playTone(ToneGenerator.TONE_CDMA_PRESSHOLDKEY_LITE, 35)
+            SoundStyle.SYNTHWAVE -> playTone(ToneGenerator.TONE_DTMF_B, 35)
             SoundStyle.NONE -> {}
         }
     }
@@ -79,6 +81,7 @@ class SoundManager(@Suppress("unused") private val context: Context) {
             SoundStyle.MODERN_SOFT -> playTone(ToneGenerator.TONE_PROP_ACK, 40)
             SoundStyle.ARCADE -> playTone(ToneGenerator.TONE_DTMF_D, 80)
             SoundStyle.MECHANICAL -> playTone(ToneGenerator.TONE_CDMA_ANSWER, 50)
+            SoundStyle.SYNTHWAVE -> playTone(ToneGenerator.TONE_SUP_RINGTONE, 70)
             SoundStyle.NONE -> {}
         }
     }
@@ -87,18 +90,11 @@ class SoundManager(@Suppress("unused") private val context: Context) {
         if (!enabled || soundStyle == SoundStyle.NONE) return
         
         when (soundStyle) {
-            SoundStyle.RETRO_BEEP -> {
-                playTone(ToneGenerator.TONE_DTMF_A, 80)
-            }
-            SoundStyle.MODERN_SOFT -> {
-                playTone(ToneGenerator.TONE_PROP_PROMPT, 120)
-            }
-            SoundStyle.ARCADE -> {
-                playTone(ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD, 200)
-            }
-            SoundStyle.MECHANICAL -> {
-                playTone(ToneGenerator.TONE_CDMA_CONFIRM, 150)
-            }
+            SoundStyle.RETRO_BEEP -> playTone(ToneGenerator.TONE_DTMF_A, 80)
+            SoundStyle.MODERN_SOFT -> playTone(ToneGenerator.TONE_PROP_PROMPT, 120)
+            SoundStyle.ARCADE -> playTone(ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD, 200)
+            SoundStyle.MECHANICAL -> playTone(ToneGenerator.TONE_CDMA_CONFIRM, 150)
+            SoundStyle.SYNTHWAVE -> playTone(ToneGenerator.TONE_CDMA_ALERT_NETWORK_LITE, 180)
             SoundStyle.NONE -> {}
         }
     }
@@ -111,6 +107,7 @@ class SoundManager(@Suppress("unused") private val context: Context) {
             SoundStyle.MODERN_SOFT -> playTone(ToneGenerator.TONE_PROP_NACK, 300)
             SoundStyle.ARCADE -> playTone(ToneGenerator.TONE_CDMA_SOFT_ERROR_LITE, 500)
             SoundStyle.MECHANICAL -> playTone(ToneGenerator.TONE_CDMA_CALLDROP_LITE, 400)
+            SoundStyle.SYNTHWAVE -> playTone(ToneGenerator.TONE_CDMA_EMERGENCY_RINGBACK, 500)
             SoundStyle.NONE -> {}
         }
     }
@@ -123,8 +120,15 @@ class SoundManager(@Suppress("unused") private val context: Context) {
             SoundStyle.MODERN_SOFT -> playTone(ToneGenerator.TONE_PROP_PROMPT, 200)
             SoundStyle.ARCADE -> playTone(ToneGenerator.TONE_CDMA_ALERT_AUTOREDIAL_LITE, 300)
             SoundStyle.MECHANICAL -> playTone(ToneGenerator.TONE_CDMA_NETWORK_CALLWAITING, 200)
+            SoundStyle.SYNTHWAVE -> playTone(ToneGenerator.TONE_CDMA_ABBR_INTERCEPT, 250)
             SoundStyle.NONE -> {}
         }
+    }
+    
+    /** Perfect Clear celebration sound */
+    fun playPerfectClear() {
+        if (!enabled || soundStyle == SoundStyle.NONE) return
+        playTone(ToneGenerator.TONE_CDMA_ALERT_INCALL_LITE, 600)
     }
     
 

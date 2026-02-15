@@ -72,6 +72,8 @@ class TetrisGame {
     // Hold piece
     private var holdPiece: Tetromino? = null
     private var holdUsedThisTurn = false
+    private var spawnCounter = 0
+    private var holdCounter = 0
 
     // Line clear animation pending state
     private var pendingLineClear = false
@@ -123,11 +125,13 @@ class TetrisGame {
         // Fill next queue
         repeat(NEXT_QUEUE_SIZE + 1) { nextQueue.add(generateFromBag()) }
 
+        // Zone mode starts at level 15 for instant high-speed gameplay
+        val startLevel = if (gameMode == GameMode.ZONE) maxOf(15, difficulty.startLevel) else difficulty.startLevel
         _state.update {
             GameState(
                 status = GameStatus.PLAYING,
                 score = 0,
-                level = difficulty.startLevel,
+                level = startLevel,
                 lines = 0,
                 board = getVisibleBoard(),
                 difficulty = difficulty,
@@ -185,6 +189,7 @@ class TetrisGame {
         }
 
         holdUsedThisTurn = true
+        holdCounter++
         lastActionWasRotation = false
         lockDelayActive = false
         lockMoveCount = 0
@@ -197,6 +202,23 @@ class TetrisGame {
     fun completePendingLineClear() {
         if (!pendingLineClear) return
         actuallyRemoveCompletedLines()
+
+        // Perfect Clear (All Clear) detection — is the entire board empty?
+        val isPerfectClear = isBoardEmpty()
+        if (isPerfectClear) {
+            // Recalculate score with perfect clear bonus
+            val clearedCount = pendingClearedLines.size
+            val recalc = ScoreCalculator.calculateScore(
+                linesCleared = clearedCount, level = _state.value.level,
+                tSpinType = _state.value.tSpinType,
+                isBackToBack = _state.value.backToBackCount > 0,
+                comboCount = _state.value.comboCount,
+                difficultyMultiplier = difficulty.scoreMultiplier,
+                isPerfectClear = true
+            )
+            pendingPoints = recalc.points
+            pendingLabel = recalc.label
+        }
 
         _state.update {
             it.copy(
@@ -217,6 +239,12 @@ class TetrisGame {
         if (checkWinCondition()) return
         spawnPiece()
     }
+
+    /** Check if the entire board (including hidden rows) is empty */
+    private fun isBoardEmpty(): Boolean =
+        (0 until TOTAL_HEIGHT).all { y ->
+            (0 until BOARD_WIDTH).all { x -> board[y][x] == 0 }
+        }
 
     // ===== Movement =====
 
@@ -364,14 +392,15 @@ class TetrisGame {
             return (1000L * difficulty.speedMultiplier).toLong().coerceAtLeast(16L)
         }
         val level = _state.value.level
-        // Guideline-inspired speed curve (NES-like)
+        // Guideline-inspired speed curve (NES-like) with 20G at extreme levels
         val baseSpeed = when {
             level <= 1 -> 1000L
             level <= 5 -> 1000L - (level - 1) * 100L
             level <= 10 -> 600L - (level - 5) * 60L
             level <= 15 -> 300L - (level - 10) * 30L
-            level <= 20 -> 150L - (level - 15) * 15L
-            else -> 50L
+            level <= 19 -> 150L - (level - 15) * 25L
+            level == 20 -> 33L   // Near-instant "20G" — piece drops ~1 row per frame
+            else -> 16L          // True 20G — instant gravity at level 21+
         }
         return (baseSpeed * difficulty.speedMultiplier).toLong().coerceAtLeast(16L)
     }
@@ -435,6 +464,7 @@ class TetrisGame {
         lastKickUsed = false
         lockDelayActive = false
         lockMoveCount = 0
+        spawnCounter++
         updateState()
     }
 
@@ -636,7 +666,9 @@ class TetrisGame {
                 ghostY = visibleGhostY,
                 linesCleared = 0,
                 clearedLineRows = emptyList(),
-                hardDropTrail = emptyList()
+                hardDropTrail = emptyList(),
+                spawnEvent = spawnCounter,
+                holdEvent = holdCounter
             )
         }
     }
@@ -682,7 +714,8 @@ enum class GameMode(val displayName: String, val description: String) {
     MARATHON("Marathon", "Classic endless mode"),
     SPRINT("Sprint 40L", "Clear 40 lines as fast as possible"),
     ULTRA("Ultra 2min", "Highest score in 2 minutes"),
-    INFINITY("Infinity", "Relaxing endless play at constant speed")
+    INFINITY("Infinity", "Relaxing endless play at constant speed"),
+    ZONE("Zone", "Start at level 15 — survive the 20G zone")
 }
 
 // ===== Data Classes =====
@@ -745,7 +778,11 @@ data class GameState(
     /** Hard drop trail: list of (x, startY, endY) columns for trail rendering */
     val hardDropTrail: List<Triple<Int, Int, Int>> = emptyList(),
     /** Incremented each time a piece locks — UI can watch for changes */
-    val lockEvent: Int = 0
+    val lockEvent: Int = 0,
+    /** Incremented each time a new piece spawns — UI uses for spawn animation */
+    val spawnEvent: Int = 0,
+    /** Incremented each time hold is used — UI uses for hold swap animation */
+    val holdEvent: Int = 0
 ) {
     /** Backward compat: first next piece */
     val effectiveNextPiece: PieceState? get() = nextPieces.firstOrNull() ?: nextPiece
