@@ -61,6 +61,331 @@ val LocalHighContrast = compositionLocalOf { false }
 val LocalUiScale = compositionLocalOf { 1.0f }
 val LocalLeftHanded = compositionLocalOf { false }
 
+// ========================= SHARED GAME EFFECTS =========================
+// Extracted from 5 layout functions to eliminate ~300 lines of duplication.
+// All modern layouts now use rememberGameEffects() + GameEffectsLayer().
+
+/** Particle data for explosion effects */
+data class EffectParticle(val x: Float, val y: Float, val vx: Float, val vy: Float,
+                          val size: Float, val color: Int, val life: Float, val type: Int = 0)
+
+/** Holds all mutable state for game visual effects */
+class GameEffectsState {
+    var screenShakeX by mutableFloatStateOf(0f)
+    var screenShakeY by mutableFloatStateOf(0f)
+    var clearFlashAlpha by mutableFloatStateOf(0f)
+    val clearSize = mutableIntStateOf(0)
+    // Score flyup
+    var flyupKey by mutableIntStateOf(0)
+    var flyupText by mutableStateOf("")
+    var flyupProgress by mutableFloatStateOf(0f)
+    // Level up burst
+    var levelUpFlash by mutableFloatStateOf(0f)
+    var prevLevel by mutableIntStateOf(0)
+    // Score glow (level 9+)
+    var scoreGlowAlpha by mutableFloatStateOf(0f)
+    // Particles + shockwave
+    var particles by mutableStateOf(emptyList<EffectParticle>())
+    var shockwaveProgress by mutableFloatStateOf(0f)
+    var shockwaveY by mutableFloatStateOf(0.5f)
+    var shockwaveCount by mutableIntStateOf(0)
+}
+
+/**
+ * Creates and wires up all game visual effects for a layout.
+ * @param shakeSteps number of shake iterations (18 for full, 14 for compact)
+ * @param shakeDelay ms between shake frames
+ * @param shakeMultiplier scale factor for shake intensity (1f = full, 0.8f = reduced)
+ * @param flashMultiplier scale factor for flash intensity
+ * @param enableParticles whether to enable explosion particles + shockwave
+ * @param enableFlyup whether to enable score flyup text
+ * @param enableLevelBurst whether to enable level-up ring burst
+ * @param enableScoreGlow whether to enable score glow at level 9+
+ */
+@Composable
+fun rememberGameEffects(
+    gs: GameState,
+    shakeSteps: Int = 18,
+    shakeDelay: Long = 25L,
+    shakeMultiplier: Float = 1f,
+    flashMultiplier: Float = 1f,
+    enableParticles: Boolean = true,
+    enableFlyup: Boolean = true,
+    enableLevelBurst: Boolean = true,
+    enableScoreGlow: Boolean = true
+): GameEffectsState {
+    val state = remember { GameEffectsState() }
+
+    // Screen shake + flash on line clears
+    LaunchedEffect(gs.clearedLineRows) {
+        if (gs.clearedLineRows.isNotEmpty()) {
+            state.clearSize.intValue = gs.clearedLineRows.size
+            state.clearFlashAlpha = (when (gs.clearedLineRows.size) {
+                4 -> 0.7f; 3 -> 0.45f; 2 -> 0.3f; else -> 0.15f
+            }) * flashMultiplier
+            val shakeIntensity = (when (gs.clearedLineRows.size) {
+                4 -> 20f; 3 -> 14f; 2 -> 8f; else -> 4f
+            }) * shakeMultiplier
+            val rng = kotlin.random.Random
+            repeat(shakeSteps) { i ->
+                val decay = 1f - i.toFloat() / shakeSteps
+                state.screenShakeX = (rng.nextFloat() - 0.5f) * shakeIntensity * decay * 2f
+                state.screenShakeY = (rng.nextFloat() - 0.5f) * shakeIntensity * decay * 2f
+                state.clearFlashAlpha *= 0.82f
+                delay(shakeDelay)
+            }
+            state.screenShakeX = 0f; state.screenShakeY = 0f; state.clearFlashAlpha = 0f
+        }
+    }
+
+    // Score flyup
+    if (enableFlyup) {
+        var lastScore by remember { mutableIntStateOf(gs.score) }
+        LaunchedEffect(gs.score) {
+            val diff = gs.score - lastScore
+            if (diff > 50 && gs.status == GameStatus.PLAYING) {
+                state.flyupText = "+$diff"
+                state.flyupKey++
+            }
+            lastScore = gs.score
+        }
+        LaunchedEffect(state.flyupKey) {
+            if (state.flyupKey > 0) {
+                state.flyupProgress = 1f
+                val steps = 20
+                repeat(steps) {
+                    state.flyupProgress = 1f - (it + 1).toFloat() / steps
+                    delay(30)
+                }
+                state.flyupProgress = 0f
+            }
+        }
+    }
+
+    // Level up burst
+    if (enableLevelBurst) {
+        LaunchedEffect(gs.level) {
+            if (gs.level > state.prevLevel && state.prevLevel > 0) {
+                state.levelUpFlash = 0.8f
+                repeat(16) { state.levelUpFlash *= 0.85f; delay(30) }
+                state.levelUpFlash = 0f
+            }
+            state.prevLevel = gs.level
+        }
+    }
+
+    // Score glow (level 9+)
+    if (enableScoreGlow) {
+        LaunchedEffect(gs.score) {
+            if (gs.score > 0 && gs.level >= 9) {
+                state.scoreGlowAlpha = 1f
+                repeat(10) { state.scoreGlowAlpha *= 0.8f; delay(30) }
+                state.scoreGlowAlpha = 0f
+            }
+        }
+    }
+
+    // Explosion particles + shockwave
+    if (enableParticles) {
+        LaunchedEffect(gs.clearedLineRows) {
+            if (gs.clearedLineRows.isNotEmpty()) {
+                val rng = kotlin.random.Random
+                val newParticles = mutableListOf<EffectParticle>()
+                val colors = listOf(0xFFF4D03F.toInt(), 0xFFFF6B6B.toInt(), 0xFF4ECDC4.toInt(),
+                    0xFFFF9F43.toInt(), 0xFFA8E6CF.toInt(), 0xFFFF85A2.toInt(),
+                    0xFF6C5CE7.toInt(), 0xFF00B894.toInt(), 0xFFE17055.toInt())
+                val isTetrisClear = gs.clearedLineRows.size >= 4
+
+                gs.clearedLineRows.forEach { row ->
+                    val rowY = row.toFloat() / 20f
+                    val count = when (gs.clearedLineRows.size) { 4 -> 60; 3 -> 40; 2 -> 25; else -> 15 }
+                    repeat(count) {
+                        val speed = if (isTetrisClear) 0.06f else 0.04f
+                        newParticles.add(EffectParticle(
+                            x = rng.nextFloat(), y = rowY,
+                            vx = (rng.nextFloat() - 0.5f) * speed,
+                            vy = (rng.nextFloat() - 0.5f) * speed - 0.015f,
+                            size = 2f + rng.nextFloat() * (if (isTetrisClear) 10f else 7f),
+                            color = colors[rng.nextInt(colors.size)],
+                            life = 1f, type = 0
+                        ))
+                    }
+                    repeat(if (isTetrisClear) 20 else 8) {
+                        val angle = rng.nextFloat() * 6.28f
+                        val spd = 0.03f + rng.nextFloat() * 0.05f
+                        newParticles.add(EffectParticle(
+                            x = rng.nextFloat(), y = rowY,
+                            vx = kotlin.math.cos(angle) * spd,
+                            vy = kotlin.math.sin(angle) * spd,
+                            size = 1.5f + rng.nextFloat() * 2f,
+                            color = 0xFFFFFFFF.toInt(),
+                            life = 1f, type = 1
+                        ))
+                    }
+                }
+                state.particles = newParticles
+                state.shockwaveY = gs.clearedLineRows.average().toFloat() / 20f
+                state.shockwaveCount++
+
+                val totalSteps = if (isTetrisClear) 40 else 30
+                repeat(totalSteps) {
+                    state.particles = state.particles.mapNotNull { p ->
+                        val decay = if (p.type == 1) 0.06f else 0.033f
+                        val newLife = p.life - decay
+                        if (newLife <= 0f) null
+                        else p.copy(x = p.x + p.vx, y = p.y + p.vy,
+                            vy = p.vy + 0.0015f, vx = p.vx * 0.98f, life = newLife)
+                    }
+                    delay(20)
+                }
+                state.particles = emptyList()
+            }
+        }
+        LaunchedEffect(state.shockwaveCount) {
+            if (state.shockwaveCount > 0) {
+                state.shockwaveProgress = 0f
+                repeat(20) {
+                    state.shockwaveProgress = (it + 1) / 20f
+                    delay(15)
+                }
+                state.shockwaveProgress = 0f
+            }
+        }
+    }
+
+    return state
+}
+
+/**
+ * Renders the visual effects overlay: edge glow, particles, shockwave, flyup, level-up burst, combo glow.
+ * Place this INSIDE the board area Box (after GameBoard) so it overlays the board.
+ */
+@Composable
+fun GameEffectsLayer(
+    fx: GameEffectsState,
+    gs: GameState,
+    modifier: Modifier = Modifier
+) {
+    val theme = LocalGameTheme.current
+
+    // Combo glow + pulse
+    val comboGlow = (gs.comboCount.coerceAtLeast(0) / 8f).coerceIn(0f, 1f)
+    val comboPulse = rememberInfiniteTransition(label = "combo")
+    val comboPulseAlpha by comboPulse.animateFloat(
+        0.3f, 1f, infiniteRepeatable(tween(300), RepeatMode.Reverse), label = "cp"
+    )
+
+    // Edge glow flash on line clears
+    if (fx.clearFlashAlpha > 0.01f) {
+        val flashColor = when {
+            fx.clearSize.intValue >= 4 -> Color(0xFFF4D03F)
+            fx.clearSize.intValue >= 3 -> Color(0xFFFF9F43)
+            fx.clearSize.intValue >= 2 -> Color(0xFF4ECDC4)
+            else -> Color.White
+        }
+        Canvas(modifier) {
+            val a = fx.clearFlashAlpha.coerceIn(0f, 1f)
+            val edgeW = size.width * 0.12f; val edgeH = size.height * 0.06f
+            drawRect(Brush.horizontalGradient(listOf(flashColor.copy(a), Color.Transparent)),
+                Offset.Zero, Size(edgeW, size.height))
+            drawRect(Brush.horizontalGradient(listOf(Color.Transparent, flashColor.copy(a))),
+                Offset(size.width - edgeW, 0f), Size(edgeW, size.height))
+            drawRect(Brush.verticalGradient(listOf(flashColor.copy(a * 0.7f), Color.Transparent)),
+                Offset.Zero, Size(size.width, edgeH))
+            drawRect(Brush.verticalGradient(listOf(Color.Transparent, flashColor.copy(a * 0.7f))),
+                Offset(0f, size.height - edgeH), Size(size.width, edgeH))
+        }
+    }
+
+    // Level up burst — ring + edge glow
+    if (fx.levelUpFlash > 0.01f) {
+        Canvas(modifier) {
+            val ringProgress = 1f - fx.levelUpFlash / 0.8f
+            val ringRadius = size.minDimension * 0.2f + ringProgress * size.maxDimension * 0.6f
+            val ringWidth = 8f + (1f - ringProgress) * 20f
+            drawCircle(Color(0xFFF4D03F).copy(alpha = fx.levelUpFlash),
+                radius = ringRadius, center = Offset(size.width / 2f, size.height / 2f),
+                style = Stroke(ringWidth))
+            val a = (fx.levelUpFlash * 0.5f).coerceIn(0f, 1f)
+            val ew = size.width * 0.1f
+            drawRect(Brush.horizontalGradient(listOf(Color(0xFFF4D03F).copy(a), Color.Transparent)),
+                Offset.Zero, Size(ew, size.height))
+            drawRect(Brush.horizontalGradient(listOf(Color.Transparent, Color(0xFFF4D03F).copy(a))),
+                Offset(size.width - ew, 0f), Size(ew, size.height))
+        }
+    }
+
+    // Combo glow — pulsing border
+    if (comboGlow > 0.05f) {
+        val pulseWidth = (1.5f + comboGlow * 2f).dp
+        val comboColor = Color(0xFFF4D03F).copy(comboGlow * comboPulseAlpha * 0.6f)
+        Box(modifier.border(pulseWidth, comboColor))
+    }
+
+    // Explosion particles + spark streaks
+    if (fx.particles.isNotEmpty()) {
+        Canvas(modifier) {
+            fx.particles.forEach { p ->
+                if (p.type == 1) {
+                    drawLine(
+                        Color(p.color).copy(alpha = (p.life * p.life).coerceIn(0f, 1f)),
+                        start = Offset(p.x * size.width, p.y * size.height),
+                        end = Offset((p.x - p.vx * 8f) * size.width, (p.y - p.vy * 8f) * size.height),
+                        strokeWidth = p.size * p.life
+                    )
+                } else {
+                    drawCircle(
+                        Color(p.color).copy(alpha = (p.life * p.life).coerceIn(0f, 1f)),
+                        radius = p.size * (0.5f + p.life * 0.5f),
+                        center = Offset(p.x * size.width, p.y * size.height)
+                    )
+                    if (p.life > 0.4f) {
+                        drawCircle(
+                            Color.White.copy(alpha = ((p.life - 0.4f) * 1.5f).coerceIn(0f, 0.9f)),
+                            radius = p.size * 0.25f * p.life,
+                            center = Offset(p.x * size.width, p.y * size.height)
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    // Shockwave ring
+    if (fx.shockwaveProgress > 0.01f && fx.shockwaveProgress < 1f) {
+        Canvas(modifier) {
+            val maxRadius = size.maxDimension * 0.8f
+            val radius = fx.shockwaveProgress * maxRadius
+            val ringAlpha = (1f - fx.shockwaveProgress) * 0.6f
+            val ringWidth = (1f - fx.shockwaveProgress) * 6f + 2f
+            drawCircle(Color.White.copy(alpha = ringAlpha), radius = radius,
+                center = Offset(size.width / 2f, fx.shockwaveY * size.height),
+                style = Stroke(ringWidth))
+            if (fx.shockwaveProgress > 0.1f) {
+                val r2 = (fx.shockwaveProgress - 0.1f) / 0.9f * maxRadius
+                val a2 = (1f - fx.shockwaveProgress) * 0.3f
+                drawCircle(Color(0xFFF4D03F).copy(alpha = a2), radius = r2,
+                    center = Offset(size.width / 2f, fx.shockwaveY * size.height),
+                    style = Stroke(ringWidth * 0.5f))
+            }
+        }
+    }
+
+    // Score flyup
+    if (fx.flyupProgress > 0.01f) {
+        val yOff = (1f - fx.flyupProgress) * -80f
+        val scale = 0.8f + fx.flyupProgress * 0.4f
+        Box(modifier, contentAlignment = Alignment.Center) {
+            Text(fx.flyupText, fontSize = 32.sp, fontWeight = FontWeight.ExtraBold,
+                fontFamily = FontFamily.Monospace,
+                color = Color(0xFFF4D03F).copy(alpha = (fx.flyupProgress * fx.flyupProgress).coerceIn(0f, 0.95f)),
+                modifier = Modifier.graphicsLayer {
+                    translationY = yOff; scaleX = scale; scaleY = scale; shadowElevation = 12f
+                })
+        }
+    }
+}
+
 @Composable
 fun GameScreen(
     gameState: GameState,
@@ -486,173 +811,8 @@ fun GameScreen(
     val levelHue = (gs.level * 27f) % 360f
     val bgGradientColor = if (isDark) Color.hsl(levelHue, 0.3f, 0.08f) else Color.hsl(levelHue, 0.15f, 0.88f)
 
-    // === Line clear EXPLOSION flash + screen shake ===
-    var clearFlashAlpha by remember { mutableFloatStateOf(0f) }
-    var screenShakeX by remember { mutableFloatStateOf(0f) }
-    var screenShakeY by remember { mutableFloatStateOf(0f) }
-    val clearSize = remember { mutableIntStateOf(0) }
-    LaunchedEffect(gs.clearedLineRows) {
-        if (gs.clearedLineRows.isNotEmpty()) {
-            clearSize.intValue = gs.clearedLineRows.size
-            // Flash intensity based on clear size
-            clearFlashAlpha = when (gs.clearedLineRows.size) {
-                4 -> 0.7f; 3 -> 0.45f; 2 -> 0.3f; else -> 0.15f
-            }
-            // Screen shake — MORE violent for bigger clears
-            val shakeIntensity = when (gs.clearedLineRows.size) {
-                4 -> 20f; 3 -> 14f; 2 -> 8f; else -> 4f
-            }
-            val rng = java.util.Random()
-            repeat(18) { i ->
-                val decay = 1f - i / 18f
-                screenShakeX = (rng.nextFloat() - 0.5f) * shakeIntensity * decay * 2f
-                screenShakeY = (rng.nextFloat() - 0.5f) * shakeIntensity * decay * 2f
-                clearFlashAlpha *= 0.82f
-                delay(25)
-            }
-            screenShakeX = 0f; screenShakeY = 0f; clearFlashAlpha = 0f
-        }
-    }
-
-    // === Score flyup — fire-and-forget with key to prevent sticking ===
-    var flyupKey by remember { mutableIntStateOf(0) }
-    var flyupText by remember { mutableStateOf("") }
-    var lastScore by remember { mutableIntStateOf(gs.score) }
-    LaunchedEffect(gs.score) {
-        val diff = gs.score - lastScore
-        if (diff > 50 && gs.status == GameStatus.PLAYING) {
-            flyupText = "+$diff"
-            flyupKey++  // new key forces fresh animation
-        }
-        lastScore = gs.score
-    }
-    // Separate effect keyed on flyupKey — cannot get stuck
-    var flyupProgress by remember { mutableFloatStateOf(0f) }
-    LaunchedEffect(flyupKey) {
-        if (flyupKey > 0) {
-            flyupProgress = 1f
-            // Quick rise and fade — total 600ms
-            val steps = 20
-            repeat(steps) {
-                flyupProgress = 1f - (it + 1).toFloat() / steps
-                delay(30)
-            }
-            flyupProgress = 0f
-        }
-    }
-
-    // === Level up BURST ===
-    var levelUpFlash by remember { mutableFloatStateOf(0f) }
-    var prevLevel by remember { mutableIntStateOf(gs.level) }
-    LaunchedEffect(gs.level) {
-        if (gs.level > prevLevel && prevLevel > 0) {
-            levelUpFlash = 0.8f
-            repeat(16) { levelUpFlash *= 0.85f; delay(30) }
-            levelUpFlash = 0f
-        }
-        prevLevel = gs.level
-    }
-
-    // === Combo glow + pulse ===
-    val comboGlow = (gs.comboCount.coerceAtLeast(0) / 8f).coerceIn(0f, 1f)
-    val comboPulse = rememberInfiniteTransition(label = "combo")
-    val comboPulseAlpha by comboPulse.animateFloat(
-        0.3f, 1f, infiniteRepeatable(tween(300), RepeatMode.Reverse), label = "cp"
-    )
-
-    // === Level 9+: Score glow on change ===
-    var scoreGlowAlpha by remember { mutableFloatStateOf(0f) }
-    LaunchedEffect(gs.score) {
-        if (gs.score > 0 && gs.level >= 9) {
-            scoreGlowAlpha = 1f
-            repeat(10) { scoreGlowAlpha *= 0.8f; delay(30) }
-            scoreGlowAlpha = 0f
-        }
-    }
-
-    // === Explosion particles for line clears ===
-    data class Particle(val x: Float, val y: Float, val vx: Float, val vy: Float,
-                        val size: Float, val color: Int, val life: Float, val type: Int = 0)
-    var particles by remember { mutableStateOf(emptyList<Particle>()) }
-    // Shockwave rings from line clears
-    var shockwaveProgress by remember { mutableFloatStateOf(0f) }
-    var shockwaveY by remember { mutableFloatStateOf(0.5f) }
-    var shockwaveCount by remember { mutableIntStateOf(0) }
-    LaunchedEffect(gs.clearedLineRows) {
-        if (gs.clearedLineRows.isNotEmpty()) {
-            val rng = java.util.Random()
-            val newParticles = mutableListOf<Particle>()
-            val colors = listOf(0xFFF4D03F.toInt(), 0xFFFF6B6B.toInt(), 0xFF4ECDC4.toInt(),
-                0xFFFF9F43.toInt(), 0xFFA8E6CF.toInt(), 0xFFFF85A2.toInt(),
-                0xFF6C5CE7.toInt(), 0xFF00B894.toInt(), 0xFFE17055.toInt())
-            val isTetrisClear = gs.clearedLineRows.size >= 4
-
-            gs.clearedLineRows.forEach { row ->
-                val rowY = row.toFloat() / 20f
-                // Main explosion particles — LOTS more
-                val count = when (gs.clearedLineRows.size) { 4 -> 60; 3 -> 40; 2 -> 25; else -> 15 }
-                repeat(count) {
-                    val speed = if (isTetrisClear) 0.06f else 0.04f
-                    newParticles.add(Particle(
-                        x = rng.nextFloat(), y = rowY,
-                        vx = (rng.nextFloat() - 0.5f) * speed,
-                        vy = (rng.nextFloat() - 0.5f) * speed - 0.015f,
-                        size = 2f + rng.nextFloat() * (if (isTetrisClear) 10f else 7f),
-                        color = colors[rng.nextInt(colors.size)],
-                        life = 1f, type = 0
-                    ))
-                }
-                // Spark streaks — fast narrow particles that shoot outward
-                repeat(if (isTetrisClear) 20 else 8) {
-                    val angle = rng.nextFloat() * 6.28f
-                    val spd = 0.03f + rng.nextFloat() * 0.05f
-                    newParticles.add(Particle(
-                        x = rng.nextFloat(), y = rowY,
-                        vx = kotlin.math.cos(angle) * spd,
-                        vy = kotlin.math.sin(angle) * spd,
-                        size = 1.5f + rng.nextFloat() * 2f,
-                        color = 0xFFFFFFFF.toInt(),
-                        life = 1f, type = 1  // spark type
-                    ))
-                }
-            }
-            particles = newParticles
-
-            // Trigger shockwave
-            shockwaveY = gs.clearedLineRows.average().toFloat() / 20f
-            shockwaveCount++
-
-            // Animate particles — longer for Tetris
-            val totalSteps = if (isTetrisClear) 40 else 30
-            repeat(totalSteps) {
-                particles = particles.mapNotNull { p ->
-                    val decay = if (p.type == 1) 0.06f else 0.033f
-                    val newLife = p.life - decay
-                    if (newLife <= 0f) null
-                    else p.copy(
-                        x = p.x + p.vx,
-                        y = p.y + p.vy,
-                        vy = p.vy + 0.0015f,  // gravity
-                        vx = p.vx * 0.98f,     // air drag
-                        life = newLife
-                    )
-                }
-                delay(20)
-            }
-            particles = emptyList()
-        }
-    }
-    // Shockwave animation
-    LaunchedEffect(shockwaveCount) {
-        if (shockwaveCount > 0) {
-            shockwaveProgress = 0f
-            repeat(20) {
-                shockwaveProgress = (it + 1) / 20f
-                delay(15)
-            }
-            shockwaveProgress = 0f
-        }
-    }
+    // === Shared game effects (shake, flash, particles, flyup, level burst, score glow) ===
+    val fx = rememberGameEffects(gs)
 
     // === Level 8+: Board breathing — subtle scale pulse ===
     val breathTransition = rememberInfiniteTransition(label = "breath")
@@ -696,12 +856,12 @@ fun GameScreen(
                             fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, letterSpacing = 0.5.sp)
                         Text(animatedScore.toString().padStart(7, '0'), fontSize = 14.sp,
                             fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace,
-                            color = if (gs.level >= 9 && scoreGlowAlpha > 0.01f)
-                                Color(0xFFF4D03F).copy((0.9f + scoreGlowAlpha * 0.1f).coerceAtMost(1f))
+                            color = if (gs.level >= 9 && fx.scoreGlowAlpha > 0.01f)
+                                Color(0xFFF4D03F).copy((0.9f + fx.scoreGlowAlpha * 0.1f).coerceAtMost(1f))
                             else (if (isDark) Color.White else Color.Black).copy(0.9f),
                             letterSpacing = 1.sp,
-                            modifier = if (gs.level >= 9 && scoreGlowAlpha > 0.01f)
-                                Modifier.graphicsLayer { scaleX = 1f + scoreGlowAlpha * 0.15f; scaleY = 1f + scoreGlowAlpha * 0.15f }
+                            modifier = if (gs.level >= 9 && fx.scoreGlowAlpha > 0.01f)
+                                Modifier.graphicsLayer { scaleX = 1f + fx.scoreGlowAlpha * 0.15f; scaleY = 1f + fx.scoreGlowAlpha * 0.15f }
                             else Modifier)
                     }
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -728,11 +888,9 @@ fun GameScreen(
             // === Board area with screen shake + breathing ===
             Box(Modifier.weight(1f).fillMaxWidth()
                 .graphicsLayer {
-                    translationX = screenShakeX; translationY = screenShakeY
+                    translationX = fx.screenShakeX; translationY = fx.screenShakeY
                     if (gs.level >= 8) { scaleX = breathScale; scaleY = breathScale }
                 }) {
-                // NO colored background — falling pieces show through cleanly
-
                 // Game board — transparent modern grid
                 GameBoard(gs.board, Modifier.fillMaxSize().alpha(boardDimAlpha),
                     gs.currentPiece, gs.ghostY, ghost, gs.clearedLineRows, anim, ad, multiColor = true,
@@ -750,134 +908,8 @@ fun GameScreen(
                     }
                 }
 
-                // === Explosion flash — edge glow only, never covers the board ===
-                if (clearFlashAlpha > 0.01f) {
-                    val flashColor = when {
-                        clearSize.intValue >= 4 -> Color(0xFFF4D03F) // gold for Tetris
-                        clearSize.intValue >= 3 -> Color(0xFFFF9F43) // orange for triple
-                        clearSize.intValue >= 2 -> Color(0xFF4ECDC4) // teal for double
-                        else -> Color.White
-                    }
-                    Canvas(Modifier.matchParentSize()) {
-                        val a = clearFlashAlpha.coerceIn(0f, 1f)
-                        val edgeW = size.width * 0.12f
-                        val edgeH = size.height * 0.06f
-                        // Left edge glow
-                        drawRect(Brush.horizontalGradient(listOf(flashColor.copy(a), Color.Transparent)),
-                            Offset.Zero, Size(edgeW, size.height))
-                        // Right edge glow
-                        drawRect(Brush.horizontalGradient(listOf(Color.Transparent, flashColor.copy(a))),
-                            Offset(size.width - edgeW, 0f), Size(edgeW, size.height))
-                        // Top edge glow
-                        drawRect(Brush.verticalGradient(listOf(flashColor.copy(a * 0.7f), Color.Transparent)),
-                            Offset.Zero, Size(size.width, edgeH))
-                        // Bottom edge glow
-                        drawRect(Brush.verticalGradient(listOf(Color.Transparent, flashColor.copy(a * 0.7f))),
-                            Offset(0f, size.height - edgeH), Size(size.width, edgeH))
-                    }
-                }
-
-                // === Level up BURST — ring + edge glow, no board overlay ===
-                if (levelUpFlash > 0.01f) {
-                    Canvas(Modifier.matchParentSize()) {
-                        val ringProgress = 1f - levelUpFlash / 0.8f
-                        val ringRadius = size.minDimension * 0.2f + ringProgress * size.maxDimension * 0.6f
-                        val ringWidth = 8f + (1f - ringProgress) * 20f
-                        drawCircle(
-                            Color(0xFFF4D03F).copy(alpha = levelUpFlash),
-                            radius = ringRadius,
-                            center = Offset(size.width / 2f, size.height / 2f),
-                            style = Stroke(ringWidth)
-                        )
-                        // Edge glow instead of full overlay
-                        val a = (levelUpFlash * 0.5f).coerceIn(0f, 1f)
-                        val ew = size.width * 0.1f
-                        drawRect(Brush.horizontalGradient(listOf(Color(0xFFF4D03F).copy(a), Color.Transparent)),
-                            Offset.Zero, Size(ew, size.height))
-                        drawRect(Brush.horizontalGradient(listOf(Color.Transparent, Color(0xFFF4D03F).copy(a))),
-                            Offset(size.width - ew, 0f), Size(ew, size.height))
-                    }
-                }
-
-                // === Combo glow — pulsing border ===
-                if (comboGlow > 0.05f) {
-                    val pulseWidth = (1.5f + comboGlow * 2f).dp
-                    val comboColor = Color(0xFFF4D03F).copy(comboGlow * comboPulseAlpha * 0.6f)
-                    Box(Modifier.matchParentSize().border(pulseWidth, comboColor))
-                }
-
-                // === Explosion particles + spark streaks ===
-                if (particles.isNotEmpty()) {
-                    Canvas(Modifier.matchParentSize()) {
-                        particles.forEach { p ->
-                            if (p.type == 1) {
-                                // Spark streak — draw as a line trailing behind
-                                val trailLen = 12f * p.life
-                                drawLine(
-                                    Color(p.color).copy(alpha = (p.life * p.life).coerceIn(0f, 1f)),
-                                    start = Offset(p.x * size.width, p.y * size.height),
-                                    end = Offset((p.x - p.vx * 8f) * size.width, (p.y - p.vy * 8f) * size.height),
-                                    strokeWidth = p.size * p.life
-                                )
-                            } else {
-                                // Main particle — glowing circle
-                                drawCircle(
-                                    Color(p.color).copy(alpha = (p.life * p.life).coerceIn(0f, 1f)),
-                                    radius = p.size * (0.5f + p.life * 0.5f),
-                                    center = Offset(p.x * size.width, p.y * size.height)
-                                )
-                                // Bright core
-                                if (p.life > 0.4f) {
-                                    drawCircle(
-                                        Color.White.copy(alpha = ((p.life - 0.4f) * 1.5f).coerceIn(0f, 0.9f)),
-                                        radius = p.size * 0.25f * p.life,
-                                        center = Offset(p.x * size.width, p.y * size.height)
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // === Shockwave ring expanding from cleared rows ===
-                if (shockwaveProgress > 0.01f && shockwaveProgress < 1f) {
-                    Canvas(Modifier.matchParentSize()) {
-                        val maxRadius = size.maxDimension * 0.8f
-                        val radius = shockwaveProgress * maxRadius
-                        val ringAlpha = (1f - shockwaveProgress) * 0.6f
-                        val ringWidth = (1f - shockwaveProgress) * 6f + 2f
-                        // Main ring
-                        drawCircle(
-                            Color.White.copy(alpha = ringAlpha),
-                            radius = radius,
-                            center = Offset(size.width / 2f, shockwaveY * size.height),
-                            style = Stroke(ringWidth)
-                        )
-                        // Secondary ring — slightly delayed
-                        if (shockwaveProgress > 0.1f) {
-                            val r2 = (shockwaveProgress - 0.1f) / 0.9f * maxRadius
-                            val a2 = (1f - shockwaveProgress) * 0.3f
-                            drawCircle(
-                                Color(0xFFF4D03F).copy(alpha = a2),
-                                radius = r2,
-                                center = Offset(size.width / 2f, shockwaveY * size.height),
-                                style = Stroke(ringWidth * 0.5f)
-                            )
-                        }
-                    }
-                }
-
-                // === Score flyup — quick flash, never sticks ===
-                if (flyupProgress > 0.01f) {
-                    val yOff = (1f - flyupProgress) * -80f
-                    val scale = 0.8f + flyupProgress * 0.4f
-                    Text(flyupText, fontSize = 32.sp, fontWeight = FontWeight.ExtraBold,
-                        fontFamily = FontFamily.Monospace,
-                        color = Color(0xFFF4D03F).copy(alpha = (flyupProgress * flyupProgress).coerceIn(0f, 0.95f)),
-                        modifier = Modifier.align(Alignment.Center).graphicsLayer {
-                            translationY = yOff; scaleX = scale; scaleY = scale; shadowElevation = 12f
-                        })
-                }
+                // === All effects: edge glow, particles, shockwave, flyup, level burst, combo ===
+                GameEffectsLayer(fx, gs, Modifier.matchParentSize())
             }
 
             // === Controls ===
@@ -898,30 +930,8 @@ fun GameScreen(
     val isDark = com.brickgame.tetris.ui.theme.LocalIsDarkMode.current
     val levelHue = (gs.level * 36f) % 360f
 
-    // === Reuse Modern layout effect states ===
     val animatedScore by animateIntAsState(gs.score, animationSpec = tween(300), label = "fsscore")
-    var screenShakeX by remember { mutableFloatStateOf(0f) }
-    var screenShakeY by remember { mutableFloatStateOf(0f) }
-    var clearFlashAlpha by remember { mutableFloatStateOf(0f) }
-    val clearSize = remember { mutableIntStateOf(0) }
-
-    // Screen shake + flash on line clear
-    LaunchedEffect(gs.clearedLineRows) {
-        if (gs.clearedLineRows.isNotEmpty()) {
-            clearSize.intValue = gs.clearedLineRows.size
-            clearFlashAlpha = when (gs.clearedLineRows.size) { 4 -> 0.7f; 3 -> 0.45f; 2 -> 0.3f; else -> 0.15f }
-            val shakeIntensity = when (gs.clearedLineRows.size) { 4 -> 20f; 3 -> 14f; 2 -> 8f; else -> 4f }
-            val rng = java.util.Random()
-            repeat(18) { i ->
-                val decay = 1f - i / 18f
-                screenShakeX = (rng.nextFloat() - 0.5f) * shakeIntensity * decay * 2f
-                screenShakeY = (rng.nextFloat() - 0.5f) * shakeIntensity * decay * 2f
-                clearFlashAlpha *= 0.82f
-                delay(20)
-            }
-            screenShakeX = 0f; screenShakeY = 0f; clearFlashAlpha = 0f
-        }
-    }
+    val fx = rememberGameEffects(gs, shakeDelay = 20L)
 
     Box(Modifier.fillMaxSize()) {
         // Falling pieces background
@@ -932,28 +942,12 @@ fun GameScreen(
 
         // Board with shake
         Box(Modifier.fillMaxSize()
-            .graphicsLayer { translationX = screenShakeX; translationY = screenShakeY }) {
+            .graphicsLayer { translationX = fx.screenShakeX; translationY = fx.screenShakeY }) {
             GameBoard(gs.board, Modifier.fillMaxSize().alpha(boardDimAlpha), gs.currentPiece, gs.ghostY, ghost, gs.clearedLineRows, anim, ad, multiColor = LocalMultiColor.current,
                 hardDropTrail = gs.hardDropTrail, lockEvent = gs.lockEvent, pieceMaterial = LocalPieceMaterial.current, highContrast = LocalHighContrast.current,
                 boardOpacity = if (isDark) 0.10f else 0.15f, gameLevel = gs.level)
 
-            // Edge glow flash on line clears
-            if (clearFlashAlpha > 0.01f) {
-                val flashColor = when {
-                    clearSize.intValue >= 4 -> Color(0xFFF4D03F)
-                    clearSize.intValue >= 3 -> Color(0xFFFF9F43)
-                    clearSize.intValue >= 2 -> Color(0xFF4ECDC4)
-                    else -> Color.White
-                }
-                Canvas(Modifier.matchParentSize()) {
-                    val a = clearFlashAlpha.coerceIn(0f, 1f)
-                    val edgeW = size.width * 0.12f; val edgeH = size.height * 0.06f
-                    drawRect(Brush.horizontalGradient(listOf(flashColor.copy(a), Color.Transparent)), Offset.Zero, Size(edgeW, size.height))
-                    drawRect(Brush.horizontalGradient(listOf(Color.Transparent, flashColor.copy(a))), Offset(size.width - edgeW, 0f), Size(edgeW, size.height))
-                    drawRect(Brush.verticalGradient(listOf(flashColor.copy(a * 0.7f), Color.Transparent)), Offset.Zero, Size(size.width, edgeH))
-                    drawRect(Brush.verticalGradient(listOf(Color.Transparent, flashColor.copy(a * 0.7f))), Offset(0f, size.height - edgeH), Size(size.width, edgeH))
-                }
-            }
+            GameEffectsLayer(fx, gs, Modifier.matchParentSize())
         }
 
         // Floating info bar — same style as Modern
@@ -1020,28 +1014,7 @@ fun GameScreen(
     val theme = LocalGameTheme.current
     val isDark = com.brickgame.tetris.ui.theme.LocalIsDarkMode.current
     val animatedScore by animateIntAsState(gs.score, animationSpec = tween(300), label = "chscore")
-
-    // Screen shake
-    var screenShakeX by remember { mutableFloatStateOf(0f) }
-    var screenShakeY by remember { mutableFloatStateOf(0f) }
-    var clearFlashAlpha by remember { mutableFloatStateOf(0f) }
-    val clearSize = remember { mutableIntStateOf(0) }
-    LaunchedEffect(gs.clearedLineRows) {
-        if (gs.clearedLineRows.isNotEmpty()) {
-            clearSize.intValue = gs.clearedLineRows.size
-            clearFlashAlpha = when (gs.clearedLineRows.size) { 4 -> 0.7f; 3 -> 0.45f; 2 -> 0.3f; else -> 0.15f }
-            val shakeIntensity = when (gs.clearedLineRows.size) { 4 -> 16f; 3 -> 10f; 2 -> 6f; else -> 3f }
-            val rng = java.util.Random()
-            repeat(14) { i ->
-                val decay = 1f - i / 14f
-                screenShakeX = (rng.nextFloat() - 0.5f) * shakeIntensity * decay * 2f
-                screenShakeY = (rng.nextFloat() - 0.5f) * shakeIntensity * decay * 2f
-                clearFlashAlpha *= 0.82f
-                delay(20)
-            }
-            screenShakeX = 0f; screenShakeY = 0f; clearFlashAlpha = 0f
-        }
-    }
+    val fx = rememberGameEffects(gs, shakeSteps = 14, shakeDelay = 20L, shakeMultiplier = 0.8f)
 
     Box(Modifier.fillMaxSize()) {
         // Falling pieces background
@@ -1098,29 +1071,13 @@ fun GameScreen(
 
             // Board with shake — transparent modern grid
             Box(Modifier.weight(1f).fillMaxWidth()
-                .graphicsLayer { translationX = screenShakeX; translationY = screenShakeY }) {
+                .graphicsLayer { translationX = fx.screenShakeX; translationY = fx.screenShakeY }) {
                 GameBoard(gs.board, Modifier.fillMaxSize(), gs.currentPiece, gs.ghostY, ghost, gs.clearedLineRows, anim, ad,
                     multiColor = LocalMultiColor.current, pieceMaterial = LocalPieceMaterial.current, highContrast = LocalHighContrast.current,
                     boardOpacity = if (isDark) 0.12f else 0.18f, gameLevel = gs.level,
                     hardDropTrail = gs.hardDropTrail, lockEvent = gs.lockEvent)
 
-                // Edge glow
-                if (clearFlashAlpha > 0.01f) {
-                    val flashColor = when {
-                        clearSize.intValue >= 4 -> Color(0xFFF4D03F)
-                        clearSize.intValue >= 3 -> Color(0xFFFF9F43)
-                        clearSize.intValue >= 2 -> Color(0xFF4ECDC4)
-                        else -> Color.White
-                    }
-                    Canvas(Modifier.matchParentSize()) {
-                        val a = clearFlashAlpha.coerceIn(0f, 1f)
-                        val edgeW = size.width * 0.10f; val edgeH = size.height * 0.05f
-                        drawRect(Brush.horizontalGradient(listOf(flashColor.copy(a), Color.Transparent)), Offset.Zero, Size(edgeW, size.height))
-                        drawRect(Brush.horizontalGradient(listOf(Color.Transparent, flashColor.copy(a))), Offset(size.width - edgeW, 0f), Size(edgeW, size.height))
-                        drawRect(Brush.verticalGradient(listOf(flashColor.copy(a * 0.7f), Color.Transparent)), Offset.Zero, Size(size.width, edgeH))
-                        drawRect(Brush.verticalGradient(listOf(Color.Transparent, flashColor.copy(a * 0.7f))), Offset(0f, size.height - edgeH), Size(size.width, edgeH))
-                    }
-                }
+                GameEffectsLayer(fx, gs, Modifier.matchParentSize())
             }
 
             // Controls — same Compact style DPad layout, respects handedness
@@ -1460,27 +1417,8 @@ fun GameScreen(
     val isHorizontal = rotationStep == 1 || rotationStep == 3 // needs swapped dims
     val animatedRotation by animateFloatAsState(boardRotation, animationSpec = tween(400), label = "brot")
 
-    // Screen shake
-    var screenShakeX by remember { mutableFloatStateOf(0f) }
-    var screenShakeY by remember { mutableFloatStateOf(0f) }
-    var clearFlashAlpha by remember { mutableFloatStateOf(0f) }
-    val clearSize = remember { mutableIntStateOf(0) }
-    LaunchedEffect(gs.clearedLineRows) {
-        if (gs.clearedLineRows.isNotEmpty()) {
-            clearSize.intValue = gs.clearedLineRows.size
-            clearFlashAlpha = when (gs.clearedLineRows.size) { 4 -> 0.7f; 3 -> 0.45f; 2 -> 0.3f; else -> 0.15f }
-            val shakeIntensity = when (gs.clearedLineRows.size) { 4 -> 20f; 3 -> 14f; 2 -> 8f; else -> 4f }
-            val rng = java.util.Random()
-            repeat(18) { i ->
-                val decay = 1f - i / 18f
-                screenShakeX = (rng.nextFloat() - 0.5f) * shakeIntensity * decay * 2f
-                screenShakeY = (rng.nextFloat() - 0.5f) * shakeIntensity * decay * 2f
-                clearFlashAlpha *= 0.82f
-                delay(20)
-            }
-            screenShakeX = 0f; screenShakeY = 0f; clearFlashAlpha = 0f
-        }
-    }
+    // Shared effects — uses shake but custom edge glow for rotated board
+    val fx = rememberGameEffects(gs, shakeDelay = 20L, enableParticles = false, enableFlyup = false, enableLevelBurst = false, enableScoreGlow = false)
 
     val bgSpeed = if (gs.level >= 10) 1f + (gs.level - 10) * 0.15f else 1f
 
@@ -1495,16 +1433,14 @@ fun GameScreen(
 
         // Board — rotated, fills entire screen
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            // At -90° and -270° (horizontal), swap width/height so board fills screen
-            // At 0° and -180° (vertical), use normal dimensions
             val boardW = if (isHorizontal) screenH else screenW
             val boardH = if (isHorizontal) screenW else screenH
             // Shake vector rotates with the board
             val shakeX = when (rotationStep) {
-                0 -> screenShakeX; 1 -> screenShakeY; 2 -> -screenShakeX; else -> -screenShakeY
+                0 -> fx.screenShakeX; 1 -> fx.screenShakeY; 2 -> -fx.screenShakeX; else -> -fx.screenShakeY
             }
             val shakeY = when (rotationStep) {
-                0 -> screenShakeY; 1 -> -screenShakeX; 2 -> -screenShakeY; else -> screenShakeX
+                0 -> fx.screenShakeY; 1 -> -fx.screenShakeX; 2 -> -fx.screenShakeY; else -> fx.screenShakeX
             }
             Box(Modifier
                 .width(boardW).height(boardH)
@@ -1522,32 +1458,31 @@ fun GameScreen(
             }
         }
 
-        // Edge glow on line clears
-        if (clearFlashAlpha > 0.01f) {
+        // Rotation-aware edge glow on line clears
+        if (fx.clearFlashAlpha > 0.01f) {
             val flashColor = when {
-                clearSize.intValue >= 4 -> Color(0xFFF4D03F)
-                clearSize.intValue >= 3 -> Color(0xFFFF9F43)
-                clearSize.intValue >= 2 -> Color(0xFF4ECDC4)
+                fx.clearSize.intValue >= 4 -> Color(0xFFF4D03F)
+                fx.clearSize.intValue >= 3 -> Color(0xFFFF9F43)
+                fx.clearSize.intValue >= 2 -> Color(0xFF4ECDC4)
                 else -> Color.White
             }
             Canvas(Modifier.matchParentSize()) {
-                val a = clearFlashAlpha.coerceIn(0f, 1f)
+                val a = fx.clearFlashAlpha.coerceIn(0f, 1f)
                 val edgeW = size.width * 0.08f; val edgeH = size.height * 0.06f
-                // Stack side gets strongest glow based on rotation
                 when (rotationStep) {
-                    0 -> { // Normal: stack at bottom
+                    0 -> {
                         drawRect(Brush.verticalGradient(listOf(flashColor.copy(a * 0.3f), Color.Transparent)), Offset.Zero, Size(size.width, edgeH))
                         drawRect(Brush.verticalGradient(listOf(Color.Transparent, flashColor.copy(a))), Offset(0f, size.height - edgeH), Size(size.width, edgeH))
                     }
-                    1 -> { // -90°: stack at right
+                    1 -> {
                         drawRect(Brush.horizontalGradient(listOf(flashColor.copy(a * 0.3f), Color.Transparent)), Offset.Zero, Size(edgeW, size.height))
                         drawRect(Brush.horizontalGradient(listOf(Color.Transparent, flashColor.copy(a))), Offset(size.width - edgeW, 0f), Size(edgeW, size.height))
                     }
-                    2 -> { // -180°: stack at top
+                    2 -> {
                         drawRect(Brush.verticalGradient(listOf(flashColor.copy(a), Color.Transparent)), Offset.Zero, Size(size.width, edgeH))
                         drawRect(Brush.verticalGradient(listOf(Color.Transparent, flashColor.copy(a * 0.3f))), Offset(0f, size.height - edgeH), Size(size.width, edgeH))
                     }
-                    else -> { // -270°: stack at left
+                    else -> {
                         drawRect(Brush.horizontalGradient(listOf(flashColor.copy(a), Color.Transparent)), Offset.Zero, Size(edgeW, size.height))
                         drawRect(Brush.horizontalGradient(listOf(Color.Transparent, flashColor.copy(a * 0.3f))), Offset(size.width - edgeW, 0f), Size(edgeW, size.height))
                     }
@@ -1659,7 +1594,7 @@ fun GameScreen(
             clearSize.intValue = gs.clearedLineRows.size
             clearFlashAlpha = when (gs.clearedLineRows.size) { 4 -> 0.6f; 3 -> 0.4f; 2 -> 0.25f; else -> 0.12f }
             val shakeIntensity = when (gs.clearedLineRows.size) { 4 -> 14f; 3 -> 9f; 2 -> 5f; else -> 2f }
-            val rng = java.util.Random()
+            val rng = kotlin.random.Random
             repeat(14) { i ->
                 val decay = 1f - i / 14f
                 screenShakeX = (rng.nextFloat() - 0.5f) * shakeIntensity * decay * 2f
@@ -2128,7 +2063,7 @@ private fun FallingPiecesBackground(theme: com.brickgame.tetris.ui.theme.GameThe
                   val sparkle: Boolean, val sparklePhase: Float)
 
     val pieces = remember {
-        val rng = java.util.Random(42)
+        val rng = kotlin.random.Random(42)
         (0..299).map {
             FP(col = rng.nextFloat(), speed = 0.4f + rng.nextFloat() * 1.2f,
                sz = 5f + rng.nextFloat() * 8f, shape = it % 7,

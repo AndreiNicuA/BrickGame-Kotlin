@@ -108,7 +108,27 @@ object GameThemes {
         accentColor = Color(0xFFE07030)
     )
 
-    val builtInThemes = listOf(ClassicGreen, Midnight, RetroAmber, Neon, Paper)
+    val Cyberpunk = GameTheme(
+        id = "builtin_cyberpunk", name = "Cyberpunk",
+        backgroundColor = Color(0xFF0A0A1A), deviceColor = Color(0xFF0E0E24),
+        screenBackground = Color(0xFF0C0C20), pixelOn = Color(0xFFFF0066), pixelOff = Color(0xFF0D0D1E),
+        textPrimary = Color(0xFFE0E8FF), textSecondary = Color(0xFF5566AA),
+        buttonPrimary = Color(0xFF00FFFF), buttonPrimaryPressed = Color(0xFF00CCCC),
+        buttonSecondary = Color(0xFF1A1A3A), buttonSecondaryPressed = Color(0xFF101028),
+        accentColor = Color(0xFF00FFFF)
+    )
+
+    val Sakura = GameTheme(
+        id = "builtin_sakura", name = "Sakura",
+        backgroundColor = Color(0xFFFFF5F0), deviceColor = Color(0xFFF0E0D8),
+        screenBackground = Color(0xFFFFF8F5), pixelOn = Color(0xFF8B475D), pixelOff = Color(0xFFF0E0DC),
+        textPrimary = Color(0xFF3A2028), textSecondary = Color(0xFF9A7080),
+        buttonPrimary = Color(0xFFFFB7C5), buttonPrimaryPressed = Color(0xFFE8A0B0),
+        buttonSecondary = Color(0xFFF0D8E0), buttonSecondaryPressed = Color(0xFFE0C8D0),
+        accentColor = Color(0xFFFF69B4)
+    )
+
+    val builtInThemes = listOf(ClassicGreen, Midnight, RetroAmber, Neon, Paper, Cyberpunk, Sakura)
 
     var allThemes: List<GameTheme> = builtInThemes
         private set
