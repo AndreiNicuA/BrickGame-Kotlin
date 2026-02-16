@@ -390,7 +390,6 @@ class MainActivity : ComponentActivity() {
                             levelEventsEnabled = levelEvents,
                             onSetLevelEventsEnabled = vm::setLevelEventsEnabled,
                             buttonStyle = buttonStyle,
-                    boardShape = boardShape,
                             onSetButtonStyle = vm::setButtonStyle,
                             controllerLayoutMode = controllerLayoutMode,
                             onSetControllerLayout = vm::setControllerLayout,

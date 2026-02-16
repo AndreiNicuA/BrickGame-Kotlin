@@ -132,6 +132,10 @@ private fun elementBaseSize(type: FreeformElementType): Pair<Dp, Dp> = when (typ
     FreeformElementType.LINES -> 72.dp to 20.dp
     FreeformElementType.HOLD_PREVIEW -> 48.dp to 56.dp
     FreeformElementType.NEXT_PREVIEW -> 48.dp to 100.dp
+    FreeformElementType.INFO_BAR_HORIZONTAL -> 280.dp to 36.dp
+    FreeformElementType.INFO_BAR_VERTICAL -> 64.dp to 200.dp
+    FreeformElementType.INFO_SPLIT_STATS -> 200.dp to 28.dp
+    FreeformElementType.INFO_SPLIT_PIECES -> 120.dp to 56.dp
 }
 
 /** Render actual game components — used both in gameplay and editor preview */
@@ -182,6 +186,15 @@ fun RenderElement(
                 gs.nextPieces.take(3).forEachIndexed { i, p ->
                     NextPiecePreview(p.shape, Modifier.size((if (i == 0) 36 * scale else 24 * scale).dp), if (i == 0) 1f else 0.5f)
                 }
+            }
+        }
+        // Compound info bars
+        FreeformElementType.INFO_BAR_HORIZONTAL,
+        FreeformElementType.INFO_BAR_VERTICAL,
+        FreeformElementType.INFO_SPLIT_STATS,
+        FreeformElementType.INFO_SPLIT_PIECES -> {
+            Box(Modifier.background(Color.Black.copy(0.45f), RoundedCornerShape(6.dp)).padding(horizontal = 8.dp, vertical = 3.dp)) {
+                Text("Info", fontSize = (12 * scale).sp, fontFamily = FontFamily.Monospace, color = theme.accentColor)
             }
         }
     }
