@@ -27,6 +27,10 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import com.brickgame.tetris.data.*
 import com.brickgame.tetris.game.GameState
 import com.brickgame.tetris.game.GameStatus
@@ -49,6 +53,7 @@ fun FreeformGameLayout(
     animationStyle: AnimationStyle,
     animationDuration: Float,
     elements: Map<String, FreeformElement>,
+    boardShape: BoardShape = BoardShape.STANDARD,
     onRotate: () -> Unit,
     onHardDrop: () -> Unit,
     onHold: () -> Unit,
@@ -101,9 +106,10 @@ fun FreeformGameLayout(
                         .offset(x = maxW * elem.x - w / 2, y = maxH * elem.y - h / 2)
                         .alpha(elem.alpha)
                 ) {
+                    val elemShape = ButtonShape.entries.find { it.name == elem.buttonShape } ?: ButtonShape.ROUND
                     RenderElement(type, scale, gs, onRotate, onHardDrop, onHold,
                         onLeftPress, onLeftRelease, onRightPress, onRightRelease,
-                        onDownPress, onDownRelease, onPause, onOpenSettings, onStartGame)
+                        onDownPress, onDownRelease, onPause, onOpenSettings, onStartGame, elemShape)
                 }
             }
         }
@@ -135,23 +141,24 @@ fun RenderElement(
     onRotate: () -> Unit, onHD: () -> Unit, onHold: () -> Unit,
     onLP: () -> Unit, onLR: () -> Unit, onRP: () -> Unit, onRR: () -> Unit,
     onDP: () -> Unit, onDR: () -> Unit, onPause: () -> Unit,
-    onSet: () -> Unit, onStart: () -> Unit
+    onSet: () -> Unit, onStart: () -> Unit,
+    elemButtonShape: ButtonShape = ButtonShape.ROUND
 ) {
     val theme = LocalGameTheme.current
     val sz = (50 * scale).dp
     when (type) {
         FreeformElementType.BOARD -> {} // handled separately
-        FreeformElementType.DPAD -> DPad(buttonSize = sz, rotateInCenter = false,
+        FreeformElementType.DPAD -> DPad(buttonSize = sz, rotateInCenter = false, shapeOverride = elemButtonShape,
             onUpPress = onHD, onDownPress = onDP, onDownRelease = onDR,
             onLeftPress = onLP, onLeftRelease = onLR, onRightPress = onRP, onRightRelease = onRR, onRotate = onRotate)
-        FreeformElementType.DPAD_ROTATE -> DPad(buttonSize = sz, rotateInCenter = true,
+        FreeformElementType.DPAD_ROTATE -> DPad(buttonSize = sz, rotateInCenter = true, shapeOverride = elemButtonShape,
             onUpPress = onHD, onDownPress = onDP, onDownRelease = onDR,
             onLeftPress = onLP, onLeftRelease = onLR, onRightPress = onRP, onRightRelease = onRR, onRotate = onRotate)
-        FreeformElementType.BTN_UP -> TapButton(ButtonIcon.UP, sz, onClick = onHD)
-        FreeformElementType.BTN_DOWN -> HoldButton(ButtonIcon.DOWN, sz, onPress = onDP, onRelease = onDR)
-        FreeformElementType.BTN_LEFT -> HoldButton(ButtonIcon.LEFT, sz, onPress = onLP, onRelease = onLR)
-        FreeformElementType.BTN_RIGHT -> HoldButton(ButtonIcon.RIGHT, sz, onPress = onRP, onRelease = onRR)
-        FreeformElementType.ROTATE -> RotateButton(onRotate, (64 * scale).dp)
+        FreeformElementType.BTN_UP -> TapButton(ButtonIcon.UP, sz, shapeOverride = elemButtonShape, onClick = onHD)
+        FreeformElementType.BTN_DOWN -> HoldButton(ButtonIcon.DOWN, sz, shapeOverride = elemButtonShape, onPress = onDP, onRelease = onDR)
+        FreeformElementType.BTN_LEFT -> HoldButton(ButtonIcon.LEFT, sz, shapeOverride = elemButtonShape, onPress = onLP, onRelease = onLR)
+        FreeformElementType.BTN_RIGHT -> HoldButton(ButtonIcon.RIGHT, sz, shapeOverride = elemButtonShape, onPress = onRP, onRelease = onRR)
+        FreeformElementType.ROTATE -> RotateButton(onRotate, (64 * scale).dp, shapeOverride = elemButtonShape)
         FreeformElementType.HOLD_BTN -> ActionButton("HOLD", onHold, width = (78 * scale).dp, height = (34 * scale).dp, backgroundColor = theme.buttonPrimary)
         FreeformElementType.PAUSE_BTN -> ActionButton(
             if (gs.status == GameStatus.MENU) "START" else "PAUSE",
@@ -422,33 +429,88 @@ fun FreeformEditorScreen(
             }
         }
 
-        // Side panel drawer (slides from right)
+        // Scrim when drawer is open
         if (showMenu) {
-            Box(Modifier.fillMaxSize().background(Color.Black.copy(0.4f)).clickable { showMenu = false })
+            Box(Modifier.fillMaxSize().background(Color.Black.copy(0.3f)).clickable { showMenu = false })
+        }
+
+        // Side Drawer — slides from right (40% width)
+        AnimatedVisibility(
+            visible = showMenu,
+            enter = slideInHorizontally(animationSpec = tween(250)) { it },
+            exit = slideOutHorizontally(animationSpec = tween(250)) { it },
+            modifier = Modifier.align(Alignment.CenterEnd)
+        ) {
             Surface(
-                modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight().fillMaxWidth(0.55f),
+                modifier = Modifier.fillMaxHeight().fillMaxWidth(0.42f),
                 shape = RoundedCornerShape(topStart = 16.dp, bottomStart = 16.dp),
-                color = Color(0xFF1A1A1A).copy(0.95f)
+                color = Color(0xFF1A1A1A).copy(0.95f),
+                shadowElevation = 8.dp
             ) {
                 Column(Modifier.fillMaxSize().systemBarsPadding().padding(12.dp)) {
                     Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
-                        Text("Elements", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                        Text("Freeform", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
                         Text("✕", color = Color(0xFF888888), fontSize = 20.sp,
                             modifier = Modifier.clickable { showMenu = false }.padding(4.dp))
                     }
                     Spacer(Modifier.height(6.dp))
-                    // Labels toggle
-                    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(Color(0xFF222222))
-                        .clickable { showLabels = !showLabels }.padding(horizontal = 10.dp, vertical = 7.dp),
-                        Arrangement.SpaceBetween, Alignment.CenterVertically) {
-                        Text("Show Labels", color = Color.White, fontSize = 12.sp)
-                        Text(if (showLabels) "ON" else "OFF", color = if (showLabels) Color(0xFF22C55E) else Color(0xFF888888),
-                            fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                    }
-                    Spacer(Modifier.height(8.dp))
 
                     LazyColumn(Modifier.weight(1f)) {
-                        // LCD / Info section
+                        // ── Shape picker for selected element ──
+                        if (selectedElement != null) {
+                            val selType = FreeformElementType.fromKey(selectedElement.key)
+                            val isControl = selType?.category == ElementCategory.CONTROL
+                            if (isControl) {
+                                item {
+                                    Text("Button Shape", color = Color(0xFF22C55E), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                    Spacer(Modifier.height(4.dp))
+                                    val current = ButtonShape.entries.find { it.name == selectedElement.buttonShape } ?: ButtonShape.ROUND
+                                    ButtonShape.entries.forEach { shape ->
+                                        val isSel = shape == current
+                                        Row(
+                                            Modifier.fillMaxWidth().padding(vertical = 2.dp)
+                                                .clip(RoundedCornerShape(6.dp))
+                                                .background(if (isSel) Color(0xFF22C55E).copy(0.15f) else Color(0xFF252525))
+                                                .clickable {
+                                                    val fresh = elements[selectedElement.key] ?: return@clickable
+                                                    onElementUpdated(fresh.copy(buttonShape = shape.name))
+                                                }
+                                                .padding(horizontal = 10.dp, vertical = 7.dp),
+                                            Arrangement.SpaceBetween, Alignment.CenterVertically
+                                        ) {
+                                            Column {
+                                                Text(shape.displayName, color = if (isSel) Color.White else Color(0xFFAAAAAA), fontSize = 12.sp, fontWeight = if (isSel) FontWeight.Bold else FontWeight.Normal)
+                                                Text(shape.description, color = Color(0xFF666666), fontSize = 10.sp)
+                                            }
+                                            if (isSel) Text("✓", color = Color(0xFF22C55E), fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                                        }
+                                    }
+                                    Spacer(Modifier.height(10.dp))
+                                }
+                            }
+                        }
+
+                        // ── Labels toggle ──
+                        item {
+                            Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(Color(0xFF222222))
+                                .clickable { showLabels = !showLabels }.padding(horizontal = 10.dp, vertical = 7.dp),
+                                Arrangement.SpaceBetween, Alignment.CenterVertically) {
+                                Text("Show Labels", color = Color.White, fontSize = 12.sp)
+                                Text(if (showLabels) "ON" else "OFF", color = if (showLabels) Color(0xFF22C55E) else Color(0xFF888888),
+                                    fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
+                            Spacer(Modifier.height(4.dp))
+                            Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(Color(0xFF222222))
+                                .clickable { snapEnabled = !snapEnabled }.padding(horizontal = 10.dp, vertical = 7.dp),
+                                Arrangement.SpaceBetween, Alignment.CenterVertically) {
+                                Text("Snap Grid", color = Color.White, fontSize = 12.sp)
+                                Text(if (snapEnabled) "ON" else "OFF", color = if (snapEnabled) Color(0xFF22C55E) else Color(0xFF888888),
+                                    fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
+                            Spacer(Modifier.height(8.dp))
+                        }
+
+                        // ── LCD & Info section ──
                         item { Text("LCD & Info", color = Color(0xFFF59E0B), fontSize = 12.sp, fontWeight = FontWeight.Bold); Spacer(Modifier.height(4.dp)) }
                         val infoTypes = listOf(FreeformElementType.BOARD, FreeformElementType.SCORE, FreeformElementType.LEVEL,
                             FreeformElementType.LINES, FreeformElementType.HOLD_PREVIEW, FreeformElementType.NEXT_PREVIEW)
@@ -460,7 +522,8 @@ fun FreeformEditorScreen(
                                 else onElementUpdated(el.copy(visible = !el.visible))
                             }
                         }
-                        // Buttons section
+
+                        // ── Buttons section ──
                         item { Spacer(Modifier.height(8.dp)); Text("Buttons", color = Color(0xFF3B82F6), fontSize = 12.sp, fontWeight = FontWeight.Bold); Spacer(Modifier.height(4.dp)) }
                         val ctrlTypes = FreeformElementType.entries.filter { it.category == ElementCategory.CONTROL }
                         items(ctrlTypes.size) { i ->
@@ -478,6 +541,25 @@ fun FreeformEditorScreen(
                             colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)) {
                             Text("↺ Reset All")
                         }
+                    }
+                }
+            }
+        }
+
+        // Edge tab to open drawer (when drawer is closed)
+        if (!showMenu) {
+            Surface(
+                modifier = Modifier.align(Alignment.CenterEnd)
+                    .offset(x = (-2).dp)
+                    .width(20.dp).height(56.dp)
+                    .clickable { showMenu = true },
+                shape = RoundedCornerShape(topStart = 8.dp, bottomStart = 8.dp),
+                color = Color(0xFF3B82F6).copy(0.7f)
+            ) {
+                Column(Modifier.fillMaxSize(), Arrangement.Center, Alignment.CenterHorizontally) {
+                    repeat(3) {
+                        Box(Modifier.width(10.dp).height(2.dp).background(Color.White.copy(0.7f), RoundedCornerShape(1.dp)))
+                        if (it < 2) Spacer(Modifier.height(3.dp))
                     }
                 }
             }

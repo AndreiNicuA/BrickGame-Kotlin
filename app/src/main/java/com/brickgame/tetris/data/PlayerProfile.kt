@@ -16,6 +16,9 @@ data class PlayerProfile(
     val dpadStyle: String = "STANDARD",
     val activeCustomLayoutId: String? = null,
     val freeformElements: Map<String, FreeformElement> = defaultFreeformElements(),
+    val boardShape: String = "STANDARD",
+    val infoBarType: String = "INDIVIDUAL",
+    val infoBarShape: String = "PILL",
     val soundEnabled: Boolean = true,
     val soundVolume: Float = 0.7f,
     val soundStyle: String = "RETRO_BEEP",
@@ -60,9 +63,10 @@ data class FreeformElement(
     val x: Float,
     val y: Float,
     val size: Float = 1.0f,
-    val sizeH: Float = -1f, // -1 means use size for both; positive = independent height scale
+    val sizeH: Float = -1f,
     val alpha: Float = 1.0f,
-    val visible: Boolean = true
+    val visible: Boolean = true,
+    val buttonShape: String = "ROUND"
 )
 
 /** Effective height scale — uses sizeH if set, otherwise falls back to size */
@@ -89,7 +93,12 @@ enum class FreeformElementType(
     LEVEL("LEVEL", "Level", ElementCategory.INFO, "Level indicator"),
     LINES("LINES", "Lines", ElementCategory.INFO, "Lines cleared"),
     HOLD_PREVIEW("HOLD_PREVIEW", "Hold Piece", ElementCategory.INFO, "Held piece preview"),
-    NEXT_PREVIEW("NEXT_PREVIEW", "Next Pieces", ElementCategory.INFO, "Next piece queue");
+    NEXT_PREVIEW("NEXT_PREVIEW", "Next Pieces", ElementCategory.INFO, "Next piece queue"),
+    // Compound info bars
+    INFO_BAR_HORIZONTAL("INFO_BAR_HORIZONTAL", "Info Bar (H)", ElementCategory.INFO, "Horizontal info bar"),
+    INFO_BAR_VERTICAL("INFO_BAR_VERTICAL", "Info Bar (V)", ElementCategory.INFO, "Vertical info stack"),
+    INFO_SPLIT_STATS("INFO_SPLIT_STATS", "Stats Bar", ElementCategory.INFO, "Score/Level/Lines bar"),
+    INFO_SPLIT_PIECES("INFO_SPLIT_PIECES", "Pieces Bar", ElementCategory.INFO, "Hold/Next bar");
 
     companion object {
         fun fromKey(key: String): FreeformElementType? = entries.find { it.key == key }

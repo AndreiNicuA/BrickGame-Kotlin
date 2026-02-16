@@ -176,6 +176,7 @@ class MainActivity : ComponentActivity() {
             // New features
             val levelEvents by vm.levelEventsEnabled.collectAsState()
             val buttonStyle by vm.buttonStyle.collectAsState()
+            val boardShape by vm.boardShape.collectAsState()
             val controllerLayoutMode by vm.controllerLayout.collectAsState()
             val leftHanded by vm.leftHanded.collectAsState()
             val infinityTimer by vm.infinityTimer.collectAsState()
@@ -389,6 +390,7 @@ class MainActivity : ComponentActivity() {
                             levelEventsEnabled = levelEvents,
                             onSetLevelEventsEnabled = vm::setLevelEventsEnabled,
                             buttonStyle = buttonStyle,
+                    boardShape = boardShape,
                             onSetButtonStyle = vm::setButtonStyle,
                             controllerLayoutMode = controllerLayoutMode,
                             onSetControllerLayout = vm::setControllerLayout,
@@ -428,6 +430,7 @@ class MainActivity : ComponentActivity() {
                                 freeformElements = profile.freeformElements,
                                 levelEventsEnabled = levelEvents,
                                 buttonStyle = buttonStyle,
+                    boardShape = boardShape,
                                 controllerLayoutMode = controllerLayoutMode,
                                 controllerConnected = GamepadController.getConnectedControllers().isNotEmpty(),
                                 timerExpired = timerExpired,

@@ -44,6 +44,7 @@ import com.brickgame.tetris.game.GameMode
 import com.brickgame.tetris.data.LayoutElements
 import com.brickgame.tetris.ui.components.*
 import com.brickgame.tetris.ui.components.LocalButtonShape
+import com.brickgame.tetris.ui.layout.BoardShape
 import com.brickgame.tetris.ui.layout.ButtonShape
 import com.brickgame.tetris.ui.layout.DPadStyle
 import com.brickgame.tetris.ui.layout.FreeformGameLayout
@@ -422,6 +423,7 @@ fun GameScreen(
     // New features
     levelEventsEnabled: Boolean = false,
     buttonStyle: String = "ROUND",
+    boardShape: String = "STANDARD",
     controllerLayoutMode: String = "normal",
     controllerConnected: Boolean = false,
     timerExpired: Boolean = false,
