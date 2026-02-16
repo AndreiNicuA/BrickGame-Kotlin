@@ -426,6 +426,7 @@ fun GameScreen(
     levelEventsEnabled: Boolean = false,
     buttonStyle: String = "ROUND",
     boardShape: String = "STANDARD",
+    infoBarShape: String = "PILL",
     infoBarType: String = "INDIVIDUAL",
     infoBarShape: String = "PILL",
     controllerLayoutMode: String = "normal",

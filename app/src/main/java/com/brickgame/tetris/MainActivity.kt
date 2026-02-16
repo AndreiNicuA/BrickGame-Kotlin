@@ -182,6 +182,8 @@ class MainActivity : ComponentActivity() {
             val boardShape by vm.boardShape.collectAsState()
             val infoBarType by vm.infoBarType.collectAsState()
             val infoBarShape by vm.infoBarShape.collectAsState()
+            val infoBarType by vm.infoBarType.collectAsState()
+            val infoBarShape by vm.infoBarShape.collectAsState()
             val controllerLayoutMode by vm.controllerLayout.collectAsState()
             val leftHanded by vm.leftHanded.collectAsState()
             val infinityTimer by vm.infinityTimer.collectAsState()
@@ -325,6 +327,10 @@ class MainActivity : ComponentActivity() {
                         FreeformEditorScreen(
                             boardShape = BoardShape.entries.find { it.name == boardShape } ?: BoardShape.STANDARD,
                             onBoardShapeChanged = { shape -> vm.setBoardShape(shape.name) },
+                            infoBarType = InfoBarType.entries.find { it.name == infoBarType } ?: InfoBarType.INDIVIDUAL,
+                            onInfoBarTypeChanged = { type -> vm.setInfoBarType(type.name) },
+                            infoBarShape = InfoBarShape.entries.find { it.name == infoBarShape } ?: InfoBarShape.PILL,
+                            onInfoBarShapeChanged = { shape -> vm.setInfoBarShape(shape.name) },
                             elements = profile.freeformElements,
                             onElementUpdated = vm::updateFreeformElement,
                             onElementAdded = vm::addFreeformElement,
@@ -437,6 +443,7 @@ class MainActivity : ComponentActivity() {
                                 levelEventsEnabled = levelEvents,
                                 buttonStyle = buttonStyle,
                     boardShape = boardShape,
+                    infoBarShape = infoBarShape,
                     infoBarType = infoBarType,
                     infoBarShape = infoBarShape,
                                 controllerLayoutMode = controllerLayoutMode,

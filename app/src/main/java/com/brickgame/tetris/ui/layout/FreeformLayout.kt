@@ -688,7 +688,62 @@ fun FreeformEditorScreen(
                             Spacer(Modifier.height(8.dp))
                         }
 
-                        // ── Labels toggle ──
+                        // ── Board Shape (when BOARD selected) ──
+                        if (selectedElement != null && selectedElement.key == "BOARD") {
+                            item {
+                                Text("Board Shape", color = Color(0xFF8B5CF6), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                Spacer(Modifier.height(4.dp))
+                                BoardShape.entries.forEach { shape ->
+                                    val isSel = shape == boardShape
+                                    Row(Modifier.fillMaxWidth().padding(vertical = 2.dp).clip(RoundedCornerShape(6.dp))
+                                        .background(if (isSel) Color(0xFF8B5CF6).copy(0.15f) else Color(0xFF252525))
+                                        .clickable { onBoardShapeChanged(shape) }.padding(horizontal = 10.dp, vertical = 7.dp),
+                                        Arrangement.SpaceBetween, Alignment.CenterVertically) {
+                                        Column { Text(shape.displayName, color = if (isSel) Color.White else Color(0xFFAAAAAA), fontSize = 12.sp, fontWeight = if (isSel) FontWeight.Bold else FontWeight.Normal); Text(shape.description, color = Color(0xFF666666), fontSize = 10.sp) }
+                                        if (isSel) Text("✓", color = Color(0xFF8B5CF6), fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                                Spacer(Modifier.height(10.dp))
+                            }
+                        }
+
+                        // ── Info Bar Shape (when compound info selected) ──
+                        if (selectedElement != null && selectedElement.key.startsWith("INFO_")) {
+                            item {
+                                Text("Info Bar Shape", color = Color(0xFFF59E0B), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                Spacer(Modifier.height(4.dp))
+                                InfoBarShape.entries.forEach { shape ->
+                                    val isSel = shape == infoBarShape
+                                    Row(Modifier.fillMaxWidth().padding(vertical = 2.dp).clip(RoundedCornerShape(6.dp))
+                                        .background(if (isSel) Color(0xFFF59E0B).copy(0.15f) else Color(0xFF252525))
+                                        .clickable { onInfoBarShapeChanged(shape) }.padding(horizontal = 10.dp, vertical = 7.dp),
+                                        Arrangement.SpaceBetween, Alignment.CenterVertically) {
+                                        Text(shape.displayName, color = if (isSel) Color.White else Color(0xFFAAAAAA), fontSize = 12.sp, fontWeight = if (isSel) FontWeight.Bold else FontWeight.Normal)
+                                        if (isSel) Text("✓", color = Color(0xFFF59E0B), fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                                Spacer(Modifier.height(10.dp))
+                            }
+                        }
+
+                        // ── Info Bar Type ──
+                        item {
+                            Text("Info Bar Type", color = Color(0xFFF59E0B), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            Spacer(Modifier.height(4.dp))
+                            InfoBarType.entries.forEach { t ->
+                                val isSel = t == infoBarType
+                                Row(Modifier.fillMaxWidth().padding(vertical = 2.dp).clip(RoundedCornerShape(6.dp))
+                                    .background(if (isSel) Color(0xFFF59E0B).copy(0.15f) else Color(0xFF252525))
+                                    .clickable { onInfoBarTypeChanged(t) }.padding(horizontal = 10.dp, vertical = 7.dp),
+                                    Arrangement.SpaceBetween, Alignment.CenterVertically) {
+                                    Column { Text(t.displayName, color = if (isSel) Color.White else Color(0xFFAAAAAA), fontSize = 12.sp, fontWeight = if (isSel) FontWeight.Bold else FontWeight.Normal); Text(t.description, color = Color(0xFF666666), fontSize = 10.sp) }
+                                    if (isSel) Text("✓", color = Color(0xFFF59E0B), fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                            Spacer(Modifier.height(8.dp))
+                        }
+
+                        // ── Labels & Snap toggles ──
                         item {
                             Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(Color(0xFF222222))
                                 .clickable { showLabels = !showLabels }.padding(horizontal = 10.dp, vertical = 7.dp),
