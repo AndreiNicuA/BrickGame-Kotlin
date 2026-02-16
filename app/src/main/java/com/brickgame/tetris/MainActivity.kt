@@ -443,7 +443,6 @@ class MainActivity : ComponentActivity() {
                     boardShape = boardShape,
                     infoBarShape = infoBarShape,
                     infoBarType = infoBarType,
-                    infoBarShape = infoBarShape,
                                 controllerLayoutMode = controllerLayoutMode,
                                 controllerConnected = GamepadController.getConnectedControllers().isNotEmpty(),
                                 timerExpired = timerExpired,
