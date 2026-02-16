@@ -148,7 +148,7 @@ fun FreeformGameLayout(
                     val elemShape = ButtonShape.entries.find { it.name == elem.buttonShape } ?: ButtonShape.ROUND
                     RenderElement(type, scale, gs, onRotate, onHardDrop, onHold,
                         onLeftPress, onLeftRelease, onRightPress, onRightRelease,
-                        onDownPress, onDownRelease, onPause, onOpenSettings, onStartGame, elemShape)
+                        onDownPress, onDownRelease, onPause, onOpenSettings, onStartGame, elemShape, infoBarShape)
                 }
             }
         }
@@ -185,7 +185,8 @@ fun RenderElement(
     onLP: () -> Unit, onLR: () -> Unit, onRP: () -> Unit, onRR: () -> Unit,
     onDP: () -> Unit, onDR: () -> Unit, onPause: () -> Unit,
     onSet: () -> Unit, onStart: () -> Unit,
-    elemButtonShape: ButtonShape = ButtonShape.ROUND
+    elemButtonShape: ButtonShape = ButtonShape.ROUND,
+    infoBarShape: InfoBarShape = InfoBarShape.PILL
 ) {
     val theme = LocalGameTheme.current
     val sz = (50 * scale).dp
@@ -297,7 +298,7 @@ private fun RenderEditorPreview(type: FreeformElementType, scale: Float) {
             FreeformElementType.BOARD -> {
                 // Board: DO NOT render here — board uses BoardOutlineHandle instead
             }
-            else -> RenderElement(type, scale, dummyGs, noop, noop, noop, noop, noop, noop, noop, noop, noop, noop, noop, noop)
+            else -> RenderElement(type, scale, dummyGs, noop, noop, noop, noop, noop, noop, noop, noop, noop, noop, noop, noop, infoBarShape = InfoBarShape.PILL)
         }
     }
 }
