@@ -288,7 +288,12 @@ private fun infoBarShapeModifier(shape: InfoBarShape, theme: com.brickgame.tetri
 
 /** Render a non-interactive preview of an element for the editor */
 @Composable
-private fun RenderEditorPreview(type: FreeformElementType, scale: Float) {
+private fun RenderEditorPreview(
+    type: FreeformElementType,
+    scale: Float,
+    elemButtonShape: ButtonShape = ButtonShape.ROUND,
+    infoBarShape: InfoBarShape = InfoBarShape.PILL
+) {
     val theme = LocalGameTheme.current
     val dummyGs = remember { GameState() }
     val noop: () -> Unit = {}
@@ -298,7 +303,7 @@ private fun RenderEditorPreview(type: FreeformElementType, scale: Float) {
             FreeformElementType.BOARD -> {
                 // Board: DO NOT render here — board uses BoardOutlineHandle instead
             }
-            else -> RenderElement(type, scale, dummyGs, noop, noop, noop, noop, noop, noop, noop, noop, noop, noop, noop, noop, infoBarShape = InfoBarShape.PILL)
+            else -> RenderElement(type, scale, dummyGs, noop, noop, noop, noop, noop, noop, noop, noop, noop, noop, noop, noop, elemButtonShape = elemButtonShape, infoBarShape = infoBarShape)
         }
     }
 }
@@ -428,6 +433,7 @@ fun FreeformEditorScreen(
                     val elemWPx = with(density) { elemW.toPx() }
                     val elemHPx = with(density) { elemH.toPx() }
 
+                    val elemBtnShape = ButtonShape.entries.find { it.name == elem.buttonShape } ?: ButtonShape.ROUND
                     DraggableRealElement(
                         key = elem.key,
                         label = type.displayName,
@@ -443,7 +449,9 @@ fun FreeformEditorScreen(
                         onTap = { selectedKey = if (selectedKey == elem.key) null else elem.key },
                         onDragEnd = { newX, newY -> onElementUpdated(elem.copy(x = newX, y = newY)) },
                         snapEnabled = snapEnabled,
-                        snapGridPx = snapGridPx
+                        snapGridPx = snapGridPx,
+                        elemButtonShape = elemBtnShape,
+                        editorInfoBarShape = infoBarShape
                     )
                 }
             }
@@ -845,6 +853,8 @@ private fun BoxWithConstraintsScope.DraggableRealElement(
     snapEnabled: Boolean = false,
     snapGridPx: Float = 0f,
     showLabels: Boolean = true,
+    elemButtonShape: ButtonShape = ButtonShape.ROUND,
+    editorInfoBarShape: InfoBarShape = InfoBarShape.PILL,
     customContent: (@Composable () -> Unit)? = null
 ) {
     // Committed position (stored state) — center using actual w/h
@@ -915,7 +925,7 @@ private fun BoxWithConstraintsScope.DraggableRealElement(
         if (customContent != null) {
             customContent()
         } else {
-            RenderEditorPreview(type, scale)
+            RenderEditorPreview(type, scale, elemButtonShape = elemButtonShape, infoBarShape = editorInfoBarShape)
         }
         // 5D: Labels — togglable, never clipped by parent size
         if (customContent == null && showLabels) {
