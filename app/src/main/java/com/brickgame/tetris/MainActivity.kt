@@ -39,6 +39,8 @@ import com.brickgame.tetris.game.GameStatus
 import com.brickgame.tetris.input.GamepadController
 import com.brickgame.tetris.ui.layout.FreeformEditorScreen
 import com.brickgame.tetris.ui.layout.BoardShape
+import com.brickgame.tetris.ui.layout.InfoBarType
+import com.brickgame.tetris.ui.layout.InfoBarShape
 import com.brickgame.tetris.ui.layout.LayoutPreset
 import com.brickgame.tetris.ui.components.PieceMaterial
 import com.brickgame.tetris.ui.screens.Game3DScreen
@@ -178,6 +180,8 @@ class MainActivity : ComponentActivity() {
             val levelEvents by vm.levelEventsEnabled.collectAsState()
             val buttonStyle by vm.buttonStyle.collectAsState()
             val boardShape by vm.boardShape.collectAsState()
+            val infoBarType by vm.infoBarType.collectAsState()
+            val infoBarShape by vm.infoBarShape.collectAsState()
             val controllerLayoutMode by vm.controllerLayout.collectAsState()
             val leftHanded by vm.leftHanded.collectAsState()
             val infinityTimer by vm.infinityTimer.collectAsState()
@@ -433,6 +437,8 @@ class MainActivity : ComponentActivity() {
                                 levelEventsEnabled = levelEvents,
                                 buttonStyle = buttonStyle,
                     boardShape = boardShape,
+                    infoBarType = infoBarType,
+                    infoBarShape = infoBarShape,
                                 controllerLayoutMode = controllerLayoutMode,
                                 controllerConnected = GamepadController.getConnectedControllers().isNotEmpty(),
                                 timerExpired = timerExpired,

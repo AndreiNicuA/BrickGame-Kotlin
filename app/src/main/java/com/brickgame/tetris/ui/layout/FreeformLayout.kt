@@ -7,6 +7,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -56,6 +57,8 @@ fun FreeformGameLayout(
     animationDuration: Float,
     elements: Map<String, FreeformElement>,
     boardShape: BoardShape = BoardShape.STANDARD,
+    infoBarType: InfoBarType = InfoBarType.INDIVIDUAL,
+    infoBarShape: InfoBarShape = InfoBarShape.PILL,
     onRotate: () -> Unit,
     onHardDrop: () -> Unit,
     onHold: () -> Unit,
@@ -224,16 +227,62 @@ fun RenderElement(
                 }
             }
         }
-        // Compound info bars
-        FreeformElementType.INFO_BAR_HORIZONTAL,
-        FreeformElementType.INFO_BAR_VERTICAL,
-        FreeformElementType.INFO_SPLIT_STATS,
+        // Compound info bars — full rendering
+        FreeformElementType.INFO_BAR_HORIZONTAL -> {
+            val shapeMod = infoBarShapeModifier(infoBarShape, theme)
+            Box(shapeMod.padding(horizontal = 8.dp, vertical = 3.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    HoldPiecePreview(gs.holdPiece?.shape, gs.holdUsed, Modifier.size((24 * scale).dp))
+                    Text(gs.score.toString().padStart(7, '0'), fontSize = (14 * scale).sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, color = theme.pixelOn)
+                    Text("LV ${gs.level}", fontSize = (11 * scale).sp, fontFamily = FontFamily.Monospace, color = theme.accentColor)
+                    Text("${gs.lines}L", fontSize = (11 * scale).sp, fontFamily = FontFamily.Monospace, color = theme.accentColor)
+                    gs.nextPieces.firstOrNull()?.let { NextPiecePreview(it.shape, Modifier.size((24 * scale).dp)) }
+                }
+            }
+        }
+        FreeformElementType.INFO_BAR_VERTICAL -> {
+            val shapeMod = infoBarShapeModifier(infoBarShape, theme)
+            Box(shapeMod.padding(4.dp)) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    HoldPiecePreview(gs.holdPiece?.shape, gs.holdUsed, Modifier.size((32 * scale).dp))
+                    Text(gs.score.toString().padStart(7, '0'), fontSize = (12 * scale).sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, color = theme.pixelOn)
+                    Text("LV ${gs.level}", fontSize = (10 * scale).sp, fontFamily = FontFamily.Monospace, color = theme.accentColor)
+                    Text("${gs.lines} L", fontSize = (10 * scale).sp, fontFamily = FontFamily.Monospace, color = theme.accentColor)
+                    gs.nextPieces.take(3).forEachIndexed { i, p -> NextPiecePreview(p.shape, Modifier.size((if (i == 0) 28 * scale else 20 * scale).dp)) }
+                }
+            }
+        }
+        FreeformElementType.INFO_SPLIT_STATS -> {
+            val shapeMod = infoBarShapeModifier(infoBarShape, theme)
+            Box(shapeMod.padding(horizontal = 8.dp, vertical = 3.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(gs.score.toString().padStart(7, '0'), fontSize = (14 * scale).sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, color = theme.pixelOn)
+                    Text("LV ${gs.level}", fontSize = (11 * scale).sp, fontFamily = FontFamily.Monospace, color = theme.accentColor)
+                    Text("${gs.lines}L", fontSize = (11 * scale).sp, fontFamily = FontFamily.Monospace, color = theme.accentColor)
+                }
+            }
+        }
         FreeformElementType.INFO_SPLIT_PIECES -> {
-            Box(Modifier.background(Color.Black.copy(0.45f), RoundedCornerShape(6.dp)).padding(horizontal = 8.dp, vertical = 3.dp)) {
-                Text("Info", fontSize = (12 * scale).sp, fontFamily = FontFamily.Monospace, color = theme.accentColor)
+            val shapeMod = infoBarShapeModifier(infoBarShape, theme)
+            Box(shapeMod.padding(4.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    HoldPiecePreview(gs.holdPiece?.shape, gs.holdUsed, Modifier.size((28 * scale).dp))
+                    gs.nextPieces.take(3).forEachIndexed { i, p -> NextPiecePreview(p.shape, Modifier.size((if (i == 0) 28 * scale else 20 * scale).dp)) }
+                }
             }
         }
     }
+}
+
+/** Returns a Modifier for the info bar container based on shape variant */
+@Composable
+private fun infoBarShapeModifier(shape: InfoBarShape, theme: com.brickgame.tetris.ui.theme.GameTheme): Modifier = when (shape) {
+    InfoBarShape.PILL -> Modifier.background(Color.Black.copy(0.45f), RoundedCornerShape(50))
+    InfoBarShape.RECTANGLE -> Modifier.background(Color.Black.copy(0.45f), RoundedCornerShape(6.dp))
+    InfoBarShape.NO_BORDER -> Modifier
+    InfoBarShape.FRAMED -> Modifier
+        .border(3.dp, theme.deviceColor.copy(alpha = 0.7f), RoundedCornerShape(8.dp))
+        .background(Color.Black.copy(0.5f), RoundedCornerShape(8.dp))
 }
 
 /** Render a non-interactive preview of an element for the editor */
@@ -262,7 +311,11 @@ private fun RenderEditorPreview(type: FreeformElementType, scale: Float) {
 fun FreeformEditorScreen(
     elements: Map<String, FreeformElement>,
     boardShape: BoardShape = BoardShape.STANDARD,
+    infoBarType: InfoBarType = InfoBarType.INDIVIDUAL,
+    infoBarShape: InfoBarShape = InfoBarShape.PILL,
     onBoardShapeChanged: (BoardShape) -> Unit = {},
+    onInfoBarTypeChanged: (InfoBarType) -> Unit = {},
+    onInfoBarShapeChanged: (InfoBarShape) -> Unit = {},
     onElementUpdated: (FreeformElement) -> Unit,
     onElementAdded: (FreeformElement) -> Unit,
     onElementRemoved: (String) -> Unit,
@@ -583,6 +636,57 @@ fun FreeformEditorScreen(
                             }
                         }
 
+                        // ── Info Bar Shape picker (when compound info bar selected) ──
+                        if (selectedElement != null) {
+                            val selType = FreeformElementType.fromKey(selectedElement.key)
+                            val isCompoundInfo = selType != null && selType.key.startsWith("INFO_")
+                            if (isCompoundInfo) {
+                                item {
+                                    Text("Info Bar Shape", color = Color(0xFFF59E0B), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                    Spacer(Modifier.height(4.dp))
+                                    InfoBarShape.entries.forEach { shape ->
+                                        val isSel = shape == infoBarShape
+                                        Row(
+                                            Modifier.fillMaxWidth().padding(vertical = 2.dp)
+                                                .clip(RoundedCornerShape(6.dp))
+                                                .background(if (isSel) Color(0xFFF59E0B).copy(0.15f) else Color(0xFF252525))
+                                                .clickable { onInfoBarShapeChanged(shape) }
+                                                .padding(horizontal = 10.dp, vertical = 7.dp),
+                                            Arrangement.SpaceBetween, Alignment.CenterVertically
+                                        ) {
+                                            Text(shape.displayName, color = if (isSel) Color.White else Color(0xFFAAAAAA), fontSize = 12.sp, fontWeight = if (isSel) FontWeight.Bold else FontWeight.Normal)
+                                            if (isSel) Text("✓", color = Color(0xFFF59E0B), fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                                        }
+                                    }
+                                    Spacer(Modifier.height(10.dp))
+                                }
+                            }
+                        }
+
+                        // ── Info Bar Type switcher ──
+                        item {
+                            Text("Info Bar Type", color = Color(0xFFF59E0B), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            Spacer(Modifier.height(4.dp))
+                            InfoBarType.entries.forEach { type ->
+                                val isSel = type == infoBarType
+                                Row(
+                                    Modifier.fillMaxWidth().padding(vertical = 2.dp)
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(if (isSel) Color(0xFFF59E0B).copy(0.15f) else Color(0xFF252525))
+                                        .clickable { onInfoBarTypeChanged(type) }
+                                        .padding(horizontal = 10.dp, vertical = 7.dp),
+                                    Arrangement.SpaceBetween, Alignment.CenterVertically
+                                ) {
+                                    Column {
+                                        Text(type.displayName, color = if (isSel) Color.White else Color(0xFFAAAAAA), fontSize = 12.sp, fontWeight = if (isSel) FontWeight.Bold else FontWeight.Normal)
+                                        Text(type.description, color = Color(0xFF666666), fontSize = 10.sp)
+                                    }
+                                    if (isSel) Text("✓", color = Color(0xFFF59E0B), fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                            Spacer(Modifier.height(8.dp))
+                        }
+
                         // ── Labels toggle ──
                         item {
                             Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(Color(0xFF222222))
@@ -606,7 +710,9 @@ fun FreeformEditorScreen(
                         // ── LCD & Info section ──
                         item { Text("LCD & Info", color = Color(0xFFF59E0B), fontSize = 12.sp, fontWeight = FontWeight.Bold); Spacer(Modifier.height(4.dp)) }
                         val infoTypes = listOf(FreeformElementType.BOARD, FreeformElementType.SCORE, FreeformElementType.LEVEL,
-                            FreeformElementType.LINES, FreeformElementType.HOLD_PREVIEW, FreeformElementType.NEXT_PREVIEW)
+                            FreeformElementType.LINES, FreeformElementType.HOLD_PREVIEW, FreeformElementType.NEXT_PREVIEW,
+                            FreeformElementType.INFO_BAR_HORIZONTAL, FreeformElementType.INFO_BAR_VERTICAL,
+                            FreeformElementType.INFO_SPLIT_STATS, FreeformElementType.INFO_SPLIT_PIECES)
                         items(infoTypes.size) { i ->
                             val t = infoTypes[i]; val el = elements[t.key]
                             val isOn = el != null && el.visible

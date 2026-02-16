@@ -96,6 +96,10 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     val buttonStyle: StateFlow<String> = _buttonStyle.asStateFlow()
     private val _boardShape = MutableStateFlow("STANDARD")
     val boardShape: StateFlow<String> = _boardShape.asStateFlow()
+    private val _infoBarType = MutableStateFlow("INDIVIDUAL")
+    val infoBarType: StateFlow<String> = _infoBarType.asStateFlow()
+    private val _infoBarShape = MutableStateFlow("PILL")
+    val infoBarShape: StateFlow<String> = _infoBarShape.asStateFlow()
     private val _controllerLayout = MutableStateFlow("auto")
     val controllerLayout: StateFlow<String> = _controllerLayout.asStateFlow()
     private val _leftHanded = MutableStateFlow(false)
@@ -187,6 +191,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch { settingsRepo.levelEventsEnabled.collect { _levelEventsEnabled.value = it } }
         viewModelScope.launch { settingsRepo.buttonStyle.collect { _buttonStyle.value = it } }
         viewModelScope.launch { profileRepo.profile.collect { _boardShape.value = it.boardShape } }
+        viewModelScope.launch { profileRepo.profile.collect { _infoBarType.value = it.infoBarType } }
+        viewModelScope.launch { profileRepo.profile.collect { _infoBarShape.value = it.infoBarShape } }
         viewModelScope.launch { settingsRepo.controllerLayout.collect { _controllerLayout.value = it } }
         viewModelScope.launch { settingsRepo.leftHanded.collect { _leftHanded.value = it } }
         viewModelScope.launch { settingsRepo.gameMode.collect { name -> _gameMode.value = GameMode.entries.find { it.name == name } ?: GameMode.MARATHON; game.setGameMode(_gameMode.value) } }
@@ -303,6 +309,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     fun setLevelEventsEnabled(v: Boolean) { _levelEventsEnabled.value = v; viewModelScope.launch { settingsRepo.setLevelEventsEnabled(v) } }
     fun setButtonStyle(v: String) { _buttonStyle.value = v; viewModelScope.launch { settingsRepo.setButtonStyle(v) } }
     fun setBoardShape(v: String) { _boardShape.value = v; viewModelScope.launch { profileRepo.updateProfile { it.copy(boardShape = v) } } }
+    fun setInfoBarType(v: String) { _infoBarType.value = v; viewModelScope.launch { profileRepo.updateProfile { it.copy(infoBarType = v) } } }
+    fun setInfoBarShape(v: String) { _infoBarShape.value = v; viewModelScope.launch { profileRepo.updateProfile { it.copy(infoBarShape = v) } } }
     fun setControllerLayout(v: String) { _controllerLayout.value = v; viewModelScope.launch { settingsRepo.setControllerLayout(v) } }
     fun setLeftHanded(v: Boolean) { _leftHanded.value = v; viewModelScope.launch { settingsRepo.setLeftHanded(v) } }
     fun setInfinityTimer(v: Int) { _infinityTimer.value = v; viewModelScope.launch { settingsRepo.setInfinityTimer(v) } }

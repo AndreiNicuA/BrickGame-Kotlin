@@ -45,6 +45,8 @@ import com.brickgame.tetris.data.LayoutElements
 import com.brickgame.tetris.ui.components.*
 import com.brickgame.tetris.ui.components.LocalButtonShape
 import com.brickgame.tetris.ui.layout.BoardShape
+import com.brickgame.tetris.ui.layout.InfoBarType
+import com.brickgame.tetris.ui.layout.InfoBarShape
 import com.brickgame.tetris.ui.layout.ButtonShape
 import com.brickgame.tetris.ui.layout.DPadStyle
 import com.brickgame.tetris.ui.layout.FreeformGameLayout
@@ -424,6 +426,8 @@ fun GameScreen(
     levelEventsEnabled: Boolean = false,
     buttonStyle: String = "ROUND",
     boardShape: String = "STANDARD",
+    infoBarType: String = "INDIVIDUAL",
+    infoBarShape: String = "PILL",
     controllerLayoutMode: String = "normal",
     controllerConnected: Boolean = false,
     timerExpired: Boolean = false,
@@ -542,7 +546,7 @@ fun GameScreen(
                     LayoutPreset.PORTRAIT_MODERN -> ModernLayout(gameState, dpadStyle, effectiveGhost, animationStyle, animationDuration, onRotate, onHardDrop, effectiveHold, onLeftPress, onLeftRelease, onRightPress, onRightRelease, onDownPress, onDownRelease, onPause, onOpenSettings, onStartGame, boardDimAlpha, effectiveNextCount)
                     LayoutPreset.PORTRAIT_FULLSCREEN -> FullscreenLayout(gameState, dpadStyle, effectiveGhost, animationStyle, animationDuration, onRotate, onHardDrop, effectiveHold, onLeftPress, onLeftRelease, onRightPress, onRightRelease, onDownPress, onDownRelease, onPause, onOpenSettings, onStartGame, boardDimAlpha, effectiveNextCount)
                     LayoutPreset.PORTRAIT_ONEHAND -> OneHandLayout(gameState, effectiveGhost, animationStyle, animationDuration, onRotate, onHardDrop, effectiveHold, onLeftPress, onLeftRelease, onRightPress, onRightRelease, onDownPress, onDownRelease, onPause, onOpenSettings, onStartGame)
-                    LayoutPreset.PORTRAIT_FREEFORM -> FreeformGameLayout(gameState, dpadStyle, effectiveGhost, animationStyle, animationDuration, freeformElements, boardShape = BoardShape.entries.find { it.name == boardShape } ?: BoardShape.STANDARD, onRotate = onRotate, onHardDrop = onHardDrop, onHold = effectiveHold, onLeftPress = onLeftPress, onLeftRelease = onLeftRelease, onRightPress = onRightPress, onRightRelease = onRightRelease, onDownPress = onDownPress, onDownRelease = onDownRelease, onPause = onPause, onOpenSettings = onOpenSettings, onStartGame = onStartGame)
+                    LayoutPreset.PORTRAIT_FREEFORM -> FreeformGameLayout(gameState, dpadStyle, effectiveGhost, animationStyle, animationDuration, freeformElements, boardShape = BoardShape.entries.find { it.name == boardShape } ?: BoardShape.STANDARD, infoBarType = InfoBarType.entries.find { it.name == infoBarType } ?: InfoBarType.INDIVIDUAL, infoBarShape = InfoBarShape.entries.find { it.name == infoBarShape } ?: InfoBarShape.PILL, onRotate = onRotate, onHardDrop = onHardDrop, onHold = effectiveHold, onLeftPress = onLeftPress, onLeftRelease = onLeftRelease, onRightPress = onRightPress, onRightRelease = onRightRelease, onDownPress = onDownPress, onDownRelease = onDownRelease, onPause = onPause, onOpenSettings = onOpenSettings, onStartGame = onStartGame)
                     LayoutPreset.LANDSCAPE_DEFAULT -> LandscapeLayout(gameState, dpadStyle, effectiveGhost, animationStyle, animationDuration, onRotate, onHardDrop, effectiveHold, onLeftPress, onLeftRelease, onRightPress, onRightRelease, onDownPress, onDownRelease, onPause, onOpenSettings, onStartGame, portraitLayout, boardDimAlpha, effectiveNextCount)
                     LayoutPreset.LANDSCAPE_LEFTY -> LandscapeLayout(gameState, dpadStyle, effectiveGhost, animationStyle, animationDuration, onRotate, onHardDrop, effectiveHold, onLeftPress, onLeftRelease, onRightPress, onRightRelease, onDownPress, onDownRelease, onPause, onOpenSettings, onStartGame, portraitLayout, boardDimAlpha, effectiveNextCount)
                     LayoutPreset.PORTRAIT_3D -> {}
