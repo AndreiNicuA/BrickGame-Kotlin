@@ -182,8 +182,6 @@ class MainActivity : ComponentActivity() {
             val boardShape by vm.boardShape.collectAsState()
             val infoBarType by vm.infoBarType.collectAsState()
             val infoBarShape by vm.infoBarShape.collectAsState()
-            val infoBarType by vm.infoBarType.collectAsState()
-            val infoBarShape by vm.infoBarShape.collectAsState()
             val controllerLayoutMode by vm.controllerLayout.collectAsState()
             val leftHanded by vm.leftHanded.collectAsState()
             val infinityTimer by vm.infinityTimer.collectAsState()

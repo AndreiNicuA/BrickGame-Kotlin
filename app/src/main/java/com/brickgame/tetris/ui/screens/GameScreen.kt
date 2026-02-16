@@ -428,7 +428,6 @@ fun GameScreen(
     boardShape: String = "STANDARD",
     infoBarShape: String = "PILL",
     infoBarType: String = "INDIVIDUAL",
-    infoBarShape: String = "PILL",
     controllerLayoutMode: String = "normal",
     controllerConnected: Boolean = false,
     timerExpired: Boolean = false,
