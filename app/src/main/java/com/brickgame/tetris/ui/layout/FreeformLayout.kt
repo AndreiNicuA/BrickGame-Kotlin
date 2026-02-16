@@ -17,6 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
@@ -88,19 +89,19 @@ fun FreeformGameLayout(
                 // Board shape container modifier
                 val boardMod = when (boardShape) {
                     BoardShape.STANDARD -> Modifier
-                        .border(1.5.dp, theme.deviceFrame.copy(alpha = 0.6f), RoundedCornerShape(4.dp))
+                        .border(1.5.dp, theme.deviceColor.copy(alpha = 0.6f), RoundedCornerShape(4.dp))
                         .clip(RoundedCornerShape(4.dp))
                     BoardShape.FRAMELESS -> Modifier  // No border at all
                     BoardShape.DEVICE_FRAME -> Modifier
                         .shadow(4.dp, RoundedCornerShape(16.dp))
-                        .border(6.dp, theme.deviceFrame, RoundedCornerShape(16.dp))
+                        .border(6.dp, theme.deviceColor, RoundedCornerShape(16.dp))
                         .padding(4.dp)
                         .clip(RoundedCornerShape(8.dp))
                     BoardShape.BEVELED -> Modifier
                         .drawBehind {
                             val bevelW = 4.dp.toPx()
-                            val hl = theme.deviceFrame.lighten(0.3f)
-                            val sh = theme.deviceFrame.darken(0.3f)
+                            val hl = theme.deviceColor.lighten(0.3f)
+                            val sh = theme.deviceColor.darken(0.3f)
                             // Top highlight
                             drawLine(hl, Offset(0f, bevelW / 2), Offset(size.width, bevelW / 2), bevelW)
                             // Left highlight
@@ -113,7 +114,7 @@ fun FreeformGameLayout(
                         .padding(4.dp)
                         .clip(RoundedCornerShape(4.dp))
                     BoardShape.ROUNDED -> Modifier
-                        .border(2.dp, theme.deviceFrame.copy(alpha = 0.5f), RoundedCornerShape(24.dp))
+                        .border(2.dp, theme.deviceColor.copy(alpha = 0.5f), RoundedCornerShape(24.dp))
                         .clip(RoundedCornerShape(24.dp))
                 }
 
