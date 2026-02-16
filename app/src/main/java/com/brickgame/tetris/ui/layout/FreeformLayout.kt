@@ -16,6 +16,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
@@ -83,11 +84,45 @@ fun FreeformGameLayout(
                 val baseSize = elementBaseSize(type)
                 val bw = baseSize.first * scale
                 val bh = baseSize.second * elem.effectiveH
+
+                // Board shape container modifier
+                val boardMod = when (boardShape) {
+                    BoardShape.STANDARD -> Modifier
+                        .border(1.5.dp, theme.deviceFrame.copy(alpha = 0.6f), RoundedCornerShape(4.dp))
+                        .clip(RoundedCornerShape(4.dp))
+                    BoardShape.FRAMELESS -> Modifier  // No border at all
+                    BoardShape.DEVICE_FRAME -> Modifier
+                        .shadow(4.dp, RoundedCornerShape(16.dp))
+                        .border(6.dp, theme.deviceFrame, RoundedCornerShape(16.dp))
+                        .padding(4.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                    BoardShape.BEVELED -> Modifier
+                        .drawBehind {
+                            val bevelW = 4.dp.toPx()
+                            val hl = theme.deviceFrame.lighten(0.3f)
+                            val sh = theme.deviceFrame.darken(0.3f)
+                            // Top highlight
+                            drawLine(hl, Offset(0f, bevelW / 2), Offset(size.width, bevelW / 2), bevelW)
+                            // Left highlight
+                            drawLine(hl, Offset(bevelW / 2, 0f), Offset(bevelW / 2, size.height), bevelW)
+                            // Bottom shadow
+                            drawLine(sh, Offset(0f, size.height - bevelW / 2), Offset(size.width, size.height - bevelW / 2), bevelW)
+                            // Right shadow
+                            drawLine(sh, Offset(size.width - bevelW / 2, 0f), Offset(size.width - bevelW / 2, size.height), bevelW)
+                        }
+                        .padding(4.dp)
+                        .clip(RoundedCornerShape(4.dp))
+                    BoardShape.ROUNDED -> Modifier
+                        .border(2.dp, theme.deviceFrame.copy(alpha = 0.5f), RoundedCornerShape(24.dp))
+                        .clip(RoundedCornerShape(24.dp))
+                }
+
                 Box(
                     Modifier
                         .offset(x = maxW * elem.x - bw / 2, y = maxH * elem.y - bh / 2)
                         .size(bw, bh)
                         .alpha(elem.alpha)
+                        .then(boardMod)
                 ) {
                     GameBoard(
                         board = gs.board, modifier = Modifier.fillMaxSize(),
@@ -225,6 +260,8 @@ private fun RenderEditorPreview(type: FreeformElementType, scale: Float) {
 @Composable
 fun FreeformEditorScreen(
     elements: Map<String, FreeformElement>,
+    boardShape: BoardShape = BoardShape.STANDARD,
+    onBoardShapeChanged: (BoardShape) -> Unit = {},
     onElementUpdated: (FreeformElement) -> Unit,
     onElementAdded: (FreeformElement) -> Unit,
     onElementRemoved: (String) -> Unit,
@@ -269,15 +306,31 @@ fun FreeformEditorScreen(
                     val bwPx = with(density) { bw.toPx() }
                     val bhPx = with(density) { bh.toPx() }
 
-                    // Dashed outline (not interactive — just shows size)
+                    // Board outline — reflects current board shape
+                    val previewShape = when (boardShape) {
+                        BoardShape.STANDARD -> RoundedCornerShape(4.dp)
+                        BoardShape.FRAMELESS -> RoundedCornerShape(0.dp)
+                        BoardShape.DEVICE_FRAME -> RoundedCornerShape(16.dp)
+                        BoardShape.BEVELED -> RoundedCornerShape(4.dp)
+                        BoardShape.ROUNDED -> RoundedCornerShape(24.dp)
+                    }
+                    val previewBorderW = when (boardShape) {
+                        BoardShape.FRAMELESS -> 0.5.dp
+                        BoardShape.DEVICE_FRAME -> 4.dp
+                        else -> if (isSelected) 2.dp else 1.dp
+                    }
                     Box(
                         Modifier
                             .offset(x = maxWidth * elem.x - bw / 2, y = maxHeight * elem.y - bh / 2)
                             .size(bw, bh)
                             .border(
-                                width = if (isSelected) 2.dp else 1.dp,
-                                color = if (isSelected) Color(0xFF22C55E) else Color.White.copy(0.4f),
-                                shape = RoundedCornerShape(6.dp)
+                                width = previewBorderW,
+                                color = if (isSelected) Color(0xFF22C55E) else when (boardShape) {
+                                    BoardShape.FRAMELESS -> Color.White.copy(0.15f)
+                                    BoardShape.DEVICE_FRAME -> Color.White.copy(0.6f)
+                                    else -> Color.White.copy(0.4f)
+                                },
+                                shape = previewShape
                             )
                     )
 
@@ -500,6 +553,32 @@ fun FreeformEditorScreen(
                                     }
                                     Spacer(Modifier.height(10.dp))
                                 }
+                            }
+                        }
+
+                        // ── Board shape picker (when board selected) ──
+                        if (selectedElement != null && selectedElement.key == "BOARD") {
+                            item {
+                                Text("Board Shape", color = Color(0xFF8B5CF6), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                Spacer(Modifier.height(4.dp))
+                                BoardShape.entries.forEach { shape ->
+                                    val isSel = shape == boardShape
+                                    Row(
+                                        Modifier.fillMaxWidth().padding(vertical = 2.dp)
+                                            .clip(RoundedCornerShape(6.dp))
+                                            .background(if (isSel) Color(0xFF8B5CF6).copy(0.15f) else Color(0xFF252525))
+                                            .clickable { onBoardShapeChanged(shape) }
+                                            .padding(horizontal = 10.dp, vertical = 7.dp),
+                                        Arrangement.SpaceBetween, Alignment.CenterVertically
+                                    ) {
+                                        Column {
+                                            Text(shape.displayName, color = if (isSel) Color.White else Color(0xFFAAAAAA), fontSize = 12.sp, fontWeight = if (isSel) FontWeight.Bold else FontWeight.Normal)
+                                            Text(shape.description, color = Color(0xFF666666), fontSize = 10.sp)
+                                        }
+                                        if (isSel) Text("✓", color = Color(0xFF8B5CF6), fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                                Spacer(Modifier.height(10.dp))
                             }
                         }
 
@@ -773,3 +852,16 @@ private fun EmptyBoardPreview(modifier: Modifier = Modifier, gridColor: Color) {
         }
     }
 }
+
+
+// Color helpers for board shapes
+private fun Color.lighten(f: Float) = Color(
+    (red + (1 - red) * f).coerceIn(0f, 1f),
+    (green + (1 - green) * f).coerceIn(0f, 1f),
+    (blue + (1 - blue) * f).coerceIn(0f, 1f), alpha
+)
+private fun Color.darken(f: Float) = Color(
+    (red * (1 - f)).coerceIn(0f, 1f),
+    (green * (1 - f)).coerceIn(0f, 1f),
+    (blue * (1 - f)).coerceIn(0f, 1f), alpha
+)

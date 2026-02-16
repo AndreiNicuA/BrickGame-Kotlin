@@ -318,6 +318,8 @@ class MainActivity : ComponentActivity() {
 
                 when {freeformEditMode -> {
                         FreeformEditorScreen(
+                            boardShape = BoardShape.entries.find { it.name == boardShape } ?: BoardShape.STANDARD,
+                            onBoardShapeChanged = { vm.setBoardShape(it.name) },
                             elements = profile.freeformElements,
                             onElementUpdated = vm::updateFreeformElement,
                             onElementAdded = vm::addFreeformElement,
