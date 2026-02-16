@@ -38,6 +38,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.brickgame.tetris.game.GameStatus
 import com.brickgame.tetris.input.GamepadController
 import com.brickgame.tetris.ui.layout.FreeformEditorScreen
+import com.brickgame.tetris.ui.layout.BoardShape
 import com.brickgame.tetris.ui.layout.LayoutPreset
 import com.brickgame.tetris.ui.components.PieceMaterial
 import com.brickgame.tetris.ui.screens.Game3DScreen
