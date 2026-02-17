@@ -2094,6 +2094,109 @@ fun GameScreen(
     }
 }
 
+// Falling transparent tetris pieces — matrix rain style with colored pieces, long green trails, and sparkle
+@Composable
+private fun FallingPiecesBackground(theme: com.brickgame.tetris.ui.theme.GameTheme, isDark: Boolean = true, speedMultiplier: Float = 1f) {
+    data class FP(val col: Float, val speed: Float, val sz: Float, val shape: Int,
+                  val alpha: Float, val startY: Float, val colorIdx: Int, val trailLen: Int,
+                  val sparkle: Boolean, val sparklePhase: Float)
+
+    val pieces = remember {
+        val rng = kotlin.random.Random(42)
+        (0..299).map {
+            FP(col = rng.nextFloat(), speed = 0.4f + rng.nextFloat() * 1.2f,
+               sz = 5f + rng.nextFloat() * 8f, shape = it % 7,
+               alpha = 0.12f + rng.nextFloat() * 0.25f,
+               // Large random startY spread ensures pieces are uniformly distributed
+               startY = rng.nextFloat() * 10000f,
+               colorIdx = it % 7, trailLen = 4 + rng.nextInt(8),
+               sparkle = rng.nextFloat() < 0.15f,
+               sparklePhase = rng.nextFloat() * 6.28f)
+        }
+    }
+    val t = rememberInfiniteTransition(label = "bg")
+    // Very large target value so the animation never visibly restarts
+    // Each piece wraps independently via modulo on screen height
+    val anim by t.animateFloat(0f, 1_000_000f, infiniteRepeatable(tween(1_500_000, easing = LinearEasing)), label = "fall")
+
+    val pieceColors = remember { listOf(
+        Color(0xFFFF4444), Color(0xFF44AAFF), Color(0xFFFFAA00), Color(0xFF44FF44),
+        Color(0xFFFF44FF), Color(0xFF44FFFF), Color(0xFFF4D03F)
+    ) }
+    val trailColor = Color(0xFF22C55E)
+
+    val shapes = remember { listOf(
+        listOf(0 to 0, 1 to 0, 0 to 1, 1 to 1),       // O
+        listOf(0 to 0, 1 to 0, 2 to 0, 3 to 0),       // I
+        listOf(0 to 0, 1 to 0, 2 to 0, 2 to 1),       // L
+        listOf(0 to 0, 1 to 0, 2 to 0, 0 to 1),       // J
+        listOf(0 to 0, 1 to 0, 1 to 1, 2 to 1),       // S
+        listOf(1 to 0, 2 to 0, 0 to 1, 1 to 1),       // Z
+        listOf(0 to 0, 1 to 0, 2 to 0, 1 to 1),       // T
+    ) }
+
+    Canvas(Modifier.fillMaxSize()) {
+        val w = size.width; val h = size.height
+        val wrapH = h + 600f  // total travel distance before wrapping
+        // In light mode, use higher alpha for visibility on light background
+        val alphaBoost = if (isDark) 1f else 2.2f
+        val actualTrailColor = if (isDark) trailColor else Color(0xFF22A050)
+        pieces.forEach { p ->
+            // Each piece wraps independently based on its own startY offset
+            val rawY = p.startY + anim * p.speed * speedMultiplier
+            val baseY = (rawY % wrapH) - 300f
+            val x = p.col * w
+            val s = p.sz
+            val shape = shapes[p.shape % shapes.size]
+            val pColor = pieceColors[p.colorIdx]
+            val pa = (p.alpha * alphaBoost).coerceAtMost(0.55f)
+
+            // Draw long green trail (fading upward) — bigger trail
+            for (ti in 1..p.trailLen) {
+                val trailY = baseY - ti * (s + 2) * 1.2f
+                val trailAlpha = pa * 0.5f * (1f - ti.toFloat() / (p.trailLen + 1))
+                val trailSz = s * (1f - ti * 0.04f).coerceAtLeast(0.3f)
+                shape.forEach { (dx, dy) ->
+                    drawRoundRect(
+                        color = actualTrailColor.copy(alpha = trailAlpha.coerceIn(0f, 1f)),
+                        topLeft = androidx.compose.ui.geometry.Offset(x + dx * (s + 2), trailY + dy * (s + 2)),
+                        size = androidx.compose.ui.geometry.Size(trailSz, trailSz),
+                        cornerRadius = androidx.compose.ui.geometry.CornerRadius(2f, 2f)
+                    )
+                }
+            }
+
+            // Draw colored piece
+            shape.forEach { (dx, dy) ->
+                drawRoundRect(
+                    color = pColor.copy(alpha = pa),
+                    topLeft = androidx.compose.ui.geometry.Offset(x + dx * (s + 2), baseY + dy * (s + 2)),
+                    size = androidx.compose.ui.geometry.Size(s, s),
+                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(2f, 2f)
+                )
+            }
+
+            // Sparkle effect on some pieces — a bright white dot that pulses
+            if (p.sparkle) {
+                val sparkleAlpha = (0.3f + 0.4f * kotlin.math.sin(anim * 0.01f + p.sparklePhase)).coerceIn(0f, 0.7f)
+                val sparkX = x + (s + 2) * 0.5f
+                val sparkY = baseY - s * 0.5f
+                drawCircle(
+                    color = Color.White.copy(alpha = sparkleAlpha * pa * 3f),
+                    radius = s * 0.35f,
+                    center = androidx.compose.ui.geometry.Offset(sparkX, sparkY)
+                )
+                // Small outer glow
+                drawCircle(
+                    color = pColor.copy(alpha = sparkleAlpha * p.alpha * 1.5f),
+                    radius = s * 0.6f,
+                    center = androidx.compose.ui.geometry.Offset(sparkX, sparkY)
+                )
+            }
+        }
+    }
+}
+
 @Composable private fun PauseOverlay(onResume: () -> Unit, onSet: () -> Unit, onQuit: () -> Unit) {
     // Entrance animation — fade in + slide up
     var visible by remember { mutableStateOf(false) }
