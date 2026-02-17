@@ -534,7 +534,7 @@ fun GameScreen(
                         width = 70.dp, height = 30.dp, backgroundColor = theme.buttonSecondary.copy(0.7f))
                 }
                 if (gameState.status == GameStatus.PAUSED) PauseOverlay(onResume, onOpenSettings, onQuit)
-                if (gameState.status == GameStatus.GAME_OVER) GameOverOverlay(gameState.score, gameState.level, gameState.lines, onStartGame, onOpenSettings, onQuit)
+                if (gameState.status == GameStatus.GAME_OVER) GameOverOverlay(gameState.score, gameState.level, gameState.lines, gameState.highScore, gameState.comboCount, gameState.backToBackCount, gameState.elapsedTimeMs, onStartGame, onOpenSettings, onQuit)
             }
         } else {
             // Normal game content
@@ -554,7 +554,7 @@ fun GameScreen(
                 if (gameState.status == GameStatus.PAUSED) PauseOverlay(onResume, onOpenSettings, onQuit)
                 // Classic layout handles its own game-over with LCD curtain animation
                 if (gameState.status == GameStatus.GAME_OVER && layoutPreset != LayoutPreset.PORTRAIT_CLASSIC)
-                    GameOverOverlay(gameState.score, gameState.level, gameState.lines, onStartGame, onOpenSettings, onQuit)
+                    GameOverOverlay(gameState.score, gameState.level, gameState.lines, gameState.highScore, gameState.comboCount, gameState.backToBackCount, gameState.elapsedTimeMs, onStartGame, onOpenSettings, onQuit)
             }
         }
         // Modern notifications — hidden in Classic layout (portrait and landscape) to maintain authentic LCD feel
@@ -2005,13 +2005,21 @@ fun GameScreen(
     val titleAlpha by animateFloatAsState(if (visible) 1f else 0f, tween(500), label = "mta")
     val titleScale by animateFloatAsState(if (visible) 1f else 0.8f, tween(600, easing = FastOutSlowInEasing), label = "mts")
     val scoreAlpha by animateFloatAsState(if (visible) 1f else 0f, tween(400, delayMillis = 200), label = "msa")
-    val buttonsAlpha by animateFloatAsState(if (visible) 1f else 0f, tween(400, delayMillis = 400), label = "mba")
-    val buttonsSlide by animateFloatAsState(if (visible) 0f else 30f, tween(400, delayMillis = 400, easing = FastOutSlowInEasing), label = "mbs")
+    // Item 1: Staggered button entry — each button fades in with a 80ms delay
+    val btn1Alpha by animateFloatAsState(if (visible) 1f else 0f, tween(350, delayMillis = 400), label = "mb1")
+    val btn1Slide by animateFloatAsState(if (visible) 0f else 24f, tween(350, delayMillis = 400, easing = FastOutSlowInEasing), label = "ms1")
+    val btn2Alpha by animateFloatAsState(if (visible) 1f else 0f, tween(350, delayMillis = 480), label = "mb2")
+    val btn2Slide by animateFloatAsState(if (visible) 0f else 24f, tween(350, delayMillis = 480, easing = FastOutSlowInEasing), label = "ms2")
+    val leaderAlpha by animateFloatAsState(if (visible) 1f else 0f, tween(400, delayMillis = 560), label = "mla")
 
-    // Pulsing play button glow
+    // Item 1: Pulsing play button glow — theme-aware
     val inf = rememberInfiniteTransition(label = "menuPulse")
     val playPulse by inf.animateFloat(1f, 1.06f, infiniteRepeatable(tween(1200, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "pp")
     val playGlow by inf.animateFloat(0.3f, 0.8f, infiniteRepeatable(tween(1200), RepeatMode.Reverse), label = "pg")
+
+    // Item 3: Color-coded button accents
+    val playColor = if (isDark) theme.accentColor else Color(0xFFB8860B)
+    val settingsColor = if (isDark) theme.buttonSecondary else Color(0xFFE0E0E0)
 
     Box(Modifier.fillMaxSize().background(bgColor)) {
         FallingPiecesBackground(theme, isDark)
@@ -2035,7 +2043,7 @@ fun GameScreen(
                     if (bestEntry != null) {
                         val sdf = java.text.SimpleDateFormat("dd.MM.yyyy", java.util.Locale.getDefault())
                         val dateStr = sdf.format(java.util.Date(bestEntry.timestamp))
-                        Text("${bestEntry.playerName} · $dateStr", fontSize = 11.sp, fontFamily = FontFamily.Monospace,
+                        Text("${bestEntry.playerName} \u00b7 $dateStr", fontSize = 11.sp, fontFamily = FontFamily.Monospace,
                             color = if (isDark) theme.textSecondary else Color(0xFF666666))
                     }
                     Spacer(Modifier.height(4.dp))
@@ -2044,29 +2052,27 @@ fun GameScreen(
                 }
                 Spacer(Modifier.height(32.dp))
             }
-            // Buttons with slide-up entrance + pulsing PLAY button
-            Column(horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.graphicsLayer { translationY = buttonsSlide; alpha = buttonsAlpha }) {
-                // Pulsing PLAY button with subtle glow
-                val playColor = if (isDark) theme.accentColor else Color(0xFFB8860B)
-                Box(contentAlignment = Alignment.Center) {
-                    // Glow layer behind the button
-                    Box(Modifier.matchParentSize()
-                        .graphicsLayer { scaleX = playPulse + 0.08f; scaleY = playPulse + 0.08f; alpha = playGlow * 0.3f }
-                        .background(playColor.copy(alpha = 0.2f), RoundedCornerShape(12.dp)))
-                    Box(Modifier.graphicsLayer { scaleX = playPulse; scaleY = playPulse }) {
-                        ActionButton("PLAY", onStart, width = 180.dp, height = 52.dp, backgroundColor = playColor)
-                    }
+            // Item 2: Staggered PLAY button with glow pulse
+            Box(contentAlignment = Alignment.Center,
+                modifier = Modifier.graphicsLayer { translationY = btn1Slide; alpha = btn1Alpha }) {
+                // Glow layer behind
+                Box(Modifier.matchParentSize()
+                    .graphicsLayer { scaleX = playPulse + 0.08f; scaleY = playPulse + 0.08f; alpha = playGlow * 0.3f }
+                    .background(playColor.copy(alpha = 0.2f), RoundedCornerShape(12.dp)))
+                Box(Modifier.graphicsLayer { scaleX = playPulse; scaleY = playPulse }) {
+                    ActionButton("PLAY", onStart, width = 180.dp, height = 52.dp, backgroundColor = playColor)
                 }
-                Spacer(Modifier.height(12.dp))
-                ActionButton("SETTINGS", onSet, width = 180.dp, height = 44.dp,
-                    backgroundColor = if (isDark) theme.buttonSecondary else Color(0xFFE0E0E0))
+            }
+            Spacer(Modifier.height(12.dp))
+            // Item 2: Settings button with own staggered delay
+            Box(modifier = Modifier.graphicsLayer { translationY = btn2Slide; alpha = btn2Alpha }) {
+                ActionButton("SETTINGS", onSet, width = 180.dp, height = 44.dp, backgroundColor = settingsColor)
             }
             // Mini leaderboard
             if (scoreHistory.size > 1) {
                 Spacer(Modifier.height(20.dp))
                 Column(horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier.graphicsLayer { alpha = buttonsAlpha }) {
+                    modifier = Modifier.graphicsLayer { alpha = leaderAlpha }) {
                     Text("RECENT BEST", fontSize = 9.sp, fontFamily = FontFamily.Monospace,
                         color = if (isDark) theme.textSecondary.copy(0.5f) else Color(0xFF999999), letterSpacing = 3.sp)
                     Spacer(Modifier.height(6.dp))
@@ -2083,109 +2089,6 @@ fun GameScreen(
                         }
                     }
                 }
-            }
-        }
-    }
-}
-
-// Falling transparent tetris pieces — matrix rain style with colored pieces, long green trails, and sparkle
-@Composable
-private fun FallingPiecesBackground(theme: com.brickgame.tetris.ui.theme.GameTheme, isDark: Boolean = true, speedMultiplier: Float = 1f) {
-    data class FP(val col: Float, val speed: Float, val sz: Float, val shape: Int,
-                  val alpha: Float, val startY: Float, val colorIdx: Int, val trailLen: Int,
-                  val sparkle: Boolean, val sparklePhase: Float)
-
-    val pieces = remember {
-        val rng = kotlin.random.Random(42)
-        (0..299).map {
-            FP(col = rng.nextFloat(), speed = 0.4f + rng.nextFloat() * 1.2f,
-               sz = 5f + rng.nextFloat() * 8f, shape = it % 7,
-               alpha = 0.12f + rng.nextFloat() * 0.25f,
-               // Large random startY spread ensures pieces are uniformly distributed
-               startY = rng.nextFloat() * 10000f,
-               colorIdx = it % 7, trailLen = 4 + rng.nextInt(8),
-               sparkle = rng.nextFloat() < 0.15f,
-               sparklePhase = rng.nextFloat() * 6.28f)
-        }
-    }
-    val t = rememberInfiniteTransition(label = "bg")
-    // Very large target value so the animation never visibly restarts
-    // Each piece wraps independently via modulo on screen height
-    val anim by t.animateFloat(0f, 1_000_000f, infiniteRepeatable(tween(1_500_000, easing = LinearEasing)), label = "fall")
-
-    val pieceColors = remember { listOf(
-        Color(0xFFFF4444), Color(0xFF44AAFF), Color(0xFFFFAA00), Color(0xFF44FF44),
-        Color(0xFFFF44FF), Color(0xFF44FFFF), Color(0xFFF4D03F)
-    ) }
-    val trailColor = Color(0xFF22C55E)
-
-    val shapes = remember { listOf(
-        listOf(0 to 0, 1 to 0, 0 to 1, 1 to 1),       // O
-        listOf(0 to 0, 1 to 0, 2 to 0, 3 to 0),       // I
-        listOf(0 to 0, 1 to 0, 2 to 0, 2 to 1),       // L
-        listOf(0 to 0, 1 to 0, 2 to 0, 0 to 1),       // J
-        listOf(0 to 0, 1 to 0, 1 to 1, 2 to 1),       // S
-        listOf(1 to 0, 2 to 0, 0 to 1, 1 to 1),       // Z
-        listOf(0 to 0, 1 to 0, 2 to 0, 1 to 1),       // T
-    ) }
-
-    Canvas(Modifier.fillMaxSize()) {
-        val w = size.width; val h = size.height
-        val wrapH = h + 600f  // total travel distance before wrapping
-        // In light mode, use higher alpha for visibility on light background
-        val alphaBoost = if (isDark) 1f else 2.2f
-        val actualTrailColor = if (isDark) trailColor else Color(0xFF22A050)
-        pieces.forEach { p ->
-            // Each piece wraps independently based on its own startY offset
-            val rawY = p.startY + anim * p.speed * speedMultiplier
-            val baseY = (rawY % wrapH) - 300f
-            val x = p.col * w
-            val s = p.sz
-            val shape = shapes[p.shape % shapes.size]
-            val pColor = pieceColors[p.colorIdx]
-            val pa = (p.alpha * alphaBoost).coerceAtMost(0.55f)
-
-            // Draw long green trail (fading upward) — bigger trail
-            for (ti in 1..p.trailLen) {
-                val trailY = baseY - ti * (s + 2) * 1.2f
-                val trailAlpha = pa * 0.5f * (1f - ti.toFloat() / (p.trailLen + 1))
-                val trailSz = s * (1f - ti * 0.04f).coerceAtLeast(0.3f)
-                shape.forEach { (dx, dy) ->
-                    drawRoundRect(
-                        color = actualTrailColor.copy(alpha = trailAlpha.coerceIn(0f, 1f)),
-                        topLeft = androidx.compose.ui.geometry.Offset(x + dx * (s + 2), trailY + dy * (s + 2)),
-                        size = androidx.compose.ui.geometry.Size(trailSz, trailSz),
-                        cornerRadius = androidx.compose.ui.geometry.CornerRadius(2f, 2f)
-                    )
-                }
-            }
-
-            // Draw colored piece
-            shape.forEach { (dx, dy) ->
-                drawRoundRect(
-                    color = pColor.copy(alpha = pa),
-                    topLeft = androidx.compose.ui.geometry.Offset(x + dx * (s + 2), baseY + dy * (s + 2)),
-                    size = androidx.compose.ui.geometry.Size(s, s),
-                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(2f, 2f)
-                )
-            }
-
-            // Sparkle effect on some pieces — a bright white dot that pulses
-            if (p.sparkle) {
-                val sparkleAlpha = (0.3f + 0.4f * kotlin.math.sin(anim * 0.01f + p.sparklePhase)).coerceIn(0f, 0.7f)
-                val sparkX = x + (s + 2) * 0.5f
-                val sparkY = baseY - s * 0.5f
-                drawCircle(
-                    color = Color.White.copy(alpha = sparkleAlpha * pa * 3f),
-                    radius = s * 0.35f,
-                    center = androidx.compose.ui.geometry.Offset(sparkX, sparkY)
-                )
-                // Small outer glow
-                drawCircle(
-                    color = pColor.copy(alpha = sparkleAlpha * p.alpha * 1.5f),
-                    radius = s * 0.6f,
-                    center = androidx.compose.ui.geometry.Offset(sparkX, sparkY)
-                )
             }
         }
     }
@@ -2225,23 +2128,56 @@ private fun FallingPiecesBackground(theme: com.brickgame.tetris.ui.theme.GameThe
     }
 }
 
-@Composable private fun GameOverOverlay(score: Int, level: Int, lines: Int, onRestart: () -> Unit, onMenu: () -> Unit, onLeave: () -> Unit) {
+@Composable private fun GameOverOverlay(
+    score: Int, level: Int, lines: Int,
+    highScore: Int = 0, maxCombo: Int = 0, backToBack: Int = 0, elapsedMs: Long = 0,
+    onRestart: () -> Unit, onMenu: () -> Unit, onLeave: () -> Unit
+) {
     val theme = LocalGameTheme.current
+    val isNewBest = score > 0 && score >= highScore
+
     // Entrance animation — staggered reveal
     var visible by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { visible = true }
     val bgAlpha by animateFloatAsState(if (visible) 0.88f else 0f, tween(400), label = "gobg")
     val titleAlpha by animateFloatAsState(if (visible) 1f else 0f, tween(350, delayMillis = 100), label = "gotitle")
     val titleScale by animateFloatAsState(if (visible) 1f else 1.4f, tween(500, delayMillis = 100, easing = FastOutSlowInEasing), label = "gots")
-    val statsAlpha by animateFloatAsState(if (visible) 1f else 0f, tween(300, delayMillis = 350), label = "gostats")
-    val statsSlide by animateFloatAsState(if (visible) 0f else 30f, tween(300, delayMillis = 350, easing = FastOutSlowInEasing), label = "gossl")
-    val buttonsAlpha by animateFloatAsState(if (visible) 1f else 0f, tween(300, delayMillis = 550), label = "gobtn")
+    // Item 4: Each stat row fades in with increasing delay
+    val stat1Alpha by animateFloatAsState(if (visible) 1f else 0f, tween(280, delayMillis = 300), label = "gs1")
+    val stat1Slide by animateFloatAsState(if (visible) 0f else 20f, tween(280, delayMillis = 300, easing = FastOutSlowInEasing), label = "gss1")
+    val stat2Alpha by animateFloatAsState(if (visible) 1f else 0f, tween(280, delayMillis = 380), label = "gs2")
+    val stat2Slide by animateFloatAsState(if (visible) 0f else 20f, tween(280, delayMillis = 380, easing = FastOutSlowInEasing), label = "gss2")
+    val stat3Alpha by animateFloatAsState(if (visible) 1f else 0f, tween(280, delayMillis = 460), label = "gs3")
+    val stat3Slide by animateFloatAsState(if (visible) 0f else 20f, tween(280, delayMillis = 460, easing = FastOutSlowInEasing), label = "gss3")
+    val stat4Alpha by animateFloatAsState(if (visible) 1f else 0f, tween(280, delayMillis = 540), label = "gs4")
+    val stat4Slide by animateFloatAsState(if (visible) 0f else 20f, tween(280, delayMillis = 540, easing = FastOutSlowInEasing), label = "gss4")
+    val buttonsAlpha by animateFloatAsState(if (visible) 1f else 0f, tween(300, delayMillis = 650), label = "gobtn")
+    val buttonsSlide by animateFloatAsState(if (visible) 0f else 20f, tween(300, delayMillis = 650, easing = FastOutSlowInEasing), label = "gobs")
 
     // Title pulse
     val inf = rememberInfiniteTransition(label = "go")
     val titlePulse by inf.animateFloat(0.8f, 1f, infiniteRepeatable(tween(600), RepeatMode.Reverse), label = "gp")
+
+    // Item 5: New best pulsing glow
+    val bestGlow by inf.animateFloat(0.4f, 1f, infiniteRepeatable(tween(800), RepeatMode.Reverse), label = "bg")
+
+    // Item 4: Per-stat accent colors derived from theme
+    val scoreColor = theme.accentColor
+    val levelColor = Color(0xFF4ECDC4) // teal
+    val linesColor = Color(0xFFFF6B6B) // coral
+    val timeColor = Color(0xFF74B9FF)  // sky blue
+
+    // Format elapsed time
+    val timeStr = remember(elapsedMs) {
+        val totalSec = (elapsedMs / 1000).toInt()
+        val min = totalSec / 60; val sec = totalSec % 60
+        "%02d:%02d".format(min, sec)
+    }
+
     Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = bgAlpha)), Alignment.Center) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.verticalScroll(rememberScrollState())) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 24.dp)) {
+            Spacer(Modifier.height(16.dp))
             // Title with scale entrance
             Column(horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier.graphicsLayer { scaleX = titleScale; scaleY = titleScale; alpha = titleAlpha }) {
@@ -2250,31 +2186,71 @@ private fun FallingPiecesBackground(theme: com.brickgame.tetris.ui.theme.GameThe
                 Text("OVER", fontSize = 34.sp, fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace,
                     color = Color(0xFFFF4444).copy(alpha = titlePulse), letterSpacing = 6.sp)
             }
-            Spacer(Modifier.height(16.dp))
-            // Score + stats with slide-up entrance
-            Column(horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.graphicsLayer { translationY = statsSlide; alpha = statsAlpha }) {
-                // Animated score counter
-                val animatedGoScore by animateIntAsState(if (visible) score else 0, tween(800, delayMillis = 400), label = "gosc")
-                Text(animatedGoScore.toString(), fontSize = 32.sp, fontFamily = FontFamily.Monospace, color = theme.accentColor, fontWeight = FontWeight.ExtraBold)
+
+            // Item 5: New personal best badge
+            if (isNewBest) {
                 Spacer(Modifier.height(8.dp))
-                // Stats breakdown
-                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    StatChip("LEVEL", "$level")
-                    StatChip("LINES", "$lines")
-                    StatChip("LPM", if (level > 0) "${"%.1f".format(lines.toFloat() / level)}" else "0")
+                Text("NEW BEST!", fontSize = 13.sp, fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace,
+                    color = theme.accentColor.copy(alpha = bestGlow), letterSpacing = 4.sp)
+            }
+
+            Spacer(Modifier.height(20.dp))
+
+            // Animated score counter
+            val animatedGoScore by animateIntAsState(if (visible) score else 0, tween(800, delayMillis = 400), label = "gosc")
+            Text(animatedGoScore.toString(), fontSize = 32.sp, fontFamily = FontFamily.Monospace,
+                color = scoreColor, fontWeight = FontWeight.ExtraBold)
+
+            Spacer(Modifier.height(16.dp))
+
+            // Item 4: Stats with per-stat accent colors and individual staggered animations
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                GameOverStatRow("LEVEL", "$level", levelColor,
+                    Modifier.graphicsLayer { translationY = stat1Slide; alpha = stat1Alpha })
+                GameOverStatRow("LINES", "$lines", linesColor,
+                    Modifier.graphicsLayer { translationY = stat2Slide; alpha = stat2Alpha })
+                GameOverStatRow("TIME", timeStr, timeColor,
+                    Modifier.graphicsLayer { translationY = stat3Slide; alpha = stat3Alpha })
+                if (maxCombo > 1 || backToBack > 0) {
+                    val extraText = buildString {
+                        if (maxCombo > 1) append("${maxCombo}x Combo")
+                        if (backToBack > 0) {
+                            if (isNotEmpty()) append("  \u00b7  ")
+                            append("${backToBack}x B2B")
+                        }
+                    }
+                    GameOverStatRow("BEST", extraText, Color(0xFFFFAA00),
+                        Modifier.graphicsLayer { translationY = stat4Slide; alpha = stat4Alpha })
                 }
             }
+
             Spacer(Modifier.height(24.dp))
+
             // Buttons with fade-in
             Column(horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.graphicsLayer { alpha = buttonsAlpha }) {
+                modifier = Modifier.graphicsLayer { translationY = buttonsSlide; alpha = buttonsAlpha }) {
                 ActionButton("AGAIN", onRestart, width = 160.dp, height = 48.dp, backgroundColor = theme.accentColor)
                 Spacer(Modifier.height(10.dp))
                 ActionButton("LEAVE", onLeave, width = 160.dp, height = 42.dp, backgroundColor = Color(0xFFB91C1C))
             }
             Spacer(Modifier.height(16.dp))
         }
+    }
+}
+
+/** Item 4: Individual stat row for Game Over — colored label + value on a dark chip */
+@Composable private fun GameOverStatRow(label: String, value: String, accentColor: Color, modifier: Modifier = Modifier) {
+    Row(
+        modifier = modifier.fillMaxWidth(0.75f)
+            .background(Color.White.copy(0.06f), RoundedCornerShape(8.dp))
+            .padding(horizontal = 14.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(label, fontSize = 10.sp, color = Color.White.copy(0.5f), fontWeight = FontWeight.Bold,
+            fontFamily = FontFamily.Monospace, letterSpacing = 2.sp)
+        Text(value, fontSize = 16.sp, color = accentColor, fontWeight = FontWeight.Bold,
+            fontFamily = FontFamily.Monospace)
     }
 }
 
