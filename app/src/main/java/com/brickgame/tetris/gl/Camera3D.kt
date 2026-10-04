@@ -12,11 +12,12 @@ class Camera3D {
     private val projMatrix = FloatArray(16)
     private val vpMatrix = FloatArray(16)
 
-    var azimuth = 35f
-    var elevation = 25f
-    var zoom = 1f
-    var panX = 0f
-    var panY = 0f
+    // Written on the UI thread (touch / motion sensor), read on the GL thread
+    @Volatile var azimuth = 35f
+    @Volatile var elevation = 25f
+    @Volatile var zoom = 1f
+    @Volatile var panX = 0f
+    @Volatile var panY = 0f
 
     private val targetX = Tetris3DGame.BOARD_W / 2f
     private val targetY = Tetris3DGame.BOARD_H / 3f

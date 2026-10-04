@@ -6,6 +6,9 @@ import android.view.MotionEvent
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.brickgame.tetris.game.Game3DState
 import com.brickgame.tetris.ui.components.PieceMaterial
 import kotlin.math.abs
@@ -17,6 +20,10 @@ import kotlin.math.sqrt
  * Camera is the single source of truth inside BoardGLSurfaceView.
  * Touch gestures update the view's camera directly → pushed to renderer each frame.
  * onCameraChange callback reports back to Compose for the ViewCube overlay only.
+ *
+ * Renders on demand (RENDERMODE_WHEN_DIRTY): a frame is drawn only when the game state or the
+ * camera changes, so a paused game or an idle menu costs no GPU/battery. The GL thread is also
+ * paused/resumed with the screen's lifecycle.
  */
 @Composable
 fun GLBoardView(
@@ -40,6 +47,21 @@ fun GLBoardView(
     // Push game state changes to renderer (NOT camera — camera is managed by touch)
     LaunchedEffect(state, material, showGhost, themePixelOn, themeBg) {
         rendererRef.value?.updateState(state, material, showGhost, themePixelOn, themeBg)
+        viewRef.value?.requestRender()
+    }
+
+    // Pause the GL thread while the app is in the background
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_PAUSE -> viewRef.value?.onPause()
+                Lifecycle.Event.ON_RESUME -> viewRef.value?.onResume()
+                else -> {}
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     AndroidView(
@@ -53,7 +75,7 @@ fun GLBoardView(
                 view.setEGLConfigChooser(8, 8, 8, 0, 16, 0)
                 view.holder.setFormat(android.graphics.PixelFormat.OPAQUE)
                 view.setRenderer(renderer)
-                view.renderMode = GLSurfaceView.RENDERMODE_CONTINUOUSLY
+                view.renderMode = GLSurfaceView.RENDERMODE_WHEN_DIRTY
 
                 // Set initial camera
                 view.azimuth = cameraAngleY
@@ -79,6 +101,7 @@ fun GLBoardView(
                 view.azimuth, view.camElevation,
                 view.panX, view.panY, view.currentZoom
             )
+            view.requestRender()
         }
     )
 }
@@ -143,6 +166,7 @@ class BoardGLSurfaceView(context: Context) : GLSurfaceView(context) {
                 }
                 // Push camera to renderer directly (no Compose round-trip)
                 rendererRef?.updateCamera(azimuth, camElevation, panX, panY, currentZoom)
+                requestRender()
                 // Notify Compose for ViewCube overlay
                 onCameraChange?.invoke(azimuth, camElevation, currentZoom, panX, panY)
             }
@@ -167,6 +191,7 @@ class BoardGLSurfaceView(context: Context) : GLSurfaceView(context) {
     fun setCameraExternal(az: Float, el: Float, z: Float, px: Float, py: Float) {
         azimuth = az; camElevation = el; currentZoom = z; panX = px; panY = py
         rendererRef?.updateCamera(az, el, px, py, z)
+        requestRender()
     }
 
     private fun centerX(e: MotionEvent): Float { var s = 0f; for (i in 0 until e.pointerCount) s += e.getX(i); return s / e.pointerCount }

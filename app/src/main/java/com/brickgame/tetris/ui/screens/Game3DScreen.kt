@@ -13,6 +13,11 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import android.content.Context
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.Path
@@ -22,6 +27,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.brickgame.tetris.game.*
@@ -61,6 +67,14 @@ fun Game3DScreen(
     var starWars by remember { mutableStateOf(false) }
     var showCamSettings by remember { mutableStateOf(false) }
 
+    // Motion view: the phone's orientation steers the camera. Touch still works on top of it:
+    // the camera = base (touch/sliders) + phone motion.
+    val hasMotionSensor = rememberHasMotionSensor()
+    var motionView by remember { mutableStateOf(false) }
+    var motionRecenter by remember { mutableIntStateOf(0) }
+    val motionBase = remember { FloatArray(2) }   // [azimuth, elevation] the motion is added to
+    val motionLast = remember { FloatArray(2) }   // last applied motion offset [az, el] in degrees
+
     // Reference to the GL view for pushing camera changes from UI (sliders, zoom buttons)
     val glViewRef = remember { mutableStateOf<BoardGLSurfaceView?>(null) }
 
@@ -68,6 +82,25 @@ fun Game3DScreen(
     fun setCamera(az: Float = azimuth, el: Float = elevation, z: Float = zoom, px: Float = panX, py: Float = panY) {
         azimuth = az; elevation = el; zoom = z; panX = px; panY = py
         glViewRef.value?.setCameraExternal(az, el, z, px, py)
+    }
+
+    fun setMotionView(on: Boolean) {
+        motionView = on
+        motionBase[0] = azimuth; motionBase[1] = elevation
+        motionLast[0] = 0f; motionLast[1] = 0f
+        motionRecenter++
+    }
+
+    MotionViewSensor(enabled = motionView && !starWars, recenterKey = motionRecenter) { yawDeg, pitchDeg ->
+        // Turning the phone left walks the camera round to the board's left side; tilting the
+        // top edge towards you looks down into the well.
+        val dAz = -yawDeg * MOTION_GAIN
+        val dEl = pitchDeg * MOTION_GAIN
+        motionLast[0] = dAz; motionLast[1] = dEl
+        setCamera(
+            az = com.brickgame.tetris.gl.TiltMath.wrapDegrees(motionBase[0] + dAz),
+            el = (motionBase[1] + dEl).coerceIn(-10f, 85f)
+        )
     }
 
     fun moveCameraRelative(screenDx: Int, screenDz: Int) {
@@ -136,6 +169,8 @@ fun Game3DScreen(
                         material = material,
                         onCameraChange = { az, el, z, px, py ->
                             azimuth = az; elevation = el; zoom = z; panX = px; panY = py
+                            // A touch drag moves the base the phone motion is added to
+                            if (motionView) { motionBase[0] = az - motionLast[0]; motionBase[1] = el - motionLast[1] }
                         },
                         onViewCreated = { view -> glViewRef.value = view }
                     )
@@ -215,7 +250,20 @@ fun Game3DScreen(
                             CamPreset("Top", Modifier.weight(1f)) { setCamera(35f, 70f, 1f, 0f, 0f) }
                         }
                         Spacer(Modifier.height(4.dp))
-                        CamPreset("Reset All", Modifier.fillMaxWidth()) { setCamera(35f, 25f, 1f, 0f, 0f) }
+                        CamPreset("Reset All", Modifier.fillMaxWidth()) {
+                            setCamera(35f, 25f, 1f, 0f, 0f)
+                            if (motionView) setMotionView(true)  // re-centre on the current pose
+                        }
+                        if (hasMotionSensor) {
+                            Spacer(Modifier.height(6.dp))
+                            CamPreset(if (motionView) "Motion view: ON" else "Motion view: OFF", Modifier.fillMaxWidth()) {
+                                setMotionView(!motionView)
+                            }
+                            if (motionView) {
+                                Spacer(Modifier.height(4.dp))
+                                CamPreset("Re-centre", Modifier.fillMaxWidth()) { setMotionView(true) }
+                            }
+                        }
                     }
                 }
             }
@@ -259,6 +307,9 @@ fun Game3DScreen(
                         MiniToggle("SW", starWars, theme.accentColor) { starWars = !starWars }
                         MiniToggle("❄", !state.autoGravity, Color(0xFF38BDF8)) { onToggleGravity() }
                         MiniToggle("⚙", showCamSettings, Color(0xFFF59E0B)) { showCamSettings = !showCamSettings }
+                        if (hasMotionSensor) {
+                            MiniToggle("📱", motionView, Color(0xFFA78BFA)) { setMotionView(!motionView) }
+                        }
                     }
                     ActionButton("···", onOpenSettings, width = 36.dp, height = 18.dp)
                 }
@@ -331,5 +382,64 @@ private fun CamPreset(label: String, modifier: Modifier = Modifier, onClick: () 
     Box(modifier.clip(RoundedCornerShape(4.dp)).background(Color.White.copy(0.08f))
         .clickable { onClick() }.padding(vertical = 4.dp), contentAlignment = Alignment.Center) {
         Text(label, fontSize = 9.sp, color = Color.White.copy(0.6f), fontFamily = FontFamily.Monospace)
+    }
+}
+
+// ===== Motion view =====
+
+/** Degrees of camera movement per degree of phone movement — small wrist turns reveal the sides. */
+private const val MOTION_GAIN = 1.5f
+
+@Composable
+private fun rememberHasMotionSensor(): Boolean {
+    val context = LocalContext.current
+    return remember {
+        val sm = context.getSystemService(Context.SENSOR_SERVICE) as? SensorManager
+        sm?.getDefaultSensor(Sensor.TYPE_GAME_ROTATION_VECTOR) != null ||
+            sm?.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR) != null
+    }
+}
+
+/**
+ * Reports how far the phone has turned (yaw) and tilted (pitch), in degrees, relative to its
+ * orientation when [enabled] became true or [recenterKey] changed.
+ *
+ * Uses the game rotation vector (gyroscope + accelerometer, no compass, so nearby magnets or
+ * metal don't make the view drift); falls back to the regular rotation vector. No camera and no
+ * permission are needed.
+ */
+@Composable
+private fun MotionViewSensor(enabled: Boolean, recenterKey: Int, onAngles: (yawDeg: Float, pitchDeg: Float) -> Unit) {
+    val context = LocalContext.current
+    val latestOnAngles by rememberUpdatedState(onAngles)
+    DisposableEffect(enabled, recenterKey) {
+        val sm = context.getSystemService(Context.SENSOR_SERVICE) as? SensorManager
+        val sensor = sm?.getDefaultSensor(Sensor.TYPE_GAME_ROTATION_VECTOR)
+            ?: sm?.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR)
+        if (!enabled || sm == null || sensor == null) return@DisposableEffect onDispose {}
+
+        val ref = FloatArray(9); val cur = FloatArray(9); val out = FloatArray(2)
+        var hasRef = false
+        var yaw = 0f; var pitch = 0f
+        val listener = object : SensorEventListener {
+            override fun onSensorChanged(event: SensorEvent) {
+                // Some devices report 5 values; the matrix conversion only wants the first 4
+                val v = if (event.values.size > 4) event.values.copyOf(4) else event.values
+                if (!hasRef) {
+                    SensorManager.getRotationMatrixFromVector(ref, v)
+                    hasRef = true
+                    return
+                }
+                SensorManager.getRotationMatrixFromVector(cur, v)
+                com.brickgame.tetris.gl.TiltMath.relativeYawPitch(ref, cur, out)
+                // Light low-pass filter against hand tremor
+                yaw += (Math.toDegrees(out[0].toDouble()).toFloat() - yaw) * 0.35f
+                pitch += (Math.toDegrees(out[1].toDouble()).toFloat() - pitch) * 0.35f
+                latestOnAngles(yaw, pitch)
+            }
+            override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
+        }
+        sm.registerListener(listener, sensor, SensorManager.SENSOR_DELAY_GAME)
+        onDispose { sm.unregisterListener(listener) }
     }
 }
