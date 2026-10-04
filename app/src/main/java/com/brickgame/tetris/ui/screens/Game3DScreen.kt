@@ -159,7 +159,7 @@ fun Game3DScreen(
                     GameStatus.MENU -> {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text("3D", fontSize = 48.sp, fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace, color = theme.accentColor, letterSpacing = 8.sp)
-                            Text("TETRIS", fontSize = 28.sp, fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace, color = theme.textPrimary.copy(0.8f), letterSpacing = 6.sp)
+                            Text("BRICKWELL", fontSize = 28.sp, fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace, color = theme.textPrimary.copy(0.8f), letterSpacing = 6.sp)
                             Spacer(Modifier.height(28.dp))
                             ActionButton("START", onStart, width = 140.dp, height = 48.dp)
                             Spacer(Modifier.height(12.dp))

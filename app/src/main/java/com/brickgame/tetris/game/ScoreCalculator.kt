@@ -132,7 +132,7 @@ object ScoreCalculator {
             1 -> parts.add("Single")
             2 -> parts.add("Double")
             3 -> parts.add("Triple")
-            4 -> parts.add("Tetris!")
+            4 -> parts.add("Quad!")
         }
         
         if (comboCount > 1) {

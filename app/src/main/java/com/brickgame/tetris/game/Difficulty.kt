@@ -19,7 +19,7 @@ enum class Difficulty(
     ),
     NORMAL(
         "Normal", 
-        "Standard Tetris experience",
+        "The standard experience",
         1,
         1.0f,
         1.0f

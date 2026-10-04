@@ -626,12 +626,12 @@ fun SettingsScreen(
 @Composable private fun AboutPage(onBack: () -> Unit) {
     LazyColumn(Modifier.fillMaxSize().padding(20.dp)) {
         item { Header("About", onBack); Spacer(Modifier.height(24.dp)) }
-        item { Card { Text("BRICK GAME", color = acc(), fontSize = 24.sp, fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace); Text("Kotlin Edition", color = tx(), fontSize = 14.sp) } }
-        item { Card { Info("Version", "3.6.0"); Info("Build", "16"); Info("Platform", "Android 8.0+"); Info("Engine", "Compose + OpenGL ES") } }
+        item { Card { Text("BRICKWELL", color = acc(), fontSize = 24.sp, fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace); Text("Retro · Neon · 3D", color = tx(), fontSize = 14.sp) } }
+        item { Card { Info("Version", com.brickgame.tetris.BuildConfig.VERSION_NAME); Info("Build", com.brickgame.tetris.BuildConfig.VERSION_CODE.toString()); Info("Platform", "Android 8.0+"); Info("Engine", "Compose + OpenGL ES") } }
         item { Card { Text("Developer", color = dim(), fontSize = 12.sp); Text("Andrei Anton", color = tx(), fontSize = 16.sp, fontWeight = FontWeight.Bold) } }
         item { Lbl("Features") }
         item { Card {
-            Text("3D Tetris mode with OpenGL ES rendering", color = tx(), fontSize = 12.sp)
+            Text("3D mode with OpenGL ES rendering", color = tx(), fontSize = 12.sp)
             Text("Free camera rotation, zoom, and pan", color = tx(), fontSize = 12.sp)
             Text("Realistic piece materials (Stone, Granite, Marble, Diamond)", color = tx(), fontSize = 12.sp)
             Text("6 layouts (Classic, Modern, Fullscreen, Compact, Freeform, 3D)", color = tx(), fontSize = 12.sp)
@@ -654,7 +654,7 @@ fun SettingsScreen(
 
         item { Lbl("The Basics") }
         item { Card {
-            Text("Tetris is a puzzle game where you arrange falling pieces (tetrominoes) to complete horizontal lines. Completed lines are cleared from the board and award points.", color = tx(), fontSize = 13.sp, lineHeight = 20.sp)
+            Text("Brickwell is a puzzle game where you arrange falling pieces to complete horizontal lines. Completed lines are cleared from the board and award points.", color = tx(), fontSize = 13.sp, lineHeight = 20.sp)
             Spacer(Modifier.height(8.dp))
             Text("The game ends when the pieces stack up to the top of the board.", color = tx(), fontSize = 13.sp, lineHeight = 20.sp)
         } }
@@ -679,11 +679,11 @@ fun SettingsScreen(
             InfoLine("1 line (Single)", "100 × level")
             InfoLine("2 lines (Double)", "300 × level")
             InfoLine("3 lines (Triple)", "500 × level")
-            InfoLine("4 lines (Tetris!)", "800 × level")
+            InfoLine("4 lines (Quad!)", "800 × level")
             Spacer(Modifier.height(8.dp))
             Text("T-Spin — rotating a T-piece into a tight space awards bonus points (200–1600 × level).", color = tx(), fontSize = 13.sp, lineHeight = 20.sp)
             Spacer(Modifier.height(8.dp))
-            Text("Back-to-Back — consecutive difficult clears (Tetris or T-Spin) earn a 1.5× bonus.", color = tx(), fontSize = 13.sp, lineHeight = 20.sp)
+            Text("Back-to-Back — consecutive difficult clears (Quad or T-Spin) earn a 1.5× bonus.", color = tx(), fontSize = 13.sp, lineHeight = 20.sp)
             Spacer(Modifier.height(8.dp))
             Text("Combo — clearing lines on consecutive piece drops adds 50 × combo × level bonus points.", color = tx(), fontSize = 13.sp, lineHeight = 20.sp)
         } }
@@ -725,7 +725,7 @@ fun SettingsScreen(
         item { Card {
             Text("Build flat — avoid creating holes and valleys. Keep the surface even.", color = tx(), fontSize = 13.sp, lineHeight = 20.sp)
             Spacer(Modifier.height(6.dp))
-            Text("Save the I-piece — leave a column open on one side and use the long bar for Tetris (4-line) clears.", color = tx(), fontSize = 13.sp, lineHeight = 20.sp)
+            Text("Save the I-piece — leave a column open on one side and use the long bar for Quad (4-line) clears.", color = tx(), fontSize = 13.sp, lineHeight = 20.sp)
             Spacer(Modifier.height(6.dp))
             Text("Use Hold wisely — save awkward pieces for later when you have a better spot.", color = tx(), fontSize = 13.sp, lineHeight = 20.sp)
             Spacer(Modifier.height(6.dp))

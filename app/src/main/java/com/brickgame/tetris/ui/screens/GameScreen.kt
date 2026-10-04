@@ -2056,7 +2056,7 @@ fun GameScreen(
                 modifier = Modifier.graphicsLayer { scaleX = titleScale; scaleY = titleScale; alpha = titleAlpha }) {
                 Text("BRICK", fontSize = 38.sp, fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace,
                     color = if (isDark) theme.textPrimary.copy(alpha = 0.9f) else Color(0xFF2A2A2A), letterSpacing = 8.sp)
-                Text("GAME", fontSize = 38.sp, fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace,
+                Text("WELL", fontSize = 38.sp, fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace,
                     color = if (isDark) theme.accentColor else Color(0xFFB8860B), letterSpacing = 8.sp)
             }
             Spacer(Modifier.height(32.dp))
@@ -2423,10 +2423,10 @@ private fun ActionPopup(label: String, linesCleared: Int, actionEvent: Int, stat
         val popupShake: Boolean
         val popupGlow: Boolean
         when {
-            popupText.contains("Tetris", ignoreCase = true) && popupText.contains("B2B", ignoreCase = true) -> {
+            popupText.contains("Quad", ignoreCase = true) && popupText.contains("B2B", ignoreCase = true) -> {
                 popupBg = Color(0xFFFF2200).copy(0.7f); popupTextColor = Color.White; popupFontSize = 42; popupShake = true; popupGlow = true
             }
-            popupText.contains("Tetris", ignoreCase = true) -> {
+            popupText.contains("Quad", ignoreCase = true) -> {
                 popupBg = Color(0xFFFF4400).copy(0.65f); popupTextColor = Color.White; popupFontSize = 40; popupShake = true; popupGlow = true
             }
             popupText.contains("T-Spin", ignoreCase = true) -> {

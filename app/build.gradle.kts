@@ -10,7 +10,9 @@ android {
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.brickgame.tetris"
+        // Play Store identity — permanent after the first upload, so kept brand-neutral.
+        // (The Kotlin namespace below is internal and never shown to users.)
+        applicationId = "com.andreinicua.brickgame"
         minSdk = 26
         targetSdk = 35
         versionCode = 17
@@ -50,7 +52,7 @@ android {
     }
 
     kotlinOptions { jvmTarget = "17" }
-    buildFeatures { compose = true }
+    buildFeatures { compose = true; buildConfig = true }
     packaging { resources { excludes += "/META-INF/{AL2.0,LGPL2.1}" } }
 }
 
