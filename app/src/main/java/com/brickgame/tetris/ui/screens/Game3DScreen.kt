@@ -14,6 +14,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.geometry.Offset
@@ -129,8 +130,9 @@ fun Game3DScreen(
                         panOffsetX = panX,
                         panOffsetY = panY,
                         zoom = zoom,
-                        themePixelOn = theme.pixelOn.value.toLong(),
-                        themeBg = theme.backgroundColor.value.toLong(),
+                        // Color.value packs ARGB in the high 32 bits — convert explicitly
+                        themePixelOn = theme.pixelOn.toArgb().toLong() and 0xFFFFFFFFL,
+                        themeBg = theme.backgroundColor.toArgb().toLong() and 0xFFFFFFFFL,
                         material = material,
                         onCameraChange = { az, el, z, px, py ->
                             azimuth = az; elevation = el; zoom = z; panX = px; panY = py
@@ -247,7 +249,7 @@ fun Game3DScreen(
                 }
                 // Centre: HOLD + PAUSE + toggles
                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                    ActionButton("HOLD", onHold, width = 58.dp, height = 26.dp)
+                    ActionButton("HOLD", onHold, fireOnPress = true, width = 58.dp, height = 26.dp)
                     ActionButton(
                         if (state.status == GameStatus.MENU) "START" else "PAUSE",
                         { if (state.status == GameStatus.MENU) onStart() else onPause() },

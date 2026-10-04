@@ -231,7 +231,21 @@ fun SettingsScreen(
     var editName by remember { mutableStateOf(name) }
     var sortBy by remember { mutableStateOf("score") }
     var showClearConfirm by remember { mutableStateOf(false) }
-    LaunchedEffect(name) { editName = name }
+    // Once the user has typed, the field is the source of truth — a slower store emission of an
+    // older value must not overwrite newer keystrokes. Saving is debounced instead of per keystroke.
+    var edited by remember { mutableStateOf(false) }
+    LaunchedEffect(name) { if (!edited) editName = name }
+    LaunchedEffect(editName) {
+        if (edited && editName != name) { kotlinx.coroutines.delay(400); onName(editName) }
+    }
+    // Leaving the page before the debounce fires still saves the latest text
+    val latestEdit by rememberUpdatedState(editName)
+    val latestName by rememberUpdatedState(name)
+    val latestEdited by rememberUpdatedState(edited)
+    val latestOnName by rememberUpdatedState(onName)
+    DisposableEffect(Unit) {
+        onDispose { if (latestEdited && latestEdit != latestName) latestOnName(latestEdit) }
+    }
     val dateFormat = remember { java.text.SimpleDateFormat("dd MMM yyyy, HH:mm", java.util.Locale.getDefault()) }
     val sorted = remember(history, sortBy) {
         when (sortBy) {
@@ -243,7 +257,7 @@ fun SettingsScreen(
     }
     LazyColumn(Modifier.fillMaxSize().padding(20.dp)) {
         item { Header("Profile", onBack); Spacer(Modifier.height(16.dp)) }
-        item { Card { Text("Player Name", color = dim(), fontSize = 12.sp); Spacer(Modifier.height(4.dp)); EditField(editName) { editName = it; onName(it) } } }
+        item { Card { Text("Player Name", color = dim(), fontSize = 12.sp); Spacer(Modifier.height(4.dp)); EditField(editName) { editName = it; edited = true } } }
         item { Card { Text("High Score", color = dim(), fontSize = 12.sp); Text(hs.toString(), color = acc(), fontSize = 24.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace) } }
         // Stats dashboard
         if (history.isNotEmpty()) {

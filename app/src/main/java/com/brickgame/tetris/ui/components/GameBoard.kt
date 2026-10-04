@@ -82,15 +82,17 @@ fun GameBoard(
         }
     }
 
-    // Ghost piece pulse animation
-    val ghostPulse = rememberInfiniteTransition(label = "ghostPulse")
-    val ghostPulseAlpha by ghostPulse.animateFloat(
-        0.08f, 0.18f,
-        infiniteRepeatable(tween(1200, easing = FastOutSlowInEasing), RepeatMode.Reverse),
-        label = "gpa"
-    )
+    // Ghost piece pulse animation — only runs while a ghost is actually drawn, so an idle or
+    // Classic board isn't redrawn every frame
+    val ghostVisible = showGhost && currentPiece != null
+    val ghostPulseAlpha: State<Float> = if (ghostVisible) {
+        rememberInfiniteTransition(label = "ghostPulse").animateFloat(
+            0.08f, 0.18f,
+            infiniteRepeatable(tween(1200, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+            label = "gpa"
+        )
+    } else remember { mutableFloatStateOf(0.13f) }
 
-    val progress = clearProgress.value
     val isClearing = clearingLines.isNotEmpty()
     val isTetris = clearingLines.size >= 4
 
@@ -110,6 +112,8 @@ fun GameBoard(
         val boardHeight = pixelSize * TetrisGame.BOARD_HEIGHT
 
         Canvas(modifier = Modifier.width(boardWidth).height(boardHeight)) {
+            // Animation values are read here (draw phase), so they redraw without recomposing
+            val progress = clearProgress.value
             val cellSize = size.width / TetrisGame.BOARD_WIDTH
             val gap = cellSize * 0.06f
             val corner = cellSize * 0.15f
@@ -194,7 +198,7 @@ fun GameBoard(
             // Ghost — with pulsing alpha
             if (showGhost && currentPiece != null && ghostY > currentPiece.position.y) {
                 val gc = if (multiColor) PIECE_COLORS.getOrElse(currentPiece.type.ordinal + 1) { theme.pixelOn } else theme.pixelOn
-                drawGhost(currentPiece, ghostY, cellSize, gap, corner, gc, ghostPulseAlpha, pieceMaterial)
+                drawGhost(currentPiece, ghostY, cellSize, gap, corner, gc, ghostPulseAlpha.value, pieceMaterial)
             }
 
             // Hard drop trail — DRAMATIC vertical streaks with glow
@@ -563,6 +567,8 @@ private fun DrawScope.drawTetrisExplosion(
     }
 }
 
+private val FLASHY_COLORS = listOf(Color(0xFFFF0000), Color(0xFFFF7F00), Color(0xFFFFFF00), Color(0xFF00FF00), Color(0xFF00FFFF), Color(0xFF0000FF), Color(0xFF8B00FF), Color(0xFFFF00FF))
+
 private fun clearingEffect(style: AnimationStyle, progress: Float, x: Int, y: Int, baseColor: Color, lineCount: Int): Pair<Color, Float> = when (style) {
     AnimationStyle.NONE -> baseColor to 1f
     AnimationStyle.RETRO -> {
@@ -584,7 +590,7 @@ private fun clearingEffect(style: AnimationStyle, progress: Float, x: Int, y: In
         Color(r.coerceIn(0f,1f), g.coerceIn(0f,1f), b.coerceIn(0f,1f), alpha.coerceIn(0f,1f)) to scale.coerceAtLeast(0.1f)
     }
     AnimationStyle.FLASHY -> {
-        val colors = listOf(Color(0xFFFF0000), Color(0xFFFF7F00), Color(0xFFFFFF00), Color(0xFF00FF00), Color(0xFF00FFFF), Color(0xFF0000FF), Color(0xFF8B00FF), Color(0xFFFF00FF))
+        val colors = FLASHY_COLORS
         val idx = ((x + progress * 16).toInt() % colors.size)
         val alpha = if (progress > 0.6f) 1f - ((progress - 0.6f) / 0.4f) else 1f
         colors[idx].copy(alpha = alpha) to (1f + kotlin.math.sin(progress * 12.56f) * 0.1f)

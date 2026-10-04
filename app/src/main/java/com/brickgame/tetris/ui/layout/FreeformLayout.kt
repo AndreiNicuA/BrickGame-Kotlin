@@ -203,7 +203,7 @@ fun RenderElement(
         FreeformElementType.BTN_LEFT -> HoldButton(ButtonIcon.LEFT, sz, shapeOverride = elemButtonShape, onPress = onLP, onRelease = onLR)
         FreeformElementType.BTN_RIGHT -> HoldButton(ButtonIcon.RIGHT, sz, shapeOverride = elemButtonShape, onPress = onRP, onRelease = onRR)
         FreeformElementType.ROTATE -> RotateButton(onRotate, (64 * scale).dp, shapeOverride = elemButtonShape)
-        FreeformElementType.HOLD_BTN -> ActionButton("HOLD", onHold, width = (78 * scale).dp, height = (34 * scale).dp, backgroundColor = theme.buttonPrimary)
+        FreeformElementType.HOLD_BTN -> ActionButton("HOLD", onHold, fireOnPress = true, width = (78 * scale).dp, height = (34 * scale).dp, backgroundColor = theme.buttonPrimary)
         FreeformElementType.PAUSE_BTN -> ActionButton(
             if (gs.status == GameStatus.MENU) "START" else "PAUSE",
             { if (gs.status == GameStatus.MENU) onStart() else onPause() },
@@ -696,61 +696,6 @@ fun FreeformEditorScreen(
                             Spacer(Modifier.height(8.dp))
                         }
 
-                        // ── Board Shape (when BOARD selected) ──
-                        if (selectedElement != null && selectedElement.key == "BOARD") {
-                            item {
-                                Text("Board Shape", color = Color(0xFF8B5CF6), fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                                Spacer(Modifier.height(4.dp))
-                                BoardShape.entries.forEach { shape ->
-                                    val isSel = shape == boardShape
-                                    Row(Modifier.fillMaxWidth().padding(vertical = 2.dp).clip(RoundedCornerShape(6.dp))
-                                        .background(if (isSel) Color(0xFF8B5CF6).copy(0.15f) else Color(0xFF252525))
-                                        .clickable { onBoardShapeChanged(shape) }.padding(horizontal = 10.dp, vertical = 7.dp),
-                                        Arrangement.SpaceBetween, Alignment.CenterVertically) {
-                                        Column { Text(shape.displayName, color = if (isSel) Color.White else Color(0xFFAAAAAA), fontSize = 12.sp, fontWeight = if (isSel) FontWeight.Bold else FontWeight.Normal); Text(shape.description, color = Color(0xFF666666), fontSize = 10.sp) }
-                                        if (isSel) Text("✓", color = Color(0xFF8B5CF6), fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                                    }
-                                }
-                                Spacer(Modifier.height(10.dp))
-                            }
-                        }
-
-                        // ── Info Bar Shape (when compound info selected) ──
-                        if (selectedElement != null && selectedElement.key.startsWith("INFO_")) {
-                            item {
-                                Text("Info Bar Shape", color = Color(0xFFF59E0B), fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                                Spacer(Modifier.height(4.dp))
-                                InfoBarShape.entries.forEach { shape ->
-                                    val isSel = shape == infoBarShape
-                                    Row(Modifier.fillMaxWidth().padding(vertical = 2.dp).clip(RoundedCornerShape(6.dp))
-                                        .background(if (isSel) Color(0xFFF59E0B).copy(0.15f) else Color(0xFF252525))
-                                        .clickable { onInfoBarShapeChanged(shape) }.padding(horizontal = 10.dp, vertical = 7.dp),
-                                        Arrangement.SpaceBetween, Alignment.CenterVertically) {
-                                        Text(shape.displayName, color = if (isSel) Color.White else Color(0xFFAAAAAA), fontSize = 12.sp, fontWeight = if (isSel) FontWeight.Bold else FontWeight.Normal)
-                                        if (isSel) Text("✓", color = Color(0xFFF59E0B), fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                                    }
-                                }
-                                Spacer(Modifier.height(10.dp))
-                            }
-                        }
-
-                        // ── Info Bar Type ──
-                        item {
-                            Text("Info Bar Type", color = Color(0xFFF59E0B), fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                            Spacer(Modifier.height(4.dp))
-                            InfoBarType.entries.forEach { t ->
-                                val isSel = t == infoBarType
-                                Row(Modifier.fillMaxWidth().padding(vertical = 2.dp).clip(RoundedCornerShape(6.dp))
-                                    .background(if (isSel) Color(0xFFF59E0B).copy(0.15f) else Color(0xFF252525))
-                                    .clickable { onInfoBarTypeChanged(t) }.padding(horizontal = 10.dp, vertical = 7.dp),
-                                    Arrangement.SpaceBetween, Alignment.CenterVertically) {
-                                    Column { Text(t.displayName, color = if (isSel) Color.White else Color(0xFFAAAAAA), fontSize = 12.sp, fontWeight = if (isSel) FontWeight.Bold else FontWeight.Normal); Text(t.description, color = Color(0xFF666666), fontSize = 10.sp) }
-                                    if (isSel) Text("✓", color = Color(0xFFF59E0B), fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                                }
-                            }
-                            Spacer(Modifier.height(8.dp))
-                        }
-
                         // ── Labels & Snap toggles ──
                         item {
                             Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(Color(0xFF222222))
@@ -871,12 +816,23 @@ private fun BoxWithConstraintsScope.DraggableRealElement(
         if (!isDragging) { dragDeltaX = 0f; dragDeltaY = 0f }
     }
 
+    // The drag gesture below outlives recompositions (it's only restarted when its keys change),
+    // so everything it reads must be the latest value — otherwise the 2nd drag starts from the
+    // position the element had when the gesture was first installed and the element jumps back.
     val currentElemWPx by rememberUpdatedState(elemWidthPx)
     val currentElemHPx by rememberUpdatedState(elemHeightPx)
+    val currentCommittedX by rememberUpdatedState(committedX)
+    val currentCommittedY by rememberUpdatedState(committedY)
+    val currentMaxW by rememberUpdatedState(maxWidthPx)
+    val currentMaxH by rememberUpdatedState(maxHeightPx)
+    val currentSnapEnabled by rememberUpdatedState(snapEnabled)
+    val currentSnapGridPx by rememberUpdatedState(snapGridPx)
+    val currentOnTap by rememberUpdatedState(onTap)
+    val currentOnDragEnd by rememberUpdatedState(onDragEnd)
 
     // Snap helper
-    fun snap(v: Float): Float = if (snapEnabled && snapGridPx > 0f) {
-        (v / snapGridPx).roundToInt() * snapGridPx
+    fun snap(v: Float): Float = if (currentSnapEnabled && currentSnapGridPx > 0f) {
+        (v / currentSnapGridPx).roundToInt() * currentSnapGridPx
     } else v
 
     Box(
@@ -895,24 +851,26 @@ private fun BoxWithConstraintsScope.DraggableRealElement(
             // Drag detection
             .pointerInput(key, elemWidthPx, elemHeightPx) {
                 detectDragGestures(
-                    onDragStart = { isDragging = true; onTap() },
+                    onDragStart = { isDragging = true; currentOnTap() },
                     onDragEnd = {
                         val w = currentElemWPx; val h = currentElemHPx
+                        val maxW = currentMaxW; val maxH = currentMaxH
                         val finalX = snap(dragDeltaX)
                         val finalY = snap(dragDeltaY)
-                        val newAbsX = committedX + finalX
-                        val newAbsY = committedY + finalY
-                        val cx = (newAbsX + w / 2).coerceIn(0f, maxWidthPx) / maxWidthPx
-                        val cy = (newAbsY + h / 2).coerceIn(0f, maxHeightPx) / maxHeightPx
+                        val newAbsX = currentCommittedX + finalX
+                        val newAbsY = currentCommittedY + finalY
+                        val cx = (newAbsX + w / 2).coerceIn(0f, maxW) / maxW
+                        val cy = (newAbsY + h / 2).coerceIn(0f, maxH) / maxH
                         isDragging = false; dragDeltaX = 0f; dragDeltaY = 0f
-                        onDragEnd(cx.coerceIn(0.03f, 0.97f), cy.coerceIn(0.03f, 0.97f))
+                        currentOnDragEnd(cx.coerceIn(0.03f, 0.97f), cy.coerceIn(0.03f, 0.97f))
                     },
                     onDragCancel = { isDragging = false; dragDeltaX = 0f; dragDeltaY = 0f },
                     onDrag = { change, dragAmount ->
                         change.consume()
                         val w = currentElemWPx; val h = currentElemHPx
-                        dragDeltaX = (dragDeltaX + dragAmount.x).coerceIn(-committedX, maxWidthPx - w - committedX)
-                        dragDeltaY = (dragDeltaY + dragAmount.y).coerceIn(-committedY, maxHeightPx - h - committedY)
+                        val cX = currentCommittedX; val cY = currentCommittedY
+                        dragDeltaX = (dragDeltaX + dragAmount.x).coerceIn(-cX, currentMaxW - w - cX)
+                        dragDeltaY = (dragDeltaY + dragAmount.y).coerceIn(-cY, currentMaxH - h - cY)
                     }
                 )
             }

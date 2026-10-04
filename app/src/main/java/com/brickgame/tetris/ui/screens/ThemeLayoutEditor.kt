@@ -179,6 +179,9 @@ private fun TopBarZone(
             val isSelected = selectedElement == elem
             var dragDX by remember { mutableStateOf(0f) }
             var isDragging by remember { mutableStateOf(false) }
+            // The gesture is keyed on elem only — read the latest layout, not the first one
+            val currentLayout by rememberUpdatedState(layout)
+            val currentOnUpdate by rememberUpdatedState(onUpdate)
 
             Box(Modifier
                 .offset { IntOffset(if (isDragging) dragDX.roundToInt() else 0, 0) }
@@ -193,17 +196,17 @@ private fun TopBarZone(
                             isDragging = false
                             // Reorder based on drag direction
                             val threshold = with(density) { 40.dp.toPx() }
-                            val currentOrder = layout.topBarElementOrder.toMutableList()
+                            val currentOrder = currentLayout.topBarElementOrder.toMutableList()
                             val curIdx = currentOrder.indexOf(elem)
                             if (curIdx >= 0) {
                                 if (dragDX > threshold && curIdx < currentOrder.size - 1) {
                                     currentOrder.removeAt(curIdx)
                                     currentOrder.add(curIdx + 1, elem)
-                                    onUpdate(layout.copy(topBarElementOrder = currentOrder))
+                                    currentOnUpdate(currentLayout.copy(topBarElementOrder = currentOrder))
                                 } else if (dragDX < -threshold && curIdx > 0) {
                                     currentOrder.removeAt(curIdx)
                                     currentOrder.add(curIdx - 1, elem)
-                                    onUpdate(layout.copy(topBarElementOrder = currentOrder))
+                                    currentOnUpdate(currentLayout.copy(topBarElementOrder = currentOrder))
                                 }
                             }
                             dragDX = 0f
@@ -255,6 +258,10 @@ private fun ColumnScope.BoardZone(
         val maxWPx = with(density) { maxWidth.toPx() }
         var dragDX by remember { mutableStateOf(0f) }
         var isDragging by remember { mutableStateOf(false) }
+        // pointerInput(Unit) is installed once — read the latest values inside the gesture
+        val currentLayout by rememberUpdatedState(layout)
+        val currentOnUpdate by rememberUpdatedState(onUpdate)
+        val currentMaxWPx by rememberUpdatedState(maxWPx)
 
         // Board width depends on alignment — center = 85%, left/right = 75%
         val boardW = if (align == "CENTER") maxWidth * 0.85f else maxWidth * 0.75f
@@ -268,13 +275,15 @@ private fun ColumnScope.BoardZone(
                     onDragEnd = {
                         isDragging = false
                         // Determine new alignment based on drag direction
-                        val threshold = maxWPx * 0.15f
+                        val threshold = currentMaxWPx * 0.15f
+                        val current = currentLayout.boardAlignment
+                        // One step per drag: LEFT ⇄ CENTER ⇄ RIGHT (so the board can come back to center)
                         val newAlign = when {
-                            dragDX < -threshold -> "LEFT"
-                            dragDX > threshold -> "RIGHT"
-                            else -> align // stay
+                            dragDX < -threshold -> if (current == "RIGHT") "CENTER" else "LEFT"
+                            dragDX > threshold -> if (current == "LEFT") "CENTER" else "RIGHT"
+                            else -> current // stay
                         }
-                        if (newAlign != align) onUpdate(layout.copy(boardAlignment = newAlign))
+                        if (newAlign != current) currentOnUpdate(currentLayout.copy(boardAlignment = newAlign))
                         dragDX = 0f
                     },
                     onDragCancel = { isDragging = false; dragDX = 0f },
@@ -364,6 +373,10 @@ private fun ColumnScope.ControlsZone(
             var dragDY by remember { mutableStateOf(0f) }
             var isDragging by remember { mutableStateOf(false) }
             var wasDragged by remember { mutableStateOf(false) }
+            val currentPos by rememberUpdatedState(pos)
+            val currentLayout by rememberUpdatedState(layout)
+            val currentPositions by rememberUpdatedState(positions)
+            val currentOnUpdate by rememberUpdatedState(onUpdate)
 
             LaunchedEffect(pos.x, pos.y) { if (!isDragging) { dragDX = 0f; dragDY = 0f } }
 
@@ -377,10 +390,10 @@ private fun ColumnScope.ControlsZone(
                         onDragEnd = {
                             isDragging = false
                             if (wasDragged) {
-                                val newX = (pos.x + dragDX / maxWPx).coerceIn(0.05f, 0.95f)
-                                val newY = (pos.y + dragDY / maxHPx).coerceIn(0.05f, 0.95f)
+                                val newX = (currentPos.x + dragDX / maxWPx).coerceIn(0.05f, 0.95f)
+                                val newY = (currentPos.y + dragDY / maxHPx).coerceIn(0.05f, 0.95f)
                                 dragDX = 0f; dragDY = 0f
-                                onUpdate(layout.copy(controlPositions = positions + (elem to ElementPosition(newX, newY))))
+                                currentOnUpdate(currentLayout.copy(controlPositions = currentPositions + (elem to ElementPosition(newX, newY))))
                             } else { dragDX = 0f; dragDY = 0f }
                         },
                         onDragCancel = { isDragging = false; dragDX = 0f; dragDY = 0f },
@@ -579,8 +592,9 @@ private val themeGroups = listOf("Background", "Board", "Text", "Buttons")
 @Composable fun ThemeEditorScreen(theme: GameTheme, onUpdateTheme: (GameTheme) -> Unit, onSave: () -> Unit, onBack: () -> Unit) {
     var selectedTarget by remember { mutableStateOf<ThemeColorTarget?>(null) }
     var themeName by remember(theme.id) { mutableStateOf(theme.name) }
-    // Track the base theme for reset functionality
-    val baseTheme = remember(theme.id) { com.brickgame.tetris.ui.theme.GameThemes.ClassicGreen }
+    // Reset restores the colours the theme had when this editing session started
+    // (for a new theme that's the theme it was copied from), not always Classic Green
+    val baseTheme = remember(theme.id) { theme }
     var showResetConfirm by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxSize().background(PBG).systemBarsPadding()) {
         // Header: back, name, save

@@ -5,7 +5,11 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 
-class TetrisGame {
+/**
+ * Core 2D game engine. Pure Kotlin (no Android dependencies) so it can be unit-tested.
+ * @param clock monotonic millisecond clock; injectable for tests
+ */
+class TetrisGame(private val clock: () -> Long = { System.nanoTime() / 1_000_000L }) {
 
     companion object {
         const val BOARD_WIDTH = 10
@@ -15,6 +19,7 @@ class TetrisGame {
         const val NEXT_QUEUE_SIZE = 3
         const val LOCK_DELAY_MS = 500L
         const val MAX_LOCK_MOVES = 15
+        const val ULTRA_TIME_LIMIT_MS = 120_000L
 
         // SRS-compliant spawn shapes (all in bounding boxes)
         val TETROMINOS = mapOf(
@@ -100,6 +105,11 @@ class TetrisGame {
     // Game mode
     private var gameMode = GameMode.MARATHON
     private var gameStartTime = 0L
+    private var pauseStartTime = 0L
+    private var actionCounter = 0
+
+    /** Time actually played (pauses excluded). */
+    private fun playedTimeMs(): Long = clock() - gameStartTime
 
     fun setDifficulty(diff: Difficulty) { difficulty = diff }
     fun setGameMode(mode: GameMode) { gameMode = mode }
@@ -120,7 +130,10 @@ class TetrisGame {
         lastKickUsed = false
         currentBag.clear()
         nextQueue.clear()
-        gameStartTime = System.currentTimeMillis()
+        spawnCounter = 0
+        holdCounter = 0
+        actionCounter = 0
+        gameStartTime = clock()
 
         // Fill next queue
         repeat(NEXT_QUEUE_SIZE + 1) { nextQueue.add(generateFromBag()) }
@@ -144,6 +157,7 @@ class TetrisGame {
     fun pauseGame() {
         if (_state.value.status == GameStatus.PLAYING) {
             isRunning = false
+            pauseStartTime = clock()
             _state.update { it.copy(status = GameStatus.PAUSED) }
         }
     }
@@ -151,6 +165,8 @@ class TetrisGame {
     fun resumeGame() {
         if (_state.value.status == GameStatus.PAUSED) {
             isRunning = true
+            // Shift the start time so paused time doesn't count towards Sprint/Ultra timers
+            gameStartTime += clock() - pauseStartTime
             _state.update { it.copy(status = GameStatus.PLAYING) }
         }
     }
@@ -228,7 +244,8 @@ class TetrisGame {
                 linesCleared = 0,
                 clearedLineRows = emptyList(),
                 board = getVisibleBoard(),
-                lastActionLabel = pendingLabel
+                lastActionLabel = pendingLabel,
+                actionEvent = if (isPerfectClear) ++actionCounter else it.actionEvent
             )
         }
 
@@ -274,24 +291,28 @@ class TetrisGame {
         return false
     }
 
-    fun moveDown(): MoveResult {
+    /** Player soft drop: moves down one row and awards 1 point per row. */
+    fun moveDown(): MoveResult = stepDown(scorePerRow = 1)
+
+    /** Gravity tick: moves down one row without awarding points. */
+    fun gravityStep(): MoveResult = stepDown(scorePerRow = 0)
+
+    private fun stepDown(scorePerRow: Int): MoveResult {
         if (!canMove()) return MoveResult.BLOCKED
         val newPos = Position(currentPosition.x, currentPosition.y + 1)
         return if (!checkCollision(currentPiece!!.shape, newPos)) {
             currentPosition = newPos
             lastActionWasRotation = false
-            // Soft drop: 1 point per cell
-            _state.update { it.copy(score = it.score + 1) }
             if (lockDelayActive && !isTouchingGround()) {
                 lockDelayActive = false
                 lockMoveCount = 0
             }
-            updateState()
+            updateState(scoreDelta = scorePerRow)
             MoveResult.MOVED
         } else {
             if (!lockDelayActive) {
                 lockDelayActive = true
-                lockDelayStartTime = System.currentTimeMillis()
+                lockDelayStartTime = clock()
                 lockMoveCount = 0
             }
             MoveResult.BLOCKED
@@ -308,12 +329,9 @@ class TetrisGame {
             currentPosition = Position(currentPosition.x, currentPosition.y + 1)
             dropDistance++
         }
-        if (dropDistance > 0) {
-            _state.update { it.copy(score = it.score + dropDistance * 2) }
-        }
         // Emit hard drop trail: for each column occupied by the piece, record start→end Y
+        val trail = mutableListOf<Triple<Int, Int, Int>>()
         if (dropDistance > 1) {
-            val trail = mutableListOf<Triple<Int, Int, Int>>()
             for (py in piece.shape.indices) for (px in piece.shape[py].indices) {
                 if (piece.shape[py][px] > 0) {
                     val bx = currentPosition.x + px
@@ -322,7 +340,10 @@ class TetrisGame {
                     if (trailEnd > trailStart) trail.add(Triple(bx, trailStart, trailEnd))
                 }
             }
-            _state.update { it.copy(hardDropTrail = trail) }
+        }
+        // One emission for score + trail (lockPiece below emits the locked board)
+        if (dropDistance > 0 || trail.isNotEmpty()) {
+            _state.update { it.copy(score = it.score + dropDistance * 2, hardDropTrail = trail) }
         }
         lastActionWasRotation = false
         lockPiece()
@@ -338,7 +359,7 @@ class TetrisGame {
             lockMoveCount = 0
             return false
         }
-        val elapsed = System.currentTimeMillis() - lockDelayStartTime
+        val elapsed = clock() - lockDelayStartTime
         if (elapsed >= LOCK_DELAY_MS || lockMoveCount >= MAX_LOCK_MOVES) {
             lockPiece()
             return true
@@ -418,7 +439,7 @@ class TetrisGame {
 
     private fun resetLockDelayOnMove() {
         if (lockDelayActive && lockMoveCount < MAX_LOCK_MOVES) {
-            lockDelayStartTime = System.currentTimeMillis()
+            lockDelayStartTime = clock()
             lockMoveCount++
         }
     }
@@ -550,6 +571,7 @@ class TetrisGame {
                     board = getVisibleBoard(),
                     currentPiece = null,
                     lastActionLabel = scoreResult.label,
+                    actionEvent = ++actionCounter,
                     tSpinType = tSpinType,
                     comboCount = comboCount,
                     backToBackCount = backToBackCount,
@@ -569,6 +591,7 @@ class TetrisGame {
                     it.copy(
                         score = it.score + scoreResult.points,
                         lastActionLabel = scoreResult.label,
+                        actionEvent = ++actionCounter,
                         lockEvent = it.lockEvent + 1
                     )
                 }
@@ -614,11 +637,21 @@ class TetrisGame {
         }
     }
 
+    /**
+     * Time-based end conditions, polled by the game loop. Ultra must end at 2:00 even when
+     * no line is being cleared. Returns true when the game just ended.
+     */
+    fun checkTimeLimit(): Boolean {
+        if (gameMode != GameMode.ULTRA || _state.value.status != GameStatus.PLAYING) return false
+        if (pendingLineClear) return false  // completePendingLineClear() checks it right after
+        return checkWinCondition()
+    }
+
     private fun checkWinCondition(): Boolean {
         when (gameMode) {
             GameMode.SPRINT -> {
                 if (_state.value.lines >= 40) {
-                    val elapsed = System.currentTimeMillis() - gameStartTime
+                    val elapsed = playedTimeMs()
                     _state.update {
                         it.copy(status = GameStatus.GAME_OVER, elapsedTimeMs = elapsed)
                     }
@@ -627,10 +660,9 @@ class TetrisGame {
                 }
             }
             GameMode.ULTRA -> {
-                val elapsed = System.currentTimeMillis() - gameStartTime
-                if (elapsed >= 120_000L) {
+                if (playedTimeMs() >= ULTRA_TIME_LIMIT_MS) {
                     _state.update {
-                        it.copy(status = GameStatus.GAME_OVER, elapsedTimeMs = 120_000L)
+                        it.copy(status = GameStatus.GAME_OVER, elapsedTimeMs = ULTRA_TIME_LIMIT_MS)
                     }
                     isRunning = false
                     return true
@@ -641,13 +673,14 @@ class TetrisGame {
         return false
     }
 
-    private fun updateState() {
+    private fun updateState(scoreDelta: Int = 0) {
         val ghostY = calculateGhostY()
         val visibleGhostY = ghostY - HIDDEN_ROWS
         val visiblePieceY = currentPosition.y - HIDDEN_ROWS
 
         _state.update { state ->
             state.copy(
+                score = state.score + scoreDelta,
                 board = getVisibleBoard(),
                 currentPiece = currentPiece?.let {
                     PieceState(
@@ -688,7 +721,14 @@ class TetrisGame {
                 }
             }
         }
-        return display.map { it.toList() }
+        return display.map { it.asList() }  // wraps the arrays, no per-cell copy
+    }
+
+    /** Test hook: replace the board ([TOTAL_HEIGHT] rows) and make [type] the current piece. */
+    internal fun setUpForTest(rows: Array<IntArray>, type: TetrominoType) {
+        board = Array(TOTAL_HEIGHT) { rows[it].clone() }
+        nextQueue.add(0, createPiece(type))
+        spawnPiece()
     }
 
     // ===== 7-Bag Randomiser =====
@@ -771,6 +811,8 @@ data class GameState(
     val difficulty: Difficulty = Difficulty.NORMAL,
     val gameMode: GameMode = GameMode.MARATHON,
     val lastActionLabel: String = "",
+    /** Incremented each time lastActionLabel is (re)announced — UI keys popups on this */
+    val actionEvent: Int = 0,
     val tSpinType: TSpinType = TSpinType.NONE,
     val comboCount: Int = 0,
     val backToBackCount: Int = 0,

@@ -1,7 +1,7 @@
 name: Android CI
 on:
   push:
-    branches: [ main ]
+    branches: [ main, 'claude/**' ]
   pull_request:
     branches: [ main ]
   workflow_dispatch:
@@ -17,6 +17,8 @@ jobs:
           distribution: 'temurin'
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
+      - name: Unit tests
+        run: ./gradlew testDebugUnitTest
       - name: Build Debug APK
         run: ./gradlew assembleDebug
       - name: Upload APK

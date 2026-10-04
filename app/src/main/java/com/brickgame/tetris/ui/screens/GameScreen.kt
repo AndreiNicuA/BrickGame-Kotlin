@@ -19,6 +19,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
@@ -27,6 +28,8 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.TextUnit
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.text.font.FontFamily
@@ -67,10 +70,48 @@ val LocalLeftHanded = compositionLocalOf { false }
 // ========================= SHARED GAME EFFECTS =========================
 // Extracted from 5 layout functions to eliminate ~300 lines of duplication.
 // All modern layouts now use rememberGameEffects() + GameEffectsLayer().
+//
+// Performance rules for this section: animations are driven by withFrameNanos (synced to the
+// display, no delay() polling), particles live in preallocated arrays mutated in place, and every
+// animated value is read inside draw/graphicsLayer blocks so effects redraw without recomposing.
 
-/** Particle data for explosion effects */
-data class EffectParticle(val x: Float, val y: Float, val vx: Float, val vy: Float,
-                          val size: Float, val color: Int, val life: Float, val type: Int = 0)
+/** Preallocated particle pool for explosion effects. Mutated in place; read only while drawing. */
+class EffectParticles(capacity: Int = 320) {
+    val x = FloatArray(capacity); val y = FloatArray(capacity)
+    val vx = FloatArray(capacity); val vy = FloatArray(capacity)
+    val size = FloatArray(capacity); val life = FloatArray(capacity)
+    val color = IntArray(capacity); val type = IntArray(capacity)
+    var count = 0
+        private set
+
+    fun clear() { count = 0 }
+
+    fun add(px: Float, py: Float, pvx: Float, pvy: Float, pSize: Float, pColor: Int, pType: Int) {
+        if (count >= x.size) return
+        val i = count++
+        x[i] = px; y[i] = py; vx[i] = pvx; vy[i] = pvy
+        size[i] = pSize; color[i] = pColor; type[i] = pType; life[i] = 1f
+    }
+
+    /** One 20 ms physics step: move, apply gravity/drag, age and drop dead particles. */
+    fun step() {
+        var i = 0
+        while (i < count) {
+            val newLife = life[i] - if (type[i] == 1) 0.06f else 0.033f
+            if (newLife <= 0f) {
+                // Swap-remove: move the last particle into this slot
+                val last = --count
+                x[i] = x[last]; y[i] = y[last]; vx[i] = vx[last]; vy[i] = vy[last]
+                size[i] = size[last]; color[i] = color[last]; type[i] = type[last]; life[i] = life[last]
+                continue
+            }
+            x[i] += vx[i]; y[i] += vy[i]
+            vy[i] += 0.0015f; vx[i] *= 0.98f
+            life[i] = newLife
+            i++
+        }
+    }
+}
 
 /** Holds all mutable state for game visual effects */
 class GameEffectsState {
@@ -81,6 +122,7 @@ class GameEffectsState {
     // Score flyup
     var flyupKey by mutableIntStateOf(0)
     var flyupText by mutableStateOf("")
+    var flyupActive by mutableStateOf(false)
     var flyupProgress by mutableFloatStateOf(0f)
     // Level up burst
     var levelUpFlash by mutableFloatStateOf(0f)
@@ -88,19 +130,34 @@ class GameEffectsState {
     // Score glow (level 9+)
     var scoreGlowAlpha by mutableFloatStateOf(0f)
     // Particles + shockwave
-    var particles by mutableStateOf(emptyList<EffectParticle>())
+    val particles = EffectParticles()
+    /** Bumped after every particle step so the effects canvas redraws. */
+    var particleFrame by mutableIntStateOf(0)
     var shockwaveProgress by mutableFloatStateOf(0f)
     var shockwaveY by mutableFloatStateOf(0.5f)
     var shockwaveCount by mutableIntStateOf(0)
-    // Spawn animation — quick scale + fade on new piece
-    var spawnScale by mutableFloatStateOf(1f)
-    var spawnAlpha by mutableFloatStateOf(1f)
 }
+
+/** Runs [onFrame] once per display frame with t going 0→1 over [durationMs]. */
+private suspend fun animateFrames(durationMs: Long, onFrame: (t: Float) -> Unit) {
+    val start = withFrameNanos { it }
+    onFrame(0f)
+    while (true) {
+        val elapsedMs = (withFrameNanos { it } - start) / 1_000_000f
+        val t = (elapsedMs / durationMs).coerceAtMost(1f)
+        onFrame(t)
+        if (t >= 1f) break
+    }
+}
+
+private val PARTICLE_COLORS = intArrayOf(0xFFF4D03F.toInt(), 0xFFFF6B6B.toInt(), 0xFF4ECDC4.toInt(),
+    0xFFFF9F43.toInt(), 0xFFA8E6CF.toInt(), 0xFFFF85A2.toInt(),
+    0xFF6C5CE7.toInt(), 0xFF00B894.toInt(), 0xFFE17055.toInt())
 
 /**
  * Creates and wires up all game visual effects for a layout.
  * @param shakeSteps number of shake iterations (18 for full, 14 for compact)
- * @param shakeDelay ms between shake frames
+ * @param shakeDelay ms per shake iteration (total shake time = shakeSteps * shakeDelay)
  * @param shakeMultiplier scale factor for shake intensity (1f = full, 0.8f = reduced)
  * @param flashMultiplier scale factor for flash intensity
  * @param enableParticles whether to enable explosion particles + shockwave
@@ -126,38 +183,23 @@ fun rememberGameEffects(
     LaunchedEffect(gs.clearedLineRows) {
         if (gs.clearedLineRows.isNotEmpty()) {
             state.clearSize.intValue = gs.clearedLineRows.size
-            state.clearFlashAlpha = (when (gs.clearedLineRows.size) {
+            val startFlash = (when (gs.clearedLineRows.size) {
                 4 -> 0.7f; 3 -> 0.45f; 2 -> 0.3f; else -> 0.15f
             }) * flashMultiplier
             val shakeIntensity = (when (gs.clearedLineRows.size) {
                 4 -> 20f; 3 -> 14f; 2 -> 8f; else -> 4f
             }) * shakeMultiplier
             val rng = kotlin.random.Random
-            repeat(shakeSteps) { i ->
-                val decay = 1f - i.toFloat() / shakeSteps
-                state.screenShakeX = (rng.nextFloat() - 0.5f) * shakeIntensity * decay * 2f
-                state.screenShakeY = (rng.nextFloat() - 0.5f) * shakeIntensity * decay * 2f
-                state.clearFlashAlpha *= 0.82f
-                delay(shakeDelay)
+            try {
+                animateFrames(shakeSteps * shakeDelay) { t ->
+                    val decay = 1f - t
+                    state.screenShakeX = (rng.nextFloat() - 0.5f) * shakeIntensity * decay * 2f
+                    state.screenShakeY = (rng.nextFloat() - 0.5f) * shakeIntensity * decay * 2f
+                    state.clearFlashAlpha = startFlash * Math.pow(0.82, (t * shakeSteps).toDouble()).toFloat()
+                }
+            } finally {
+                state.screenShakeX = 0f; state.screenShakeY = 0f; state.clearFlashAlpha = 0f
             }
-            state.screenShakeX = 0f; state.screenShakeY = 0f; state.clearFlashAlpha = 0f
-        }
-    }
-
-    // Spawn animation — quick scale-up + fade-in on new piece spawn
-    LaunchedEffect(gs.spawnEvent) {
-        if (gs.spawnEvent > 0) {
-            state.spawnScale = 0.85f
-            state.spawnAlpha = 0.4f
-            val steps = 8
-            repeat(steps) { i ->
-                val t = (i + 1).toFloat() / steps
-                state.spawnScale = 0.85f + t * 0.15f
-                state.spawnAlpha = 0.4f + t * 0.6f
-                delay(18)
-            }
-            state.spawnScale = 1f
-            state.spawnAlpha = 1f
         }
     }
 
@@ -174,13 +216,13 @@ fun rememberGameEffects(
         }
         LaunchedEffect(state.flyupKey) {
             if (state.flyupKey > 0) {
-                state.flyupProgress = 1f
-                val steps = 20
-                repeat(steps) {
-                    state.flyupProgress = 1f - (it + 1).toFloat() / steps
-                    delay(30)
+                state.flyupActive = true
+                try {
+                    animateFrames(600) { t -> state.flyupProgress = 1f - t }
+                } finally {
+                    state.flyupProgress = 0f
+                    state.flyupActive = false
                 }
-                state.flyupProgress = 0f
             }
         }
     }
@@ -189,21 +231,26 @@ fun rememberGameEffects(
     if (enableLevelBurst) {
         LaunchedEffect(gs.level) {
             if (gs.level > state.prevLevel && state.prevLevel > 0) {
-                state.levelUpFlash = 0.8f
-                repeat(16) { state.levelUpFlash *= 0.85f; delay(30) }
-                state.levelUpFlash = 0f
+                state.prevLevel = gs.level
+                try {
+                    animateFrames(480) { t -> state.levelUpFlash = 0.8f * Math.pow(0.85, (t * 16).toDouble()).toFloat() }
+                } finally {
+                    state.levelUpFlash = 0f
+                }
             }
             state.prevLevel = gs.level
         }
     }
 
-    // Score glow (level 9+)
+    // Score glow (level 9+) — on line clears only, not on every soft-drop point
     if (enableScoreGlow) {
-        LaunchedEffect(gs.score) {
-            if (gs.score > 0 && gs.level >= 9) {
-                state.scoreGlowAlpha = 1f
-                repeat(10) { state.scoreGlowAlpha *= 0.8f; delay(30) }
-                state.scoreGlowAlpha = 0f
+        LaunchedEffect(gs.clearedLineRows) {
+            if (gs.clearedLineRows.isNotEmpty() && gs.level >= 9) {
+                try {
+                    animateFrames(300) { t -> state.scoreGlowAlpha = Math.pow(0.8, (t * 10).toDouble()).toFloat() }
+                } finally {
+                    state.scoreGlowAlpha = 0f
+                }
             }
         }
     }
@@ -213,65 +260,53 @@ fun rememberGameEffects(
         LaunchedEffect(gs.clearedLineRows) {
             if (gs.clearedLineRows.isNotEmpty()) {
                 val rng = kotlin.random.Random
-                val newParticles = mutableListOf<EffectParticle>()
-                val colors = listOf(0xFFF4D03F.toInt(), 0xFFFF6B6B.toInt(), 0xFF4ECDC4.toInt(),
-                    0xFFFF9F43.toInt(), 0xFFA8E6CF.toInt(), 0xFFFF85A2.toInt(),
-                    0xFF6C5CE7.toInt(), 0xFF00B894.toInt(), 0xFFE17055.toInt())
                 val isTetrisClear = gs.clearedLineRows.size >= 4
-
+                val p = state.particles
+                p.clear()
                 gs.clearedLineRows.forEach { row ->
                     val rowY = row.toFloat() / 20f
                     val count = when (gs.clearedLineRows.size) { 4 -> 60; 3 -> 40; 2 -> 25; else -> 15 }
+                    val speed = if (isTetrisClear) 0.06f else 0.04f
                     repeat(count) {
-                        val speed = if (isTetrisClear) 0.06f else 0.04f
-                        newParticles.add(EffectParticle(
-                            x = rng.nextFloat(), y = rowY,
-                            vx = (rng.nextFloat() - 0.5f) * speed,
-                            vy = (rng.nextFloat() - 0.5f) * speed - 0.015f,
-                            size = 2f + rng.nextFloat() * (if (isTetrisClear) 10f else 7f),
-                            color = colors[rng.nextInt(colors.size)],
-                            life = 1f, type = 0
-                        ))
+                        p.add(rng.nextFloat(), rowY,
+                            (rng.nextFloat() - 0.5f) * speed,
+                            (rng.nextFloat() - 0.5f) * speed - 0.015f,
+                            2f + rng.nextFloat() * (if (isTetrisClear) 10f else 7f),
+                            PARTICLE_COLORS[rng.nextInt(PARTICLE_COLORS.size)], 0)
                     }
                     repeat(if (isTetrisClear) 20 else 8) {
                         val angle = rng.nextFloat() * 6.28f
                         val spd = 0.03f + rng.nextFloat() * 0.05f
-                        newParticles.add(EffectParticle(
-                            x = rng.nextFloat(), y = rowY,
-                            vx = kotlin.math.cos(angle) * spd,
-                            vy = kotlin.math.sin(angle) * spd,
-                            size = 1.5f + rng.nextFloat() * 2f,
-                            color = 0xFFFFFFFF.toInt(),
-                            life = 1f, type = 1
-                        ))
+                        p.add(rng.nextFloat(), rowY,
+                            kotlin.math.cos(angle) * spd, kotlin.math.sin(angle) * spd,
+                            1.5f + rng.nextFloat() * 2f, 0xFFFFFFFF.toInt(), 1)
                     }
                 }
-                state.particles = newParticles
                 state.shockwaveY = gs.clearedLineRows.average().toFloat() / 20f
                 state.shockwaveCount++
 
+                // Physics runs in fixed 20 ms steps (as tuned), rendering follows the display
                 val totalSteps = if (isTetrisClear) 40 else 30
-                repeat(totalSteps) {
-                    state.particles = state.particles.mapNotNull { p ->
-                        val decay = if (p.type == 1) 0.06f else 0.033f
-                        val newLife = p.life - decay
-                        if (newLife <= 0f) null
-                        else p.copy(x = p.x + p.vx, y = p.y + p.vy,
-                            vy = p.vy + 0.0015f, vx = p.vx * 0.98f, life = newLife)
+                var stepsDone = 0
+                try {
+                    animateFrames(totalSteps * 20L) { t ->
+                        val target = (t * totalSteps).toInt()
+                        while (stepsDone < target) { p.step(); stepsDone++ }
+                        state.particleFrame++
                     }
-                    delay(20)
+                } finally {
+                    p.clear()
+                    state.particleFrame++
                 }
-                state.particles = emptyList()
             }
         }
         LaunchedEffect(state.shockwaveCount) {
             if (state.shockwaveCount > 0) {
-                state.shockwaveProgress = 0f
-                repeat(20) {
-                    state.shockwaveProgress = (it + 1) / 20f
-                    delay(15)
+                try {
+                    animateFrames(300) { t -> state.shockwaveProgress = t }
+                } finally {
+                    state.shockwaveProgress = 0f
                 }
-                state.shockwaveProgress = 0f
             }
         }
     }
@@ -282,6 +317,7 @@ fun rememberGameEffects(
 /**
  * Renders the visual effects overlay: edge glow, particles, shockwave, flyup, level-up burst, combo glow.
  * Place this INSIDE the board area Box (after GameBoard) so it overlays the board.
+ * All animated values are read in the draw phase, so running effects never recompose the layout.
  */
 @Composable
 fun GameEffectsLayer(
@@ -289,125 +325,132 @@ fun GameEffectsLayer(
     gs: GameState,
     modifier: Modifier = Modifier
 ) {
-    val theme = LocalGameTheme.current
-
-    // Combo glow + pulse
+    // Combo glow + pulse — the pulse animation only exists while a combo is showing
     val comboGlow = (gs.comboCount.coerceAtLeast(0) / 8f).coerceIn(0f, 1f)
-    val comboPulse = rememberInfiniteTransition(label = "combo")
-    val comboPulseAlpha by comboPulse.animateFloat(
-        0.3f, 1f, infiniteRepeatable(tween(300), RepeatMode.Reverse), label = "cp"
-    )
+    val comboPulse: State<Float> = if (comboGlow > 0.05f) {
+        rememberInfiniteTransition(label = "combo").animateFloat(
+            0.3f, 1f, infiniteRepeatable(tween(300), RepeatMode.Reverse), label = "cp"
+        )
+    } else remember { mutableFloatStateOf(1f) }
 
-    // Edge glow flash on line clears
-    if (fx.clearFlashAlpha > 0.01f) {
-        val flashColor = when {
-            fx.clearSize.intValue >= 4 -> Color(0xFFF4D03F)
-            fx.clearSize.intValue >= 3 -> Color(0xFFFF9F43)
-            fx.clearSize.intValue >= 2 -> Color(0xFF4ECDC4)
-            else -> Color.White
-        }
-        Canvas(modifier) {
-            val a = fx.clearFlashAlpha.coerceIn(0f, 1f)
+    Canvas(modifier) {
+        // Edge glow flash on line clears
+        val flash = fx.clearFlashAlpha
+        if (flash > 0.01f) {
+            val flashColor = when {
+                fx.clearSize.intValue >= 4 -> Color(0xFFF4D03F)
+                fx.clearSize.intValue >= 3 -> Color(0xFFFF9F43)
+                fx.clearSize.intValue >= 2 -> Color(0xFF4ECDC4)
+                else -> Color.White
+            }
+            val a = flash.coerceIn(0f, 1f)
             val edgeW = size.width * 0.12f; val edgeH = size.height * 0.06f
-            drawRect(Brush.horizontalGradient(listOf(flashColor.copy(a), Color.Transparent)),
+            drawRect(Brush.horizontalGradient(listOf(flashColor.copy(a), Color.Transparent), 0f, edgeW),
                 Offset.Zero, Size(edgeW, size.height))
-            drawRect(Brush.horizontalGradient(listOf(Color.Transparent, flashColor.copy(a))),
+            drawRect(Brush.horizontalGradient(listOf(Color.Transparent, flashColor.copy(a)), size.width - edgeW, size.width),
                 Offset(size.width - edgeW, 0f), Size(edgeW, size.height))
-            drawRect(Brush.verticalGradient(listOf(flashColor.copy(a * 0.7f), Color.Transparent)),
+            drawRect(Brush.verticalGradient(listOf(flashColor.copy(a * 0.7f), Color.Transparent), 0f, edgeH),
                 Offset.Zero, Size(size.width, edgeH))
-            drawRect(Brush.verticalGradient(listOf(Color.Transparent, flashColor.copy(a * 0.7f))),
+            drawRect(Brush.verticalGradient(listOf(Color.Transparent, flashColor.copy(a * 0.7f)), size.height - edgeH, size.height),
                 Offset(0f, size.height - edgeH), Size(size.width, edgeH))
         }
-    }
 
-    // Level up burst — ring + edge glow
-    if (fx.levelUpFlash > 0.01f) {
-        Canvas(modifier) {
-            val ringProgress = 1f - fx.levelUpFlash / 0.8f
+        // Level up burst — ring + edge glow
+        val levelFlash = fx.levelUpFlash
+        if (levelFlash > 0.01f) {
+            val ringProgress = 1f - levelFlash / 0.8f
             val ringRadius = size.minDimension * 0.2f + ringProgress * size.maxDimension * 0.6f
             val ringWidth = 8f + (1f - ringProgress) * 20f
-            drawCircle(Color(0xFFF4D03F).copy(alpha = fx.levelUpFlash),
+            drawCircle(Color(0xFFF4D03F).copy(alpha = levelFlash.coerceIn(0f, 1f)),
                 radius = ringRadius, center = Offset(size.width / 2f, size.height / 2f),
                 style = Stroke(ringWidth))
-            val a = (fx.levelUpFlash * 0.5f).coerceIn(0f, 1f)
+            val a = (levelFlash * 0.5f).coerceIn(0f, 1f)
             val ew = size.width * 0.1f
-            drawRect(Brush.horizontalGradient(listOf(Color(0xFFF4D03F).copy(a), Color.Transparent)),
+            drawRect(Brush.horizontalGradient(listOf(Color(0xFFF4D03F).copy(a), Color.Transparent), 0f, ew),
                 Offset.Zero, Size(ew, size.height))
-            drawRect(Brush.horizontalGradient(listOf(Color.Transparent, Color(0xFFF4D03F).copy(a))),
+            drawRect(Brush.horizontalGradient(listOf(Color.Transparent, Color(0xFFF4D03F).copy(a)), size.width - ew, size.width),
                 Offset(size.width - ew, 0f), Size(ew, size.height))
         }
-    }
 
-    // Combo glow — pulsing border
-    if (comboGlow > 0.05f) {
-        val pulseWidth = (1.5f + comboGlow * 2f).dp
-        val comboColor = Color(0xFFF4D03F).copy(comboGlow * comboPulseAlpha * 0.6f)
-        Box(modifier.border(pulseWidth, comboColor))
-    }
+        // Combo glow — pulsing border
+        if (comboGlow > 0.05f) {
+            val bw = (1.5f + comboGlow * 2f).dp.toPx()
+            drawRect(Color(0xFFF4D03F).copy((comboGlow * comboPulse.value * 0.6f).coerceIn(0f, 1f)),
+                Offset(bw / 2f, bw / 2f), Size(size.width - bw, size.height - bw), style = Stroke(bw))
+        }
 
-    // Explosion particles + spark streaks
-    if (fx.particles.isNotEmpty()) {
-        Canvas(modifier) {
-            fx.particles.forEach { p ->
-                if (p.type == 1) {
-                    drawLine(
-                        Color(p.color).copy(alpha = (p.life * p.life).coerceIn(0f, 1f)),
-                        start = Offset(p.x * size.width, p.y * size.height),
-                        end = Offset((p.x - p.vx * 8f) * size.width, (p.y - p.vy * 8f) * size.height),
-                        strokeWidth = p.size * p.life
-                    )
-                } else {
-                    drawCircle(
-                        Color(p.color).copy(alpha = (p.life * p.life).coerceIn(0f, 1f)),
-                        radius = p.size * (0.5f + p.life * 0.5f),
-                        center = Offset(p.x * size.width, p.y * size.height)
-                    )
-                    if (p.life > 0.4f) {
-                        drawCircle(
-                            Color.White.copy(alpha = ((p.life - 0.4f) * 1.5f).coerceIn(0f, 0.9f)),
-                            radius = p.size * 0.25f * p.life,
-                            center = Offset(p.x * size.width, p.y * size.height)
-                        )
-                    }
+        // Explosion particles + spark streaks
+        @Suppress("UNUSED_VARIABLE") val frame = fx.particleFrame  // subscribe to particle updates
+        val p = fx.particles
+        for (i in 0 until p.count) {
+            val life = p.life[i]
+            val px = p.x[i] * size.width; val py = p.y[i] * size.height
+            val c = Color(p.color[i]).copy(alpha = (life * life).coerceIn(0f, 1f))
+            if (p.type[i] == 1) {
+                drawLine(c, start = Offset(px, py),
+                    end = Offset((p.x[i] - p.vx[i] * 8f) * size.width, (p.y[i] - p.vy[i] * 8f) * size.height),
+                    strokeWidth = p.size[i] * life)
+            } else {
+                drawCircle(c, radius = p.size[i] * (0.5f + life * 0.5f), center = Offset(px, py))
+                if (life > 0.4f) {
+                    drawCircle(Color.White.copy(alpha = ((life - 0.4f) * 1.5f).coerceIn(0f, 0.9f)),
+                        radius = p.size[i] * 0.25f * life, center = Offset(px, py))
                 }
             }
         }
-    }
 
-    // Shockwave ring
-    if (fx.shockwaveProgress > 0.01f && fx.shockwaveProgress < 1f) {
-        Canvas(modifier) {
+        // Shockwave ring
+        val sw = fx.shockwaveProgress
+        if (sw > 0.01f && sw < 1f) {
             val maxRadius = size.maxDimension * 0.8f
-            val radius = fx.shockwaveProgress * maxRadius
-            val ringAlpha = (1f - fx.shockwaveProgress) * 0.6f
-            val ringWidth = (1f - fx.shockwaveProgress) * 6f + 2f
-            drawCircle(Color.White.copy(alpha = ringAlpha), radius = radius,
-                center = Offset(size.width / 2f, fx.shockwaveY * size.height),
-                style = Stroke(ringWidth))
-            if (fx.shockwaveProgress > 0.1f) {
-                val r2 = (fx.shockwaveProgress - 0.1f) / 0.9f * maxRadius
-                val a2 = (1f - fx.shockwaveProgress) * 0.3f
-                drawCircle(Color(0xFFF4D03F).copy(alpha = a2), radius = r2,
-                    center = Offset(size.width / 2f, fx.shockwaveY * size.height),
-                    style = Stroke(ringWidth * 0.5f))
+            val ringAlpha = (1f - sw) * 0.6f
+            val ringWidth = (1f - sw) * 6f + 2f
+            val center = Offset(size.width / 2f, fx.shockwaveY * size.height)
+            drawCircle(Color.White.copy(alpha = ringAlpha), radius = sw * maxRadius, center = center, style = Stroke(ringWidth))
+            if (sw > 0.1f) {
+                drawCircle(Color(0xFFF4D03F).copy(alpha = (1f - sw) * 0.3f),
+                    radius = (sw - 0.1f) / 0.9f * maxRadius, center = center, style = Stroke(ringWidth * 0.5f))
             }
         }
     }
 
-    // Score flyup
-    if (fx.flyupProgress > 0.01f) {
-        val yOff = (1f - fx.flyupProgress) * -80f
-        val scale = 0.8f + fx.flyupProgress * 0.4f
+    // Score flyup — composed only while active; motion is applied in the graphics layer
+    if (fx.flyupActive) {
         Box(modifier, contentAlignment = Alignment.Center) {
             Text(fx.flyupText, fontSize = 32.sp, fontWeight = FontWeight.ExtraBold,
                 fontFamily = FontFamily.Monospace,
-                color = Color(0xFFF4D03F).copy(alpha = (fx.flyupProgress * fx.flyupProgress).coerceIn(0f, 0.95f)),
+                color = Color(0xFFF4D03F),
                 modifier = Modifier.graphicsLayer {
-                    translationY = yOff; scaleX = scale; scaleY = scale; shadowElevation = 12f
+                    val p = fx.flyupProgress
+                    translationY = (1f - p) * -80f
+                    val scale = 0.8f + p * 0.4f
+                    scaleX = scale; scaleY = scale
+                    alpha = (p * p).coerceIn(0f, 0.95f)
+                    shadowElevation = 12f
                 })
         }
     }
 }
+
+/**
+ * Score text that rolls up to the new value. It is its own composable so the 300 ms roll
+ * (which restarts on every soft-drop point) recomposes only this Text, not the whole layout.
+ * [glow] is read here too, for the same reason: 0 = normal, 1 = full gold glow.
+ */
+@Composable
+private fun RollingScore(
+    score: Int, fontSize: TextUnit, fontWeight: FontWeight, fontFamily: FontFamily,
+    color: Color, letterSpacing: TextUnit = TextUnit.Unspecified, modifier: Modifier = Modifier,
+    glow: () -> Float = { 0f }
+) {
+    val animated by animateIntAsState(score, animationSpec = tween(300), label = "score")
+    val g = glow()
+    Text(animated.toString().padStart(7, '0'), fontSize = fontSize, fontWeight = fontWeight,
+        fontFamily = fontFamily, letterSpacing = letterSpacing,
+        color = if (g > 0.01f) Color(0xFFF4D03F).copy((0.9f + g * 0.1f).coerceAtMost(1f)) else color,
+        modifier = if (g > 0.01f) modifier.graphicsLayer { scaleX = 1f + g * 0.15f; scaleY = 1f + g * 0.15f } else modifier)
+}
+
 
 @Composable
 fun GameScreen(
@@ -561,7 +604,7 @@ fun GameScreen(
         val isClassicStyle = layoutPreset == LayoutPreset.PORTRAIT_CLASSIC ||
             (layoutPreset.isLandscape && portraitLayout == LayoutPreset.PORTRAIT_CLASSIC)
         if (!isClassicStyle) {
-            ActionPopup(gameState.lastActionLabel, gameState.linesCleared)
+            ActionPopup(gameState.lastActionLabel, gameState.linesCleared, gameState.actionEvent, gameState.status)
             // Combo counter display (top of screen)
             if (gameState.comboCount >= 2 && gameState.status == GameStatus.PLAYING) {
                 Box(Modifier.align(Alignment.TopCenter).padding(top = 8.dp)
@@ -585,13 +628,13 @@ fun GameScreen(
         if (remainingSeconds > 0 && gameState.status == GameStatus.PLAYING) {
             val h = remainingSeconds / 3600; val m = (remainingSeconds % 3600) / 60; val s = remainingSeconds % 60
             val isWarning = remainingSeconds <= 60
-            val pulseAlpha = if (isWarning) {
-                val inf = rememberInfiniteTransition(label = "tp")
-                val a by inf.animateFloat(0.6f, 1f, infiniteRepeatable(tween(500), RepeatMode.Reverse), label = "pa")
-                a
-            } else 0.8f
+            // Pulse is read in the draw phase so it doesn't recompose the whole game screen every frame
+            val pulseAlpha: State<Float> = if (isWarning) {
+                rememberInfiniteTransition(label = "tp").animateFloat(0.6f, 1f, infiniteRepeatable(tween(500), RepeatMode.Reverse), label = "pa")
+            } else remember { mutableFloatStateOf(0.8f) }
+            val badgeColor = if (isWarning) Color(0xFFB91C1C) else Color.Black
             Box(Modifier.align(Alignment.TopStart).padding(top = 8.dp, start = 8.dp)
-                .background((if (isWarning) Color(0xFFB91C1C) else Color.Black).copy(pulseAlpha), RoundedCornerShape(12.dp))
+                .drawBehind { drawRoundRect(badgeColor.copy(pulseAlpha.value), cornerRadius = CornerRadius(12.dp.toPx())) }
                 .padding(horizontal = 10.dp, vertical = 4.dp)) {
                 Text("%d:%02d:%02d".format(h, m, s), color = Color.White, fontSize = 12.sp,
                     fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
@@ -804,7 +847,6 @@ fun GameScreen(
 ) {
     val theme = LocalGameTheme.current
     val isDark = com.brickgame.tetris.ui.theme.LocalIsDarkMode.current
-    val animatedScore by animateIntAsState(gs.score, animationSpec = tween(300), label = "score")
 
     // === Danger zone detection ===
     val currentPieceCells = remember(gs.currentPiece) {
@@ -827,11 +869,12 @@ fun GameScreen(
     val dangerLevel = if (highestLockedRow in 0..4 && gs.status == GameStatus.PLAYING) {
         ((5 - highestLockedRow) / 5f).coerceIn(0f, 1f)
     } else 0f
-    val dangerPulse = rememberInfiniteTransition(label = "danger")
-    val dangerAlpha by dangerPulse.animateFloat(
-        0f, if (dangerLevel > 0) dangerLevel * 0.4f else 0f,
-        infiniteRepeatable(tween(600), RepeatMode.Reverse), label = "da"
-    )
+    // Pulse only exists while in danger; it is read in the draw phase so it never recomposes the layout
+    val dangerAlpha: State<Float> = if (dangerLevel > 0f) {
+        rememberInfiniteTransition(label = "danger").animateFloat(
+            0f, dangerLevel * 0.4f, infiniteRepeatable(tween(600), RepeatMode.Reverse), label = "da"
+        )
+    } else remember { mutableFloatStateOf(0f) }
 
     // === Dynamic background — adapt to light/dark mode ===
     val levelHue = (gs.level * 27f) % 360f
@@ -841,18 +884,17 @@ fun GameScreen(
     val fx = rememberGameEffects(gs)
 
     // === Level 8+: Board breathing — subtle scale pulse ===
-    val breathTransition = rememberInfiniteTransition(label = "breath")
-    val breathScale by breathTransition.animateFloat(
-        0.998f, 1.002f, infiniteRepeatable(tween(2000, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "bs"
-    )
+    val breathScale: State<Float> = if (gs.level >= 8) {
+        rememberInfiniteTransition(label = "breath").animateFloat(
+            0.998f, 1.002f, infiniteRepeatable(tween(2000, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "bs"
+        )
+    } else remember { mutableFloatStateOf(1f) }
 
     Box(Modifier.fillMaxSize()) {
         // === Falling pieces background — higher alpha, adapts to theme ===
         // Level 10+: background falls faster
         val bgSpeed = if (gs.level >= 10) 1f + (gs.level - 10) * 0.15f else 1f
-        Box(Modifier.matchParentSize().alpha(if (isDark) 0.4f else 0.25f)) {
-            FallingPiecesBackground(theme, isDark, bgSpeed)
-        }
+        FallingPiecesBackground(theme, isDark, bgSpeed, opacity = if (isDark) 0.4f else 0.25f, modifier = Modifier.matchParentSize())
 
         Column(Modifier.fillMaxSize()) {
             // === COMPACT INFO BAR ===
@@ -880,15 +922,11 @@ fun GameScreen(
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text("SCORE", fontSize = 6.sp, color = (if (isDark) Color.White else Color.Black).copy(0.4f),
                             fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, letterSpacing = 0.5.sp)
-                        Text(animatedScore.toString().padStart(7, '0'), fontSize = 14.sp,
+                        RollingScore(gs.score, fontSize = 14.sp,
                             fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace,
-                            color = if (gs.level >= 9 && fx.scoreGlowAlpha > 0.01f)
-                                Color(0xFFF4D03F).copy((0.9f + fx.scoreGlowAlpha * 0.1f).coerceAtMost(1f))
-                            else (if (isDark) Color.White else Color.Black).copy(0.9f),
+                            color = (if (isDark) Color.White else Color.Black).copy(0.9f),
                             letterSpacing = 1.sp,
-                            modifier = if (gs.level >= 9 && fx.scoreGlowAlpha > 0.01f)
-                                Modifier.graphicsLayer { scaleX = 1f + fx.scoreGlowAlpha * 0.15f; scaleY = 1f + fx.scoreGlowAlpha * 0.15f }
-                            else Modifier)
+                            glow = { if (gs.level >= 9) fx.scoreGlowAlpha else 0f })
                     }
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text("LINES", fontSize = 6.sp, color = (if (isDark) Color.White else Color.Black).copy(0.4f),
@@ -915,7 +953,7 @@ fun GameScreen(
             Box(Modifier.weight(1f).fillMaxWidth()
                 .graphicsLayer {
                     translationX = fx.screenShakeX; translationY = fx.screenShakeY
-                    if (gs.level >= 8) { scaleX = breathScale; scaleY = breathScale }
+                    scaleX = breathScale.value; scaleY = breathScale.value
                 }) {
                 // Game board — transparent modern grid
                 GameBoard(gs.board, Modifier.fillMaxSize().alpha(boardDimAlpha),
@@ -925,11 +963,12 @@ fun GameScreen(
                     boardOpacity = if (isDark) 0.12f else 0.18f, gameLevel = gs.level)
 
                 // === Danger zone overlay ===
-                if (dangerAlpha > 0.01f) {
+                if (dangerLevel > 0f) {
                     Canvas(Modifier.matchParentSize()) {
+                        val da = dangerAlpha.value.coerceIn(0f, 1f)
                         for (i in 0..5) {
                             val rowH = size.height / 20f
-                            drawRect(Color.Red.copy(alpha = dangerAlpha * (1f - i / 6f)), Offset(0f, i * rowH), Size(size.width, rowH))
+                            drawRect(Color.Red.copy(alpha = da * (1f - i / 6f)), Offset(0f, i * rowH), Size(size.width, rowH))
                         }
                     }
                 }
@@ -955,16 +994,12 @@ fun GameScreen(
     val theme = LocalGameTheme.current
     val isDark = com.brickgame.tetris.ui.theme.LocalIsDarkMode.current
     val levelHue = (gs.level * 36f) % 360f
-
-    val animatedScore by animateIntAsState(gs.score, animationSpec = tween(300), label = "fsscore")
     val fx = rememberGameEffects(gs, shakeDelay = 20L)
 
     Box(Modifier.fillMaxSize()) {
         // Falling pieces background
         val bgSpeed = if (gs.level >= 10) 1f + (gs.level - 10) * 0.15f else 1f
-        Box(Modifier.matchParentSize().alpha(if (isDark) 0.35f else 0.2f)) {
-            FallingPiecesBackground(theme, isDark, bgSpeed)
-        }
+        FallingPiecesBackground(theme, isDark, bgSpeed, opacity = if (isDark) 0.35f else 0.2f, modifier = Modifier.matchParentSize())
 
         // Board with shake
         Box(Modifier.fillMaxSize()
@@ -998,7 +1033,7 @@ fun GameScreen(
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text("SCORE", fontSize = 6.sp, color = (if (isDark) Color.White else Color.Black).copy(0.4f),
                         fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
-                    Text(animatedScore.toString().padStart(7, '0'), fontSize = 14.sp,
+                    RollingScore(gs.score, fontSize = 14.sp,
                         fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace,
                         color = (if (isDark) Color.White else Color.Black).copy(0.9f), letterSpacing = 1.sp)
                 }
@@ -1039,15 +1074,12 @@ fun GameScreen(
 ) {
     val theme = LocalGameTheme.current
     val isDark = com.brickgame.tetris.ui.theme.LocalIsDarkMode.current
-    val animatedScore by animateIntAsState(gs.score, animationSpec = tween(300), label = "chscore")
     val fx = rememberGameEffects(gs, shakeSteps = 14, shakeDelay = 20L, shakeMultiplier = 0.8f)
 
     Box(Modifier.fillMaxSize()) {
         // Falling pieces background
         val bgSpeed = if (gs.level >= 10) 1f + (gs.level - 10) * 0.15f else 1f
-        Box(Modifier.matchParentSize().alpha(if (isDark) 0.3f else 0.2f)) {
-            FallingPiecesBackground(theme, isDark, bgSpeed)
-        }
+        FallingPiecesBackground(theme, isDark, bgSpeed, opacity = if (isDark) 0.3f else 0.2f, modifier = Modifier.matchParentSize())
 
         // Dynamic level tint — subtle hue shift
         val levelHue = (gs.level * 27f) % 360f
@@ -1076,7 +1108,7 @@ fun GameScreen(
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text("SCORE", fontSize = 6.sp, color = (if (isDark) Color.White else Color.Black).copy(0.4f),
                             fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
-                        Text(animatedScore.toString().padStart(7, '0'), fontSize = 14.sp,
+                        RollingScore(gs.score, fontSize = 14.sp,
                             fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace,
                             color = (if (isDark) Color.White else Color.Black).copy(0.9f), letterSpacing = 1.sp)
                     }
@@ -1115,7 +1147,7 @@ fun GameScreen(
             Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), Arrangement.SpaceBetween, Alignment.CenterVertically) {
                 if (!lh) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        ActionButton("HOLD", onHold, width = 64.dp, height = 30.dp)
+                        ActionButton("HOLD", onHold, fireOnPress = true, width = 64.dp, height = 30.dp)
                         ActionButton(if (gs.status == GameStatus.MENU) "START" else "PAUSE",
                             { if (gs.status == GameStatus.MENU) onStart() else onPause() }, width = 64.dp, height = 30.dp)
                         ActionButton("···", onSet, width = 44.dp, height = 24.dp, backgroundColor = LocalGameTheme.current.buttonSecondary)
@@ -1126,7 +1158,7 @@ fun GameScreen(
                     onLeftPress = onLP, onLeftRelease = onLR, onRightPress = onRP, onRightRelease = onRR, onRotate = onRotate)
                 if (lh) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        ActionButton("HOLD", onHold, width = 64.dp, height = 30.dp)
+                        ActionButton("HOLD", onHold, fireOnPress = true, width = 64.dp, height = 30.dp)
                         ActionButton(if (gs.status == GameStatus.MENU) "START" else "PAUSE",
                             { if (gs.status == GameStatus.MENU) onStart() else onPause() }, width = 64.dp, height = 30.dp)
                         ActionButton("···", onSet, width = 44.dp, height = 24.dp, backgroundColor = LocalGameTheme.current.buttonSecondary)
@@ -1276,7 +1308,7 @@ fun GameScreen(
         // Hold button
         if (cl.isVisible(LayoutElements.HOLD_BTN)) {
             val hp = positions[LayoutElements.HOLD_BTN] ?: ElementPosition(0.5f, 0.2f)
-            Box(Modifier.offset(x = mw * hp.x - 39.dp, y = mh * hp.y - 17.dp)) { ActionButton("HOLD", onHold, width = 78.dp, height = 34.dp) }
+            Box(Modifier.offset(x = mw * hp.x - 39.dp, y = mh * hp.y - 17.dp)) { ActionButton("HOLD", onHold, fireOnPress = true, width = 78.dp, height = 34.dp) }
         }
 
         // Pause/Start button
@@ -1436,7 +1468,6 @@ fun GameScreen(
     val theme = LocalGameTheme.current
     val isDark = com.brickgame.tetris.ui.theme.LocalIsDarkMode.current
     val lh = LocalLeftHanded.current
-    val animatedScore by animateIntAsState(gs.score, animationSpec = tween(300), label = "fslsscore")
     val textColor = if (isDark) Color.White else Color.Black
 
     // Board rotation state: cycles 0° → -90° → -180° → -270° → 0°
@@ -1457,9 +1488,7 @@ fun GameScreen(
         val screenH = maxHeight
 
         // Falling pieces background — full screen
-        Box(Modifier.matchParentSize().alpha(if (isDark) 0.25f else 0.15f)) {
-            FallingPiecesBackground(theme, isDark, bgSpeed)
-        }
+        FallingPiecesBackground(theme, isDark, bgSpeed, opacity = if (isDark) 0.25f else 0.15f, modifier = Modifier.matchParentSize())
 
         // Board — rotated, fills entire screen
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -1489,7 +1518,7 @@ fun GameScreen(
         }
 
         // Rotation-aware edge glow on line clears
-        if (fx.clearFlashAlpha > 0.01f) {
+        run {  // always present; alpha is read in the draw phase so the flash never recomposes this layout
             val flashColor = when {
                 fx.clearSize.intValue >= 4 -> Color(0xFFF4D03F)
                 fx.clearSize.intValue >= 3 -> Color(0xFFFF9F43)
@@ -1498,6 +1527,7 @@ fun GameScreen(
             }
             Canvas(Modifier.matchParentSize()) {
                 val a = fx.clearFlashAlpha.coerceIn(0f, 1f)
+                if (a <= 0.01f) return@Canvas
                 val edgeW = size.width * 0.08f; val edgeH = size.height * 0.06f
                 when (rotationStep) {
                     0 -> {
@@ -1532,7 +1562,7 @@ fun GameScreen(
             Spacer(Modifier.width(6.dp))
             Row(Modifier.weight(1f), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
                 Text("LVL ${gs.level}", fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace, color = theme.accentColor.copy(0.7f))
-                Text(animatedScore.toString().padStart(7, '0'), fontSize = 11.sp, fontWeight = FontWeight.Bold,
+                RollingScore(gs.score, fontSize = 11.sp, fontWeight = FontWeight.Bold,
                     fontFamily = FontFamily.Monospace, color = textColor.copy(0.6f), letterSpacing = 0.5.sp)
                 Text("LNS ${gs.lines}", fontSize = 11.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, color = textColor.copy(0.5f))
             }
@@ -1583,7 +1613,7 @@ fun GameScreen(
             Column(Modifier.align(if (!lh) Alignment.CenterEnd else Alignment.CenterStart)
                 .padding(horizontal = 8.dp).alpha(0.25f),
                 horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-                ActionButton("HOLD", onHold, width = 78.dp, height = 34.dp)
+                ActionButton("HOLD", onHold, fireOnPress = true, width = 78.dp, height = 34.dp)
                 Spacer(Modifier.height(6.dp))
                 if (dp == DPadStyle.STANDARD) RotateButton(onRotate, 68.dp)
                 Spacer(Modifier.height(6.dp))
@@ -1612,7 +1642,6 @@ fun GameScreen(
     val theme = LocalGameTheme.current
     val isDark = com.brickgame.tetris.ui.theme.LocalIsDarkMode.current
     val lh = LocalLeftHanded.current
-    val animatedScore by animateIntAsState(gs.score, animationSpec = tween(300), label = "lsscore")
     val fx = rememberGameEffects(gs, shakeSteps = 14, shakeDelay = 20L, shakeMultiplier = 0.7f, flashMultiplier = 0.85f)
 
     val bgSpeed = if (gs.level >= 10) 1f + (gs.level - 10) * 0.15f else 1f
@@ -1634,7 +1663,7 @@ fun GameScreen(
     val buttonsBlock: @Composable () -> Unit = {
         Column(Modifier.fillMaxHeight().padding(4.dp),
             horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-            ActionButton("HOLD", onHold, width = 78.dp, height = 34.dp)
+            ActionButton("HOLD", onHold, fireOnPress = true, width = 78.dp, height = 34.dp)
             Spacer(Modifier.height(8.dp))
             if (dp == DPadStyle.STANDARD) RotateButton(onRotate, 68.dp)
             Spacer(Modifier.height(8.dp))
@@ -1648,9 +1677,7 @@ fun GameScreen(
 
     Box(Modifier.fillMaxSize()) {
         // Falling pieces background
-        Box(Modifier.matchParentSize().alpha(if (isDark) 0.25f else 0.15f)) {
-            FallingPiecesBackground(theme, isDark, bgSpeed)
-        }
+        FallingPiecesBackground(theme, isDark, bgSpeed, opacity = if (isDark) 0.25f else 0.15f, modifier = Modifier.matchParentSize())
 
         Row(Modifier.fillMaxSize().padding(horizontal = 2.dp, vertical = 2.dp),
             verticalAlignment = Alignment.CenterVertically) {
@@ -1692,7 +1719,7 @@ fun GameScreen(
                     // SCORE
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text("SCORE", fontSize = 7.sp, color = textColor.copy(0.4f), fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
-                        Text(animatedScore.toString().padStart(7, '0'), fontSize = 13.sp,
+                        RollingScore(gs.score, fontSize = 13.sp,
                             fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace,
                             color = textColor.copy(0.9f), letterSpacing = 0.5.sp)
                     }
@@ -1738,14 +1765,14 @@ fun GameScreen(
                     onUpPress = onHD, onDownPress = onDP, onDownRelease = onDR,
                     onLeftPress = onLP, onLeftRelease = onLR, onRightPress = onRP, onRightRelease = onRR, onRotate = onRotate)
                 Box(Modifier.align(Alignment.TopEnd).offset(x = 8.dp, y = (-2).dp)) {
-                    ActionButton("HOLD", onHold, width = 52.dp, height = 26.dp)
+                    ActionButton("HOLD", onHold, fireOnPress = true, width = 52.dp, height = 26.dp)
                 }
             }
         } else {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 if (dp == DPadStyle.STANDARD) RotateButton(onRotate, 72.dp) else Spacer(Modifier.size(72.dp))
                 Spacer(Modifier.height(2.dp))
-                ActionButton("HOLD", onHold, width = 52.dp, height = 26.dp)
+                ActionButton("HOLD", onHold, fireOnPress = true, width = 52.dp, height = 26.dp)
             }
         }
         // Centre: PAUSE + menu
@@ -1878,7 +1905,7 @@ fun GameScreen(
         // Hold button
         if (isVisible(LayoutElements.HOLD_BTN)) {
             val hb = pos[LayoutElements.HOLD_BTN] ?: ElementPosition(0.5f, 0.80f)
-            Box(Modifier.offset(x = maxW * hb.x - 39.dp, y = maxH * hb.y - 17.dp)) { ActionButton("HOLD", onHold, width = 78.dp, height = 34.dp) }
+            Box(Modifier.offset(x = maxW * hb.x - 39.dp, y = maxH * hb.y - 17.dp)) { ActionButton("HOLD", onHold, fireOnPress = true, width = 78.dp, height = 34.dp) }
         }
         // Pause
         if (isVisible(LayoutElements.PAUSE_BTN)) {
@@ -2094,104 +2121,96 @@ fun GameScreen(
     }
 }
 
-// Falling transparent tetris pieces — matrix rain style with colored pieces, long green trails, and sparkle
-@Composable
-private fun FallingPiecesBackground(theme: com.brickgame.tetris.ui.theme.GameTheme, isDark: Boolean = true, speedMultiplier: Float = 1f) {
-    data class FP(val col: Float, val speed: Float, val sz: Float, val shape: Int,
-                  val alpha: Float, val startY: Float, val colorIdx: Int, val trailLen: Int,
-                  val sparkle: Boolean, val sparklePhase: Float)
+// Falling translucent pieces — matrix rain style with colored pieces, fading trails and sparkle.
+// Kept deliberately cheap: it runs behind gameplay, so it must stay far below the frame budget
+// (~60 pieces, one rect per trail step, off-screen pieces skipped, no offscreen alpha layer).
+private class FallingPiece(
+    val col: Float, val speed: Float, val sz: Float, val shape: Int,
+    val alpha: Float, val startY: Float, val trailLen: Int,
+    val sparkle: Boolean, val sparklePhase: Float
+)
 
+private val FALLING_PIECE_COLORS = listOf(
+    Color(0xFFFF4444), Color(0xFF44AAFF), Color(0xFFFFAA00), Color(0xFF44FF44),
+    Color(0xFFFF44FF), Color(0xFF44FFFF), Color(0xFFF4D03F)
+)
+
+// Cell offsets as flat (dx, dy) pairs, plus each shape's width in cells
+private val FALLING_PIECE_SHAPES = listOf(
+    intArrayOf(0, 0, 1, 0, 0, 1, 1, 1),   // O
+    intArrayOf(0, 0, 1, 0, 2, 0, 3, 0),   // I
+    intArrayOf(0, 0, 1, 0, 2, 0, 2, 1),   // L
+    intArrayOf(0, 0, 1, 0, 2, 0, 0, 1),   // J
+    intArrayOf(0, 0, 1, 0, 1, 1, 2, 1),   // S
+    intArrayOf(1, 0, 2, 0, 0, 1, 1, 1),   // Z
+    intArrayOf(0, 0, 1, 0, 2, 0, 1, 1),   // T
+)
+private val FALLING_PIECE_WIDTHS = intArrayOf(2, 4, 3, 3, 3, 3, 3)
+
+@Composable
+private fun FallingPiecesBackground(
+    theme: com.brickgame.tetris.ui.theme.GameTheme,
+    isDark: Boolean = true,
+    speedMultiplier: Float = 1f,
+    opacity: Float = 1f,
+    modifier: Modifier = Modifier.fillMaxSize()
+) {
     val pieces = remember {
         val rng = kotlin.random.Random(42)
-        (0..299).map {
-            FP(col = rng.nextFloat(), speed = 0.4f + rng.nextFloat() * 1.2f,
-               sz = 5f + rng.nextFloat() * 8f, shape = it % 7,
-               alpha = 0.12f + rng.nextFloat() * 0.25f,
-               // Large random startY spread ensures pieces are uniformly distributed
-               startY = rng.nextFloat() * 10000f,
-               colorIdx = it % 7, trailLen = 4 + rng.nextInt(8),
-               sparkle = rng.nextFloat() < 0.15f,
-               sparklePhase = rng.nextFloat() * 6.28f)
+        List(60) {
+            FallingPiece(col = rng.nextFloat(), speed = 0.4f + rng.nextFloat() * 1.2f,
+                sz = 5f + rng.nextFloat() * 8f, shape = it % 7,
+                alpha = 0.12f + rng.nextFloat() * 0.25f,
+                startY = rng.nextFloat() * 10000f,
+                trailLen = 2 + rng.nextInt(3),
+                sparkle = rng.nextFloat() < 0.15f,
+                sparklePhase = rng.nextFloat() * 6.28f)
         }
     }
     val t = rememberInfiniteTransition(label = "bg")
-    // Very large target value so the animation never visibly restarts
-    // Each piece wraps independently via modulo on screen height
-    val anim by t.animateFloat(0f, 1_000_000f, infiniteRepeatable(tween(1_500_000, easing = LinearEasing)), label = "fall")
+    // Large target value so the animation never visibly restarts; each piece wraps via modulo.
+    // Kept as State and read only inside the draw block, so frames redraw without recomposing.
+    val anim = t.animateFloat(0f, 1_000_000f, infiniteRepeatable(tween(1_500_000, easing = LinearEasing)), label = "fall")
+    val trailColor = if (isDark) Color(0xFF22C55E) else Color(0xFF22A050)
+    // In light mode, use higher alpha for visibility on light background
+    val alphaBoost = if (isDark) 1f else 2.2f
 
-    val pieceColors = remember { listOf(
-        Color(0xFFFF4444), Color(0xFF44AAFF), Color(0xFFFFAA00), Color(0xFF44FF44),
-        Color(0xFFFF44FF), Color(0xFF44FFFF), Color(0xFFF4D03F)
-    ) }
-    val trailColor = Color(0xFF22C55E)
-
-    val shapes = remember { listOf(
-        listOf(0 to 0, 1 to 0, 0 to 1, 1 to 1),       // O
-        listOf(0 to 0, 1 to 0, 2 to 0, 3 to 0),       // I
-        listOf(0 to 0, 1 to 0, 2 to 0, 2 to 1),       // L
-        listOf(0 to 0, 1 to 0, 2 to 0, 0 to 1),       // J
-        listOf(0 to 0, 1 to 0, 1 to 1, 2 to 1),       // S
-        listOf(1 to 0, 2 to 0, 0 to 1, 1 to 1),       // Z
-        listOf(0 to 0, 1 to 0, 2 to 0, 1 to 1),       // T
-    ) }
-
-    Canvas(Modifier.fillMaxSize()) {
+    Canvas(modifier) {
         val w = size.width; val h = size.height
         val wrapH = h + 600f  // total travel distance before wrapping
-        // In light mode, use higher alpha for visibility on light background
-        val alphaBoost = if (isDark) 1f else 2.2f
-        val actualTrailColor = if (isDark) trailColor else Color(0xFF22A050)
-        pieces.forEach { p ->
-            // Each piece wraps independently based on its own startY offset
-            val rawY = p.startY + anim * p.speed * speedMultiplier
-            val baseY = (rawY % wrapH) - 300f
-            val x = p.col * w
+        val a = anim.value
+        val corner = CornerRadius(2f, 2f)
+        for (p in pieces) {
+            val baseY = ((p.startY + a * p.speed * speedMultiplier) % wrapH) - 300f
             val s = p.sz
-            val shape = shapes[p.shape % shapes.size]
-            val pColor = pieceColors[p.colorIdx]
-            val pa = (p.alpha * alphaBoost).coerceAtMost(0.55f)
+            val step = s + 2f
+            val trailTop = baseY - p.trailLen * step * 1.2f
+            if (trailTop > h || baseY + 2 * step < 0f) continue  // nothing of it on screen
+            val x = p.col * w
+            val shape = FALLING_PIECE_SHAPES[p.shape]
+            val pa = (p.alpha * alphaBoost).coerceAtMost(0.55f) * opacity
 
-            // Draw long green trail (fading upward) — bigger trail
+            // Fading trail above the piece — one bar per step instead of one rect per cell
+            val trailW = FALLING_PIECE_WIDTHS[p.shape] * step - 2f
             for (ti in 1..p.trailLen) {
-                val trailY = baseY - ti * (s + 2) * 1.2f
-                val trailAlpha = pa * 0.5f * (1f - ti.toFloat() / (p.trailLen + 1))
-                val trailSz = s * (1f - ti * 0.04f).coerceAtLeast(0.3f)
-                shape.forEach { (dx, dy) ->
-                    drawRoundRect(
-                        color = actualTrailColor.copy(alpha = trailAlpha.coerceIn(0f, 1f)),
-                        topLeft = androidx.compose.ui.geometry.Offset(x + dx * (s + 2), trailY + dy * (s + 2)),
-                        size = androidx.compose.ui.geometry.Size(trailSz, trailSz),
-                        cornerRadius = androidx.compose.ui.geometry.CornerRadius(2f, 2f)
-                    )
-                }
+                val trailAlpha = (pa * 0.5f * (1f - ti.toFloat() / (p.trailLen + 1))).coerceIn(0f, 1f)
+                drawRect(trailColor.copy(alpha = trailAlpha),
+                    Offset(x, baseY - ti * step * 1.2f), Size(trailW, s * 0.8f))
             }
 
-            // Draw colored piece
-            shape.forEach { (dx, dy) ->
-                drawRoundRect(
-                    color = pColor.copy(alpha = pa),
-                    topLeft = androidx.compose.ui.geometry.Offset(x + dx * (s + 2), baseY + dy * (s + 2)),
-                    size = androidx.compose.ui.geometry.Size(s, s),
-                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(2f, 2f)
-                )
+            // Colored piece
+            val pColor = FALLING_PIECE_COLORS[p.shape].copy(alpha = pa)
+            var i = 0
+            while (i < shape.size) {
+                drawRoundRect(pColor, Offset(x + shape[i] * step, baseY + shape[i + 1] * step), Size(s, s), corner)
+                i += 2
             }
 
-            // Sparkle effect on some pieces — a bright white dot that pulses
+            // Sparkle on some pieces — a bright dot that pulses
             if (p.sparkle) {
-                val sparkleAlpha = (0.3f + 0.4f * kotlin.math.sin(anim * 0.01f + p.sparklePhase)).coerceIn(0f, 0.7f)
-                val sparkX = x + (s + 2) * 0.5f
-                val sparkY = baseY - s * 0.5f
-                drawCircle(
-                    color = Color.White.copy(alpha = sparkleAlpha * pa * 3f),
-                    radius = s * 0.35f,
-                    center = androidx.compose.ui.geometry.Offset(sparkX, sparkY)
-                )
-                // Small outer glow
-                drawCircle(
-                    color = pColor.copy(alpha = sparkleAlpha * p.alpha * 1.5f),
-                    radius = s * 0.6f,
-                    center = androidx.compose.ui.geometry.Offset(sparkX, sparkY)
-                )
+                val sparkleAlpha = (0.3f + 0.4f * kotlin.math.sin(a * 0.01f + p.sparklePhase)).coerceIn(0f, 0.7f)
+                drawCircle(Color.White.copy(alpha = (sparkleAlpha * pa * 3f).coerceIn(0f, 1f)),
+                    radius = s * 0.35f, center = Offset(x + step * 0.5f, baseY - s * 0.5f))
             }
         }
     }
@@ -2369,28 +2388,22 @@ private fun FallingPiecesBackground(theme: com.brickgame.tetris.ui.theme.GameThe
 // ACTION POPUP — Big, centered, color-coded, auto-fading
 // =============================================================================
 @Composable
-private fun ActionPopup(label: String, linesCleared: Int) {
-    // Track the label we've already shown to prevent re-triggering on recompose
-    var lastShownLabel by remember { mutableStateOf("") }
-    var lastShownTime by remember { mutableStateOf(0L) }
+private fun ActionPopup(label: String, linesCleared: Int, actionEvent: Int, status: GameStatus) {
     var showPopup by remember { mutableStateOf(false) }
     var popupText by remember { mutableStateOf("") }
     var popupLines by remember { mutableStateOf(0) }
 
-    // Only trigger on NEW labels during active gameplay (not when returning from settings)
-    LaunchedEffect(label) {
-        if (label.isNotEmpty() && (label != lastShownLabel || System.currentTimeMillis() - lastShownTime > 1500L)) {
+    // Keyed on the action counter, so two identical clears in a row (e.g. Tetris, Tetris) both show.
+    // Only during active play: returning from settings re-enters composition while PAUSED.
+    LaunchedEffect(actionEvent) {
+        if (actionEvent > 0 && label.isNotEmpty() && status == GameStatus.PLAYING) {
             // Skip "Single" — only 1 line, not worth a popup
             if (linesCleared == 1 && !label.contains("T-Spin", ignoreCase = true) && !label.contains("B2B", ignoreCase = true)) {
-                lastShownLabel = label
-                lastShownTime = System.currentTimeMillis()
                 return@LaunchedEffect
             }
             popupText = label
             popupLines = linesCleared
             showPopup = true
-            lastShownLabel = label
-            lastShownTime = System.currentTimeMillis()
             // Auto-dismiss: longer for bigger clears
             val duration = when {
                 linesCleared >= 4 -> 1800L

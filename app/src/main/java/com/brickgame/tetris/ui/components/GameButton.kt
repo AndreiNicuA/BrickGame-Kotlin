@@ -27,6 +27,11 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Density
@@ -36,7 +41,7 @@ import androidx.compose.ui.unit.sp
 import com.brickgame.tetris.ui.layout.ButtonShape
 import com.brickgame.tetris.ui.theme.LocalGameTheme
 
-enum class ButtonIcon { UP, DOWN, LEFT, RIGHT, ROTATE }
+enum class ButtonIcon(val label: String) { UP("Up"), DOWN("Down"), LEFT("Left"), RIGHT("Right"), ROTATE("Rotate") }
 
 val LocalButtonShape = compositionLocalOf { ButtonShape.ROUND }
 
@@ -165,6 +170,8 @@ fun TapButton(
     var isPressed by remember { mutableStateOf(false) }
     val scale by animateFloatAsState(if (isPressed) 0.88f else 1f,
         spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessHigh), label = "s")
+    // pointerInput(Unit) outlives recompositions — always call the latest callback
+    val currentOnClick by rememberUpdatedState(onClick)
 
     Box(
         modifier
@@ -172,9 +179,18 @@ fun TapButton(
             .applyButtonShape(shape, theme.buttonPrimary, theme.buttonPrimaryPressed, isPressed, size)
             .pointerInput(Unit) {
                 detectTapGestures(
-                    onPress = { isPressed = true; tryAwaitRelease(); isPressed = false },
-                    onTap = { onClick() }
+                    onPress = {
+                        isPressed = true
+                        // Act on touch-down: no added latency, and sliding off can't cancel it
+                        currentOnClick()
+                        try { tryAwaitRelease() } finally { isPressed = false }
+                    }
                 )
+            }
+            .semantics {
+                role = Role.Button
+                contentDescription = icon.label
+                this.onClick { currentOnClick(); true }
             },
         Alignment.Center
     ) {
@@ -200,6 +216,8 @@ fun HoldButton(
     var isPressed by remember { mutableStateOf(false) }
     val scale by animateFloatAsState(if (isPressed) 0.88f else 1f,
         spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessHigh), label = "s")
+    val currentOnPress by rememberUpdatedState(onPress)
+    val currentOnRelease by rememberUpdatedState(onRelease)
 
     Box(
         modifier
@@ -210,14 +228,25 @@ fun HoldButton(
                     while (true) {
                         val down = awaitPointerEvent()
                         if (down.changes.any { it.pressed }) {
-                            isPressed = true; onPress()
-                            while (true) {
-                                val event = awaitPointerEvent()
-                                if (event.changes.all { !it.pressed }) { isPressed = false; onRelease(); break }
+                            isPressed = true; currentOnPress()
+                            // finally: also release if the button leaves composition mid-press,
+                            // otherwise auto-repeat (DAS) would keep running
+                            try {
+                                while (true) {
+                                    val event = awaitPointerEvent()
+                                    if (event.changes.all { !it.pressed }) break
+                                }
+                            } finally {
+                                isPressed = false; currentOnRelease()
                             }
                         }
                     }
                 }
+            }
+            .semantics {
+                role = Role.Button
+                contentDescription = icon.label
+                this.onClick { currentOnPress(); currentOnRelease(); true }
             },
         Alignment.Center
     ) {
@@ -296,10 +325,13 @@ fun RotateButton(onClick: () -> Unit, size: Dp = 72.dp, modifier: Modifier = Mod
 @Composable
 fun ActionButton(
     text: String, onClick: () -> Unit, modifier: Modifier = Modifier,
-    width: Dp = 90.dp, height: Dp = 40.dp, enabled: Boolean = true, backgroundColor: Color? = null
+    width: Dp = 90.dp, height: Dp = 40.dp, enabled: Boolean = true, backgroundColor: Color? = null,
+    /** true for in-game actions (e.g. HOLD): fire on touch-down instead of on release */
+    fireOnPress: Boolean = false
 ) {
     val theme = LocalGameTheme.current
     var isPressed by remember { mutableStateOf(false) }
+    val currentOnClick by rememberUpdatedState(onClick)
     val bg = backgroundColor ?: theme.buttonPrimary
     val scale by animateFloatAsState(if (isPressed) 0.93f else 1f, spring(stiffness = Spring.StiffnessHigh), label = "s")
     val rounding = height / 2
@@ -325,8 +357,18 @@ fun ActionButton(
                         cornerRadius = CornerRadius(size.height / 2))
                 }
             }
-            .then(if (enabled) Modifier.pointerInput(Unit) {
-                detectTapGestures(onPress = { isPressed = true; tryAwaitRelease(); isPressed = false }, onTap = { onClick() })
+            .then(if (enabled) Modifier.pointerInput(fireOnPress) {
+                detectTapGestures(
+                    onPress = {
+                        isPressed = true
+                        if (fireOnPress) currentOnClick()
+                        try { tryAwaitRelease() } finally { isPressed = false }
+                    },
+                    onTap = { if (!fireOnPress) currentOnClick() }
+                )
+            }.semantics(mergeDescendants = true) {
+                role = Role.Button
+                this.onClick { currentOnClick(); true }
             } else Modifier),
         Alignment.Center
     ) {

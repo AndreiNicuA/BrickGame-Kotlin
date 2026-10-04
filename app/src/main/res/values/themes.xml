@@ -1,7 +1,16 @@
 <resources>
     <style name="Theme.BrickGame" parent="android:Theme.Material.NoActionBar">
-        <item name="android:windowBackground">@android:color/black</item>
+        <!-- Matches the app background so there is no black flash before the first frame -->
+        <item name="android:windowBackground">@color/app_background</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
+    </style>
+
+    <!-- Launch theme: system splash screen (Android 12+ API, back-ported by core-splashscreen).
+         MainActivity keeps it on screen only until settings have loaded. -->
+    <style name="Theme.BrickGame.Starting" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/app_background</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>
+        <item name="postSplashScreenTheme">@style/Theme.BrickGame</item>
     </style>
 </resources>

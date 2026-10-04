@@ -146,6 +146,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private var lockDelayJob: Job? = null
     private var dasJob: Job? = null
     @Volatile private var handlingLineClear = false
+    /** Guards against saving the same finished game twice (several loop paths can observe GAME_OVER). */
+    private var gameOverHandled = false
 
     init { loadSettings(); loadProfile() }
 
@@ -214,6 +216,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
     fun startGame() {
         game.setDifficulty(_difficulty.value); game.setGameMode(_gameMode.value); game.startGame(); handlingLineClear = false
+        gameOverHandled = false
         _timerExpired.value = false
         startGameLoop()
         startCountdownIfNeeded()
@@ -228,7 +231,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     fun hardDrop() { val d = game.hardDrop(); if (d > 0) { soundManager.playDrop(); vibrationManager.vibrateDrop() } }
     fun rotate() { if (game.rotate()) { soundManager.playRotate(); vibrationManager.vibrateRotate() } }
     fun rotateCounterClockwise() { if (game.rotateCounterClockwise()) { soundManager.playRotate(); vibrationManager.vibrateRotate() } }
-    fun holdPiece() { game.holdCurrentPiece() }
+    fun holdPiece() { if (game.holdCurrentPiece()) { soundManager.playHold(); vibrationManager.vibrateMove() } }
 
     fun startLeftDAS() { stopDAS(); moveLeft(); dasJob = viewModelScope.launch { delay(170); while (isActive) { moveLeft(); delay(50) } } }
     fun startRightDAS() { stopDAS(); moveRight(); dasJob = viewModelScope.launch { delay(170); while (isActive) { moveRight(); delay(50) } } }
@@ -263,7 +266,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         gravityJob?.cancel(); lockDelayJob?.cancel(); handlingLineClear = false
         gravityJob = viewModelScope.launch {
             while (isActive && gameState.value.status == GameStatus.PLAYING) {
-                if (game.isGameActive()) game.moveDown()
+                if (game.isGameActive()) game.gravityStep()
                 delay(game.getDropSpeed())
             }
         }
@@ -272,7 +275,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 if (game.isPendingLineClear() && !handlingLineClear) {
                     handlingLineClear = true
                     val prevLevel = gameState.value.level; val lc = gameState.value.linesCleared
-                    if (lc > 0) { soundManager.playClear(); vibrationManager.vibrateClear(lc) }
+                    if (lc > 0) { soundManager.playClear(lc); vibrationManager.vibrateClear(lc) }
                     delay((_animationDuration.value * 500).toLong().coerceAtLeast(200))
                     game.completePendingLineClear(); handlingLineClear = false
                     if (gameState.value.level > prevLevel) { soundManager.playLevelUp(); vibrationManager.vibrateLevelUp() }
@@ -283,6 +286,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                     if (gameState.value.status == GameStatus.GAME_OVER) { onGameOver(); break }
                     continue
                 }
+                if (game.checkTimeLimit()) { onGameOver(); break }
                 delay(16L)
             }
             if (gameState.value.status == GameStatus.GAME_OVER) onGameOver()
@@ -292,7 +296,10 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private fun stopGameLoop() { gravityJob?.cancel(); lockDelayJob?.cancel(); handlingLineClear = false }
 
     private fun onGameOver() {
-        stopGameLoop(); soundManager.playGameOver(); vibrationManager.vibrateGameOver()
+        if (gameOverHandled) return
+        gameOverHandled = true
+        stopGameLoop(); stopDAS(); countdownJob?.cancel()
+        soundManager.playGameOver(); vibrationManager.vibrateGameOver()
         val s = gameState.value
         viewModelScope.launch { if (s.score > _highScore.value) settingsRepo.setHighScore(s.score); playerRepo.addScore(playerName.value, s.score, s.level, s.lines) }
     }
@@ -457,7 +464,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 // Layer clear
                 val clearedNow = s.layers - prev3DLayers
                 if (clearedNow > 0 && prev3DLayers >= 0) {
-                    soundManager.playClear(); vibrationManager.vibrateClear(clearedNow)
+                    soundManager.playClear(clearedNow); vibrationManager.vibrateClear(clearedNow)
                 }
                 prev3DLayers = s.layers
                 // Level up
@@ -478,9 +485,10 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Quit 2D game — save score to history, return to menu */
     fun quitGame() {
-        stopGameLoop()
+        stopGameLoop(); stopDAS(); countdownJob?.cancel()
         val s = gameState.value
-        if (s.score > 0) {
+        // A finished game was already saved by onGameOver()
+        if (s.score > 0 && !gameOverHandled) {
             viewModelScope.launch {
                 if (s.score > _highScore.value) settingsRepo.setHighScore(s.score)
                 playerRepo.addScore(playerName.value, s.score, s.level, s.lines)

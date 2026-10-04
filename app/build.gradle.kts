@@ -59,6 +59,7 @@ dependencies {
     implementation("androidx.core:core-ktx:1.15.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
     implementation("androidx.activity:activity-compose:1.9.3")
+    implementation("androidx.core:core-splashscreen:1.0.1")
 
     // Compose
     implementation(platform("androidx.compose:compose-bom:2024.12.01"))
@@ -80,6 +81,9 @@ dependencies {
 
     // Serialization
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
+
+    // Unit tests (pure-Kotlin game engine)
+    testImplementation("junit:junit:4.13.2")
 
     // Debug
     debugImplementation("androidx.compose.ui:ui-tooling")

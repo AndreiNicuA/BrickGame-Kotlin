@@ -2,6 +2,7 @@ package com.brickgame.tetris
 
 import android.content.pm.ActivityInfo
 import android.graphics.Color as AndroidColor
+import android.hardware.input.InputManager
 import android.os.Bundle
 import android.view.KeyEvent
 import android.view.MotionEvent
@@ -10,6 +11,7 @@ import androidx.activity.SystemBarStyle
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.viewModels
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -31,6 +33,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -55,7 +58,29 @@ import kotlin.math.*
 class MainActivity : ComponentActivity() {
 
     private val gamepad = GamepadController()
-    private var vmRef: GameViewModel? = null
+    private val vm: GameViewModel by viewModels()
+
+    /** Gamepad presence, kept current by an InputDeviceListener instead of polling every recomposition. */
+    private var controllerConnected by mutableStateOf(false)
+    private val inputDeviceListener = object : InputManager.InputDeviceListener {
+        override fun onInputDeviceAdded(deviceId: Int) = refreshControllers()
+        override fun onInputDeviceRemoved(deviceId: Int) = refreshControllers()
+        override fun onInputDeviceChanged(deviceId: Int) = refreshControllers()
+    }
+    private fun refreshControllers() {
+        controllerConnected = GamepadController.getConnectedControllers().isNotEmpty()
+    }
+
+    override fun onStart() {
+        super.onStart()
+        getSystemService(InputManager::class.java)?.registerInputDeviceListener(inputDeviceListener, null)
+        refreshControllers()
+    }
+
+    override fun onStop() {
+        getSystemService(InputManager::class.java)?.unregisterInputDeviceListener(inputDeviceListener)
+        super.onStop()
+    }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
         if (gamepad.handleKeyDown(keyCode, event)) return true
@@ -73,6 +98,9 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // System splash (icon) stays only until settings have loaded — typically a few frames.
+        // Must be installed before super.onCreate().
+        installSplashScreen().setKeepOnScreenCondition { !vm.dataLoaded.value }
         // Read saved theme mode BEFORE enableEdgeToEdge so bars match from first frame
         val prefs = getSharedPreferences("app_theme_cache", MODE_PRIVATE)
         val cachedMode = prefs.getString("mode", "auto") ?: "auto"
@@ -99,8 +127,6 @@ class MainActivity : ComponentActivity() {
         }
         super.onCreate(savedInstanceState)
         setContent {
-            val vm: GameViewModel = viewModel()
-            vmRef = vm
 
             // Wire gamepad controller to game actions
             LaunchedEffect(Unit) {
@@ -145,8 +171,6 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            val dataLoaded by vm.dataLoaded.collectAsState()
-            val gs by vm.gameState.collectAsState()
             val ui by vm.uiState.collectAsState()
             val theme by vm.currentTheme.collectAsState()
             val portraitLayout by vm.portraitLayout.collectAsState()
@@ -186,8 +210,6 @@ class MainActivity : ComponentActivity() {
             val leftHanded by vm.leftHanded.collectAsState()
             val infinityTimer by vm.infinityTimer.collectAsState()
             val infinityTimerEnabled by vm.infinityTimerEnabled.collectAsState()
-            val timerExpired by vm.timerExpired.collectAsState()
-            val remainingSeconds by vm.remainingSeconds.collectAsState()
             val showOnboarding by vm.showOnboarding.collectAsState()
 
             // Sync controller settings to gamepad handler
@@ -236,34 +258,6 @@ class MainActivity : ComponentActivity() {
             val activeCustomLayout by vm.activeCustomLayout.collectAsState()
             val profile by vm.playerProfile.collectAsState()
             val freeformEditMode by vm.freeformEditMode.collectAsState()
-            val game3DState by vm.game3DState.collectAsState()
-
-            // 3-phase launch: LOADING → WELCOME → READY
-            var phase by remember { mutableStateOf(0) } // 0=loading, 1=welcome, 2=ready
-
-            // Phase transitions
-            LaunchedEffect(dataLoaded) {
-                if (dataLoaded && phase == 0) {
-                    phase = 1 // show welcome
-                    delay(2000) // welcome visible for 2s
-                    phase = 2 // show content
-                }
-            }
-
-            // Animated alphas for each phase
-            val splashAlpha by animateFloatAsState(
-                targetValue = if (phase == 0) 1f else 0f,
-                animationSpec = tween(500, easing = EaseOut), label = "splash"
-            )
-            val welcomeAlpha by animateFloatAsState(
-                targetValue = if (phase == 1) 1f else 0f,
-                animationSpec = tween(if (phase == 1) 600 else 500, easing = if (phase == 1) EaseOut else EaseIn),
-                label = "welcome"
-            )
-            val contentAlpha by animateFloatAsState(
-                targetValue = if (phase == 2) 1f else 0f,
-                animationSpec = tween(700, easing = EaseOut), label = "content"
-            )
 
             val config = LocalConfiguration.current
             val isLandscape = config.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
@@ -294,23 +288,6 @@ class MainActivity : ComponentActivity() {
                     }
                 }
                 Box(Modifier.fillMaxSize()) {
-                    // Layer 1: Splash — rotating cube + falling pieces (visible during loading)
-                    if (splashAlpha > 0.01f) {
-                        SplashScreen(isDark = isDarkMode, modifier = Modifier.fillMaxSize().alpha(splashAlpha))
-                    }
-
-                    // Layer 2: Welcome — "Welcome, Player" over the falling pieces background
-                    if (welcomeAlpha > 0.01f) {
-                        WelcomeScreen(
-                            playerName = name,
-                            isDark = isDarkMode,
-                            modifier = Modifier.fillMaxSize().alpha(welcomeAlpha)
-                        )
-                    }
-
-                    // Layer 3: Main content — landing page, game, settings
-                    if (contentAlpha > 0.01f) {
-                        Box(Modifier.fillMaxSize().alpha(contentAlpha)) {
                 BackHandler(enabled = freeformEditMode) { vm.exitFreeformEditMode() }
                 BackHandler(enabled = ui.showSettings && !freeformEditMode) {
                     when (ui.settingsPage) {
@@ -413,218 +390,100 @@ class MainActivity : ComponentActivity() {
                         )
                     }
 
-                    else -> {
-                        if (is3D && game3DState.status != GameStatus.MENU) {
-                            Game3DScreen(
-                                state = game3DState,
-                                onMoveX = vm::move3DX,
-                                onMoveZ = vm::move3DZ,
-                                onRotateXZ = vm::rotate3DXZ,
-                                onRotateXY = vm::rotate3DXY,
-                                onHardDrop = vm::hardDrop3D,
-                                onHold = vm::hold3D,
-                                onPause = { if (game3DState.status == GameStatus.PLAYING) vm.pause3D() else vm.resume3D() },
-                                onStart = vm::start3DGame,
-                                onOpenSettings = vm::openSettings,
-                                onSoftDrop = vm::softDrop3D,
-                                onToggleGravity = vm::toggle3DGravity,
-                                onQuit = vm::quit3DGame,
-                                material = PieceMaterial.entries.find { it.name == pieceMaterial } ?: PieceMaterial.CLASSIC
-                            )
-                        } else {
-                            GameScreen(
-                                gameState = gs.copy(highScore = hs), layoutPreset = activeLayout, dpadStyle = dpadStyle,
-                                ghostEnabled = ghost, animationStyle = anim, animationDuration = animDur,
-                                multiColor = multiColor,
-                                customLayout = activeCustomLayout, scoreHistory = history,
-                                freeformElements = profile.freeformElements,
-                                levelEventsEnabled = levelEvents,
-                                buttonStyle = buttonStyle,
-                    boardShape = boardShape,
-                    infoBarShape = infoBarShape,
-                    infoBarType = infoBarType,
-                                controllerLayoutMode = controllerLayoutMode,
-                                controllerConnected = GamepadController.getConnectedControllers().isNotEmpty(),
-                                timerExpired = timerExpired,
-                                remainingSeconds = remainingSeconds,
-                                pieceMaterial = pieceMaterial,
-                                highContrast = highContrast,
-                                uiScale = uiScale,
-                                leftHanded = leftHanded,
-                                portraitLayout = portraitLayout,
-                                onCloseApp = { this@MainActivity.finishAndRemoveTask() },
-                                showOnboarding = showOnboarding,
-                                onDismissOnboarding = vm::dismissOnboarding,
-                                onStartGame = if (is3D) vm::start3DGame else vm::startGame,
-                                onPause = vm::pauseGame, onResume = vm::resumeGame,
-                                onRotate = vm::rotate, onRotateCCW = vm::rotateCounterClockwise,
-                                onHardDrop = vm::hardDrop, onHold = vm::holdPiece,
-                                onLeftPress = vm::startLeftDAS, onLeftRelease = vm::stopDAS,
-                                onRightPress = vm::startRightDAS, onRightRelease = vm::stopDAS,
-                                onDownPress = vm::startDownDAS, onDownRelease = vm::stopDAS,
-                                onOpenSettings = vm::openSettings, onToggleSound = vm::toggleSound,
-                                onQuit = vm::quitGame
-                            )
-                        }
-                    }
+                    else -> PlayScreen(
+                        vm = vm, is3D = is3D, activeLayout = activeLayout,
+                        portraitLayout = portraitLayout, dpadStyle = dpadStyle,
+                        ghost = ghost, anim = anim, animDur = animDur, multiColor = multiColor,
+                        activeCustomLayout = activeCustomLayout, history = history, hs = hs,
+                        freeformElements = profile.freeformElements, levelEvents = levelEvents,
+                        buttonStyle = buttonStyle, boardShape = boardShape,
+                        infoBarShape = infoBarShape, infoBarType = infoBarType,
+                        controllerLayoutMode = controllerLayoutMode,
+                        controllerConnected = controllerConnected,
+                        pieceMaterial = pieceMaterial, highContrast = highContrast,
+                        uiScale = uiScale, leftHanded = leftHanded,
+                        showOnboarding = showOnboarding,
+                        onCloseApp = { this@MainActivity.finishAndRemoveTask() }
+                    )
                 }
-                        }
-                    }
                 }
             }
         }
     }
 }
 
-// ==================== WELCOME SCREEN ====================
-
+/**
+ * The game itself (menu, 2D or 3D). Game state is collected HERE rather than at the activity
+ * root, so the ~60 state emissions per second during play recompose only this subtree —
+ * not the settings plumbing and everything else in setContent.
+ */
 @Composable
-private fun WelcomeScreen(playerName: String, isDark: Boolean = true, modifier: Modifier = Modifier) {
-    val bgColor = if (isDark) Color(0xFF0A0A0A) else Color(0xFFF2F2F2)
-    val accentColor = if (isDark) Color(0xFFF4D03F) else Color(0xFFB8860B)
-    val welcomeTextColor = if (isDark) Color.White.copy(0.7f) else Color(0xFF444444)
-
-    // Falling pieces in background (same as splash but dimmer)
-    val inf = rememberInfiniteTransition(label = "welcomeBg")
-    val fallAnim by inf.animateFloat(0f, 500000f, infiniteRepeatable(tween(750000, easing = LinearEasing)), label = "wFall")
-
-    data class FP(val col: Float, val speed: Float, val sz: Float, val shape: Int, val colorIdx: Int, val startY: Float)
-    val pieces = remember {
-        val rng = kotlin.random.Random(77)
-        (0..120).map { FP(rng.nextFloat(), 0.3f + rng.nextFloat() * 0.8f, 4f + rng.nextFloat() * 6f, it % 7, it % 7, rng.nextFloat() * 8000f) }
+private fun PlayScreen(
+    vm: GameViewModel, is3D: Boolean, activeLayout: LayoutPreset, portraitLayout: LayoutPreset,
+    dpadStyle: com.brickgame.tetris.ui.layout.DPadStyle, ghost: Boolean,
+    anim: com.brickgame.tetris.ui.styles.AnimationStyle, animDur: Float, multiColor: Boolean,
+    activeCustomLayout: com.brickgame.tetris.data.CustomLayoutData?,
+    history: List<com.brickgame.tetris.data.ScoreEntry>, hs: Int,
+    freeformElements: Map<String, com.brickgame.tetris.data.FreeformElement>, levelEvents: Boolean,
+    buttonStyle: String, boardShape: String, infoBarShape: String, infoBarType: String,
+    controllerLayoutMode: String, controllerConnected: Boolean, pieceMaterial: String,
+    highContrast: Boolean, uiScale: Float, leftHanded: Boolean, showOnboarding: Boolean,
+    onCloseApp: () -> Unit
+) {
+    val game3DState by vm.game3DState.collectAsState()
+    if (is3D && game3DState.status != GameStatus.MENU) {
+        Game3DScreen(
+            state = game3DState,
+            onMoveX = vm::move3DX,
+            onMoveZ = vm::move3DZ,
+            onRotateXZ = vm::rotate3DXZ,
+            onRotateXY = vm::rotate3DXY,
+            onHardDrop = vm::hardDrop3D,
+            onHold = vm::hold3D,
+            onPause = { if (vm.game3DState.value.status == GameStatus.PLAYING) vm.pause3D() else vm.resume3D() },
+            onStart = vm::start3DGame,
+            onOpenSettings = vm::openSettings,
+            onSoftDrop = vm::softDrop3D,
+            onToggleGravity = vm::toggle3DGravity,
+            onQuit = vm::quit3DGame,
+            material = PieceMaterial.entries.find { it.name == pieceMaterial } ?: PieceMaterial.CLASSIC
+        )
+        return
     }
-    val pieceColors = remember { listOf(Color(0xFFFF4444), Color(0xFF44AAFF), Color(0xFFFFAA00), Color(0xFF44FF44), Color(0xFFFF44FF), Color(0xFF44FFFF), Color(0xFFF4D03F)) }
-    val shapes = remember { listOf(
-        listOf(0 to 0, 1 to 0, 0 to 1, 1 to 1), listOf(0 to 0, 1 to 0, 2 to 0, 3 to 0),
-        listOf(0 to 0, 1 to 0, 2 to 0, 2 to 1), listOf(0 to 0, 1 to 0, 2 to 0, 0 to 1),
-        listOf(0 to 0, 1 to 0, 1 to 1, 2 to 1), listOf(1 to 0, 2 to 0, 0 to 1, 1 to 1),
-        listOf(0 to 0, 1 to 0, 2 to 0, 1 to 1),
-    ) }
-    val alphaBoost = if (isDark) 1f else 2.5f
-    val trailColor = if (isDark) Color(0xFF22C55E) else Color(0xFF22A050)
-
-    Box(modifier.background(bgColor), contentAlignment = Alignment.Center) {
-        // Falling pieces background (dimmer than splash)
-        Canvas(Modifier.fillMaxSize()) {
-            val w = size.width; val h = size.height; val wrapH = h + 400f
-            pieces.forEach { p ->
-                val rawY = p.startY + fallAnim * p.speed
-                val baseY = (rawY % wrapH) - 200f; val x = p.col * w; val s = p.sz
-                val pColor = pieceColors[p.colorIdx]; val shape = shapes[p.shape % shapes.size]
-                val pa = (0.08f * alphaBoost).coerceAtMost(0.4f)
-                shape.forEach { (dx, dy) ->
-                    drawRoundRect(pColor.copy(pa), Offset(x + dx * (s + 2), baseY + dy * (s + 2)), Size(s, s), CornerRadius(2f))
-                }
-                for (ti in 1..2) {
-                    val ty = baseY - ti * (s + 2) * 1.1f; val ta = (0.04f * alphaBoost * (1f - ti / 3f)).coerceAtMost(0.25f)
-                    shape.forEach { (dx, dy) ->
-                        drawRoundRect(trailColor.copy(ta), Offset(x + dx * (s + 2), ty + dy * (s + 2)), Size(s * 0.9f, s * 0.9f), CornerRadius(2f))
-                    }
-                }
-            }
-        }
-
-        // Welcome text
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(
-                "Welcome,",
-                fontSize = 22.sp,
-                fontWeight = FontWeight.Light,
-                fontFamily = FontFamily.Monospace,
-                color = welcomeTextColor,
-                letterSpacing = 2.sp
-            )
-            Spacer(Modifier.height(8.dp))
-            Text(
-                playerName.ifEmpty { "Player" },
-                fontSize = 32.sp,
-                fontWeight = FontWeight.Bold,
-                fontFamily = FontFamily.Monospace,
-                color = accentColor,
-                letterSpacing = 4.sp
-            )
-        }
-    }
-}
-
-// ==================== SPLASH SCREEN ====================
-
-@Composable
-private fun SplashScreen(isDark: Boolean = true, modifier: Modifier = Modifier) {
-    val bgColor = if (isDark) Color(0xFF0A0A0A) else Color(0xFFF2F2F2)
-    val inf = rememberInfiniteTransition(label = "splash")
-    val rotation by inf.animateFloat(0f, 360f, infiniteRepeatable(tween(4000, easing = LinearEasing)), label = "rot")
-    val elev by inf.animateFloat(15f, 40f, infiniteRepeatable(tween(3000, easing = EaseInOutSine), RepeatMode.Reverse), label = "elev")
-
-    data class FP(val col: Float, val speed: Float, val sz: Float, val shape: Int, val colorIdx: Int, val startY: Float)
-    val pieces = remember {
-        val rng = kotlin.random.Random(77)
-        (0..120).map { FP(rng.nextFloat(), 0.3f + rng.nextFloat() * 0.8f, 4f + rng.nextFloat() * 6f, it % 7, it % 7, rng.nextFloat() * 8000f) }
-    }
-    val fallAnim by inf.animateFloat(0f, 500000f, infiniteRepeatable(tween(750000, easing = LinearEasing)), label = "fall")
-
-    val pieceColors = remember { listOf(Color(0xFFFF4444), Color(0xFF44AAFF), Color(0xFFFFAA00), Color(0xFF44FF44), Color(0xFFFF44FF), Color(0xFF44FFFF), Color(0xFFF4D03F)) }
-    val shapes = remember { listOf(
-        listOf(0 to 0, 1 to 0, 0 to 1, 1 to 1), listOf(0 to 0, 1 to 0, 2 to 0, 3 to 0),
-        listOf(0 to 0, 1 to 0, 2 to 0, 2 to 1), listOf(0 to 0, 1 to 0, 2 to 0, 0 to 1),
-        listOf(0 to 0, 1 to 0, 1 to 1, 2 to 1), listOf(1 to 0, 2 to 0, 0 to 1, 1 to 1),
-        listOf(0 to 0, 1 to 0, 2 to 0, 1 to 1),
-    ) }
-    val alphaBoost = if (isDark) 1f else 2.5f
-    val trailColor = if (isDark) Color(0xFF22C55E) else Color(0xFF22A050)
-    val cubeEdgeColor = if (isDark) Color.White.copy(0.2f) else Color.Black.copy(0.15f)
-
-    Box(modifier.background(bgColor), contentAlignment = Alignment.Center) {
-        // Falling pieces background
-        Canvas(Modifier.fillMaxSize()) {
-            val w = size.width; val h = size.height; val wrapH = h + 400f
-            pieces.forEach { p ->
-                val rawY = p.startY + fallAnim * p.speed
-                val baseY = (rawY % wrapH) - 200f; val x = p.col * w; val s = p.sz
-                val pColor = pieceColors[p.colorIdx]; val shape = shapes[p.shape % shapes.size]
-                val pa = (0.12f * alphaBoost).coerceAtMost(0.5f)
-                shape.forEach { (dx, dy) ->
-                    drawRoundRect(pColor.copy(pa), Offset(x + dx * (s + 2), baseY + dy * (s + 2)), Size(s, s), CornerRadius(2f))
-                }
-                for (ti in 1..3) {
-                    val ty = baseY - ti * (s + 2) * 1.1f; val ta = (0.06f * alphaBoost * (1f - ti / 4f)).coerceAtMost(0.3f)
-                    shape.forEach { (dx, dy) ->
-                        drawRoundRect(trailColor.copy(ta), Offset(x + dx * (s + 2), ty + dy * (s + 2)), Size(s * 0.9f, s * 0.9f), CornerRadius(2f))
-                    }
-                }
-            }
-        }
-
-        // Central rotating 3D cube
-        Canvas(Modifier.size(100.dp)) {
-            val w = size.width; val h = size.height; val s = minOf(w, h) * 0.35f
-            val cx = w / 2f; val cy = h / 2f
-            val radAz = Math.toRadians(rotation.toDouble()); val radEl = Math.toRadians(elev.toDouble())
-            val cosAz = cos(radAz).toFloat(); val sinAz = sin(radAz).toFloat()
-            val cosEl = cos(radEl).toFloat(); val sinEl = sin(radEl).toFloat()
-            fun proj(px: Float, py: Float, pz: Float): Offset {
-                val rx = px * cosAz - py * sinAz; val ry = px * sinAz + py * cosAz; val rz = pz * cosEl - ry * sinEl
-                return Offset(cx + rx * s, cy - rz * s)
-            }
-            val c = arrayOf(proj(-1f,-1f,-1f), proj(1f,-1f,-1f), proj(1f,1f,-1f), proj(-1f,1f,-1f),
-                proj(-1f,-1f,1f), proj(1f,-1f,1f), proj(1f,1f,1f), proj(-1f,1f,1f))
-            val corners3d = arrayOf(floatArrayOf(-1f,-1f,-1f), floatArrayOf(1f,-1f,-1f), floatArrayOf(1f,1f,-1f), floatArrayOf(-1f,1f,-1f),
-                floatArrayOf(-1f,-1f,1f), floatArrayOf(1f,-1f,1f), floatArrayOf(1f,1f,1f), floatArrayOf(-1f,1f,1f))
-            data class CF(val i: IntArray, val col: Color)
-            val faces = listOf(
-                CF(intArrayOf(4,5,6,7), Color(0xFF22C55E).copy(0.5f)), CF(intArrayOf(0,3,2,1), Color(0xFF22C55E).copy(0.15f)),
-                CF(intArrayOf(0,1,5,4), Color(0xFFFF9800).copy(0.35f)), CF(intArrayOf(3,7,6,2), Color(0xFFFF9800).copy(0.15f)),
-                CF(intArrayOf(0,4,7,3), Color(0xFF2196F3).copy(0.35f)), CF(intArrayOf(1,2,6,5), Color(0xFF2196F3).copy(0.15f)))
-            data class SF(val i: IntArray, val col: Color, val d: Float)
-            val sorted = faces.map { f ->
-                val d = f.i.map { idx -> val cr = corners3d[idx]; val ry = cr[0] * sinAz + cr[1] * cosAz; cr[2] * sinEl + ry * cosEl }.average().toFloat()
-                SF(f.i, f.col, d)
-            }.sortedBy { it.d }
-            for (face in sorted) {
-                val path = Path().apply { moveTo(c[face.i[0]].x, c[face.i[0]].y); for (j in 1 until face.i.size) lineTo(c[face.i[j]].x, c[face.i[j]].y); close() }
-                drawPath(path, face.col, style = Fill)
-                drawPath(path, Color.White.copy(0.2f), style = Stroke(1.5f))
-            }
-        }
-    }
+    val gs by vm.gameState.collectAsState()
+    val timerExpired by vm.timerExpired.collectAsState()
+    val remainingSeconds by vm.remainingSeconds.collectAsState()
+    GameScreen(
+        gameState = gs.copy(highScore = hs), layoutPreset = activeLayout, dpadStyle = dpadStyle,
+        ghostEnabled = ghost, animationStyle = anim, animationDuration = animDur,
+        multiColor = multiColor,
+        customLayout = activeCustomLayout, scoreHistory = history,
+        freeformElements = freeformElements,
+        levelEventsEnabled = levelEvents,
+        buttonStyle = buttonStyle,
+        boardShape = boardShape,
+        infoBarShape = infoBarShape,
+        infoBarType = infoBarType,
+        controllerLayoutMode = controllerLayoutMode,
+        controllerConnected = controllerConnected,
+        timerExpired = timerExpired,
+        remainingSeconds = remainingSeconds,
+        pieceMaterial = pieceMaterial,
+        highContrast = highContrast,
+        uiScale = uiScale,
+        leftHanded = leftHanded,
+        portraitLayout = portraitLayout,
+        onCloseApp = onCloseApp,
+        showOnboarding = showOnboarding,
+        onDismissOnboarding = vm::dismissOnboarding,
+        onStartGame = if (is3D) vm::start3DGame else vm::startGame,
+        onPause = vm::pauseGame, onResume = vm::resumeGame,
+        onRotate = vm::rotate, onRotateCCW = vm::rotateCounterClockwise,
+        onHardDrop = vm::hardDrop, onHold = vm::holdPiece,
+        onLeftPress = vm::startLeftDAS, onLeftRelease = vm::stopDAS,
+        onRightPress = vm::startRightDAS, onRightRelease = vm::stopDAS,
+        onDownPress = vm::startDownDAS, onDownRelease = vm::stopDAS,
+        onOpenSettings = vm::openSettings, onToggleSound = vm::toggleSound,
+        onQuit = vm::quitGame
+    )
 }

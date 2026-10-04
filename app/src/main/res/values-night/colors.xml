@@ -1,0 +1,4 @@
+<resources>
+    <!-- Window + splash background; matches the dark app background -->
+    <color name="app_background">#FF0A0A0A</color>
+</resources>
