@@ -47,7 +47,7 @@ class PlayerRepository(private val context: Context) {
             }
         }
     
-    suspend fun addScore(playerName: String, score: Int, level: Int, lines: Int) {
+    suspend fun addScore(playerName: String, score: Int, level: Int, lines: Int, profileId: String = "") {
         context.playerDataStore.edit { prefs ->
             val currentJson = prefs[SCORE_HISTORY] ?: "[]"
             val currentList = try {
@@ -58,6 +58,7 @@ class PlayerRepository(private val context: Context) {
             
             currentList.add(0, ScoreEntry(
                 playerName = playerName,
+                profileId = profileId,
                 score = score,
                 level = level,
                 lines = lines,
@@ -78,6 +79,8 @@ class PlayerRepository(private val context: Context) {
 @Serializable
 data class ScoreEntry(
     val playerName: String = "Player",
+    /** LocalPlayer id; empty for scores recorded before multi-player profiles existed */
+    val profileId: String = "",
     val score: Int,
     val level: Int,
     val lines: Int,

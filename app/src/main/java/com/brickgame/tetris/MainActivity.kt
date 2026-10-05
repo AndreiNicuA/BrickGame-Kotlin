@@ -51,6 +51,15 @@ import com.brickgame.tetris.ui.screens.GameScreen
 import com.brickgame.tetris.ui.screens.GameViewModel
 import com.brickgame.tetris.ui.screens.SettingsScreen
 import com.brickgame.tetris.ui.theme.BrickGameTheme
+import com.brickgame.tetris.ui.brand.Bw
+import com.brickgame.tetris.ui.brand.BwDarkSystemBars
+import com.brickgame.tetris.ui.brand.MenuScreen
+import com.brickgame.tetris.ui.brand.OnboardingScreen
+import com.brickgame.tetris.ui.brand.PlayerSummary
+import com.brickgame.tetris.ui.brand.PlayersScreen
+import com.brickgame.tetris.data.LocalPlayer
+import com.brickgame.tetris.data.PlayStyle
+import androidx.compose.runtime.saveable.rememberSaveable
 import com.brickgame.tetris.ui.theme.LocalIsDarkMode
 import kotlinx.coroutines.delay
 import kotlin.math.*
@@ -455,6 +464,10 @@ private fun PlayScreen(
         return
     }
     val gs by vm.gameState.collectAsState()
+    if (gs.status == GameStatus.MENU) {
+        BrandScreens(vm, is3D, portraitLayout, swipeControls, history, showOnboarding)
+        return
+    }
     val timerExpired by vm.timerExpired.collectAsState()
     val remainingSeconds by vm.remainingSeconds.collectAsState()
     GameScreen(
@@ -491,4 +504,65 @@ private fun PlayScreen(
         onOpenSettings = vm::openSettings, onToggleSound = vm::toggleSound,
         onQuit = vm::quitGame
     )
+}
+
+/** Menu, intro and "Who's playing?" — the brand screens shown while no game is running. */
+@Composable
+private fun BrandScreens(
+    vm: GameViewModel, is3D: Boolean, portraitLayout: LayoutPreset, swipeControls: Boolean,
+    history: List<com.brickgame.tetris.data.ScoreEntry>, showOnboarding: Boolean
+) {
+    BwDarkSystemBars()
+    val playersState by vm.players.collectAsState()
+    val playerName by vm.playerName.collectAsState()
+    val difficulty by vm.difficulty.collectAsState()
+    var showPlayers by rememberSaveable { mutableStateOf(false) }
+    val style = when (portraitLayout) {
+        LayoutPreset.PORTRAIT_CLASSIC -> PlayStyle.CLASSIC
+        LayoutPreset.PORTRAIT_3D -> PlayStyle.THREE_D
+        else -> PlayStyle.NEON
+    }
+    val active = playersState.active
+    // Scores recorded before profiles existed belong to the player with that name
+    fun scoresOf(p: LocalPlayer?) = history.filter { e ->
+        if (p == null) true else e.profileId == p.id || (e.profileId.isEmpty() && e.playerName == p.name)
+    }
+
+    when {
+        showOnboarding -> OnboardingScreen(
+            initialName = active?.name ?: playerName,
+            initialSwipe = swipeControls,
+            initialStyle = style,
+            initialDifficulty = difficulty,
+            onFinish = { n, sw, st, d -> vm.completeOnboarding(n, sw, st, d) },
+            onSkip = vm::dismissOnboarding
+        )
+        showPlayers -> PlayersScreen(
+            players = playersState.players.map { p ->
+                val mine = scoresOf(p)
+                PlayerSummary(p, mine.maxOfOrNull { it.score } ?: 0, mine.maxOfOrNull { it.timestamp })
+            },
+            activeId = playersState.activeId,
+            onPick = { id -> vm.switchPlayer(id) },
+            onAdd = { n -> vm.addPlayer(n) },
+            onClose = { showPlayers = false }
+        )
+        else -> {
+            val mine = scoresOf(active)
+            val best = mine.maxByOrNull { it.score }
+            MenuScreen(
+                playerName = active?.name ?: playerName,
+                playerColor = Bw.playerColor(active?.colorIndex ?: 0),
+                bestScore = best?.score ?: 0,
+                bestLevel = best?.level ?: 0,
+                style = style,
+                onSelectStyle = vm::selectStyle,
+                onPlay = { if (is3D) vm.start3DGame() else vm.startGame() },
+                onSwitchPlayer = { showPlayers = true },
+                onSettings = vm::openSettings,
+                onRecords = { vm.openSettings(); vm.navigateSettings(GameViewModel.SettingsPage.PROFILE) },
+                onHowToPlay = vm::replayOnboarding
+            )
+        }
+    }
 }

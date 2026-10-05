@@ -23,6 +23,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private val customThemeRepo = CustomThemeRepository(application)
     private val customLayoutRepo = CustomLayoutRepository(application)
     private val profileRepo = PlayerProfileRepository(application)
+    private val playersRepo = ProfilesRepository(application)
     val soundManager = SoundManager(application)
     val vibrationManager = VibrationManager(application)
 
@@ -151,7 +152,76 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     /** Guards against saving the same finished game twice (several loop paths can observe GAME_OVER). */
     private var gameOverHandled = false
 
-    init { loadSettings(); loadProfile() }
+    // ===== Local players ("Who's playing?") =====
+    val players: StateFlow<PlayersState> = playersRepo.state.stateIn(viewModelScope, SharingStarted.Eagerly, PlayersState())
+    private fun activePlayerId(): String = players.value.active?.id ?: ""
+
+    init { loadSettings(); loadProfile(); loadPlayers() }
+
+    private fun loadPlayers() {
+        viewModelScope.launch {
+            // Existing installs: the current name/settings become player #1
+            playersRepo.ensureFirstPlayer(
+                name = playerRepo.playerName.first(),
+                swipe = settingsRepo.swipeControls.first(),
+                style = styleFor(LayoutPreset.entries.find { it.name == settingsRepo.portraitLayout.first() } ?: LayoutPreset.PORTRAIT_CLASSIC),
+                difficulty = settingsRepo.difficulty.first()
+            )
+        }
+    }
+
+    private fun styleFor(layout: LayoutPreset): PlayStyle = when (layout) {
+        LayoutPreset.PORTRAIT_CLASSIC -> PlayStyle.CLASSIC
+        LayoutPreset.PORTRAIT_3D -> PlayStyle.THREE_D
+        else -> PlayStyle.NEON
+    }
+
+    private fun layoutFor(style: PlayStyle): LayoutPreset = when (style) {
+        PlayStyle.CLASSIC -> LayoutPreset.PORTRAIT_CLASSIC
+        PlayStyle.THREE_D -> LayoutPreset.PORTRAIT_3D
+        PlayStyle.NEON -> if (styleFor(_portraitLayout.value) == PlayStyle.NEON) _portraitLayout.value else LayoutPreset.PORTRAIT_MODERN
+    }
+
+    /** Pick Classic / Neon / 3D from the menu (remembered for the active player). */
+    fun selectStyle(style: PlayStyle) {
+        setPortraitLayout(layoutFor(style))
+    }
+
+    /** Switch to another player and apply their name, controls, style and speed. */
+    fun switchPlayer(id: String) {
+        viewModelScope.launch {
+            playersRepo.setActive(id)
+            players.first { it.activeId == id }.active?.let { applyPlayer(it) }
+        }
+    }
+
+    fun addPlayer(name: String) {
+        viewModelScope.launch {
+            val p = playersRepo.addPlayer(name.trim()) ?: return@launch
+            players.first { it.activeId == p.id }
+            applyPlayer(p)
+        }
+    }
+
+    private suspend fun applyPlayer(p: LocalPlayer) {
+        playerRepo.setPlayerName(p.name)
+        _swipeControls.value = p.swipeControls; settingsRepo.setSwipeControls(p.swipeControls)
+        val layout = layoutFor(p.style)
+        _portraitLayout.value = layout; _activeCustomLayout.value = null; settingsRepo.setPortraitLayout(layout.name)
+        val d = Difficulty.entries.find { it.name == p.difficulty } ?: Difficulty.NORMAL
+        _difficulty.value = d; game.setDifficulty(d); settingsRepo.setDifficulty(d.name)
+    }
+
+    /** Last page of the intro: name, controls, style and speed in one go. */
+    fun completeOnboarding(name: String, swipe: Boolean, style: PlayStyle, difficulty: Difficulty) {
+        setPlayerName(name.trim().ifEmpty { "Player" })
+        setSwipeControls(swipe)
+        selectStyle(style)
+        setDifficulty(difficulty)
+        dismissOnboarding()
+    }
+
+    fun replayOnboarding() { _showOnboarding.value = true }
 
     private fun loadProfile() {
         viewModelScope.launch {
@@ -304,7 +374,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         stopGameLoop(); stopDAS(); countdownJob?.cancel()
         soundManager.playGameOver(); vibrationManager.vibrateGameOver()
         val s = gameState.value
-        viewModelScope.launch { if (s.score > _highScore.value) settingsRepo.setHighScore(s.score); playerRepo.addScore(playerName.value, s.score, s.level, s.lines) }
+        viewModelScope.launch { if (s.score > _highScore.value) settingsRepo.setHighScore(s.score); playerRepo.addScore(playerName.value, s.score, s.level, s.lines, activePlayerId()) }
     }
 
     // ===== Settings navigation =====
@@ -314,7 +384,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setTheme(t: GameTheme) { _currentTheme.value = t; viewModelScope.launch { settingsRepo.setThemeName(t.name) } }
     fun setGhostPieceEnabled(v: Boolean) { _ghostPieceEnabled.value = v; viewModelScope.launch { settingsRepo.setGhostPieceEnabled(v) } }
-    fun setDifficulty(d: Difficulty) { _difficulty.value = d; game.setDifficulty(d); viewModelScope.launch { settingsRepo.setDifficulty(d.name) } }
+    fun setDifficulty(d: Difficulty) { _difficulty.value = d; game.setDifficulty(d); viewModelScope.launch { settingsRepo.setDifficulty(d.name); playersRepo.updateActive { it.copy(difficulty = d.name) } } }
     fun setGameMode(m: GameMode) { _gameMode.value = m; viewModelScope.launch { settingsRepo.setGameMode(m.name) } }
     fun setLevelEventsEnabled(v: Boolean) { _levelEventsEnabled.value = v; viewModelScope.launch { settingsRepo.setLevelEventsEnabled(v) } }
     fun setButtonStyle(v: String) { _buttonStyle.value = v; viewModelScope.launch { settingsRepo.setButtonStyle(v) } }
@@ -323,7 +393,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     fun setInfoBarShape(v: String) { _infoBarShape.value = v; viewModelScope.launch { profileRepo.updateProfile { it.copy(infoBarShape = v) } } }
     fun setControllerLayout(v: String) { _controllerLayout.value = v; viewModelScope.launch { settingsRepo.setControllerLayout(v) } }
     fun setLeftHanded(v: Boolean) { _leftHanded.value = v; viewModelScope.launch { settingsRepo.setLeftHanded(v) } }
-    fun setSwipeControls(v: Boolean) { _swipeControls.value = v; viewModelScope.launch { settingsRepo.setSwipeControls(v) } }
+    fun setSwipeControls(v: Boolean) { _swipeControls.value = v; viewModelScope.launch { settingsRepo.setSwipeControls(v); playersRepo.updateActive { it.copy(swipeControls = v) } } }
     fun setInfinityTimer(v: Int) { _infinityTimer.value = v; viewModelScope.launch { settingsRepo.setInfinityTimer(v) } }
     fun dismissOnboarding() { _showOnboarding.value = false; viewModelScope.launch { settingsRepo.setOnboardingComplete(true) } }
 
@@ -332,9 +402,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     fun setAnimationDuration(d: Float) { _animationDuration.value = d; viewModelScope.launch { settingsRepo.setAnimationDuration(d) } }
     fun setSoundEnabled(v: Boolean) { _soundEnabled.value = v; soundManager.setEnabled(v); viewModelScope.launch { settingsRepo.setSoundEnabled(v) } }
     fun setVibrationEnabled(v: Boolean) { _vibrationEnabled.value = v; vibrationManager.setEnabled(v); viewModelScope.launch { settingsRepo.setVibrationEnabled(v) } }
-    fun setPlayerName(n: String) { viewModelScope.launch { playerRepo.setPlayerName(n) } }
+    fun setPlayerName(n: String) { viewModelScope.launch { playerRepo.setPlayerName(n); playersRepo.updateActive { it.copy(name = n) } } }
     fun toggleSound() { setSoundEnabled(!_soundEnabled.value) }
-    fun setPortraitLayout(p: LayoutPreset) { _portraitLayout.value = p; _activeCustomLayout.value = null; viewModelScope.launch { settingsRepo.setPortraitLayout(p.name) } }
+    fun setPortraitLayout(p: LayoutPreset) { _portraitLayout.value = p; _activeCustomLayout.value = null; viewModelScope.launch { settingsRepo.setPortraitLayout(p.name); playersRepo.updateActive { it.copy(style = styleFor(p)) } } }
     fun setLandscapeLayout(p: LayoutPreset) { _landscapeLayout.value = p; viewModelScope.launch { settingsRepo.setLandscapeLayout(p.name) } }
     fun setDPadStyle(s: DPadStyle) { _dpadStyle.value = s; viewModelScope.launch { settingsRepo.setDpadStyle(s.name) } }
     fun setMultiColorEnabled(v: Boolean) { _multiColorEnabled.value = v; viewModelScope.launch { settingsRepo.setMultiColorEnabled(v) } }
@@ -495,7 +565,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         if (s.score > 0 && !gameOverHandled) {
             viewModelScope.launch {
                 if (s.score > _highScore.value) settingsRepo.setHighScore(s.score)
-                playerRepo.addScore(playerName.value, s.score, s.level, s.lines)
+                playerRepo.addScore(playerName.value, s.score, s.level, s.lines, activePlayerId())
             }
         }
         game.resetToMenu()
@@ -509,7 +579,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         if (s.score > 0) {
             viewModelScope.launch {
                 if (s.score > _highScore.value) settingsRepo.setHighScore(s.score)
-                playerRepo.addScore(playerName.value, s.score, s.level, s.layers)
+                playerRepo.addScore(playerName.value, s.score, s.level, s.layers, activePlayerId())
             }
         }
         game3D.resetToMenu()
