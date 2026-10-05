@@ -47,6 +47,7 @@ class SettingsRepository(private val context: Context) {
         private val BUTTON_STYLE = stringPreferencesKey("button_style")
         private val CONTROLLER_LAYOUT = stringPreferencesKey("controller_layout")
         private val LEFT_HANDED = booleanPreferencesKey("left_handed")
+        private val SWIPE_CONTROLS = booleanPreferencesKey("swipe_controls")
         private val GAME_MODE = stringPreferencesKey("game_mode")
         private val INFINITY_TIMER = intPreferencesKey("infinity_timer_minutes")
         private val INFINITY_TIMER_ENABLED = booleanPreferencesKey("infinity_timer_enabled")
@@ -155,6 +156,8 @@ class SettingsRepository(private val context: Context) {
 
     val leftHanded get() = pref(LEFT_HANDED, false)
     suspend fun setLeftHanded(v: Boolean) = set(LEFT_HANDED, v)
+    val swipeControls get() = pref(SWIPE_CONTROLS, false)
+    suspend fun setSwipeControls(v: Boolean) = set(SWIPE_CONTROLS, v)
 
     // Game mode persistence
     val gameMode get() = pref(GAME_MODE, "MARATHON")

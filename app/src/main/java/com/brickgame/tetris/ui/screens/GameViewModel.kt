@@ -104,6 +104,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     val controllerLayout: StateFlow<String> = _controllerLayout.asStateFlow()
     private val _leftHanded = MutableStateFlow(false)
     val leftHanded: StateFlow<Boolean> = _leftHanded.asStateFlow()
+    private val _swipeControls = MutableStateFlow(false)
+    val swipeControls: StateFlow<Boolean> = _swipeControls.asStateFlow()
     private val _infinityTimer = MutableStateFlow(0)
     val infinityTimer: StateFlow<Int> = _infinityTimer.asStateFlow()
     private val _infinityTimerEnabled = MutableStateFlow(false)
@@ -197,6 +199,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch { profileRepo.profile.collect { _infoBarShape.value = it.infoBarShape } }
         viewModelScope.launch { settingsRepo.controllerLayout.collect { _controllerLayout.value = it } }
         viewModelScope.launch { settingsRepo.leftHanded.collect { _leftHanded.value = it } }
+        viewModelScope.launch { settingsRepo.swipeControls.collect { _swipeControls.value = it } }
         viewModelScope.launch { settingsRepo.gameMode.collect { name -> _gameMode.value = GameMode.entries.find { it.name == name } ?: GameMode.MARATHON; game.setGameMode(_gameMode.value) } }
         viewModelScope.launch { settingsRepo.infinityTimer.collect { _infinityTimer.value = it } }
         viewModelScope.launch { settingsRepo.infinityTimerEnabled.collect { _infinityTimerEnabled.value = it } }
@@ -320,6 +323,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     fun setInfoBarShape(v: String) { _infoBarShape.value = v; viewModelScope.launch { profileRepo.updateProfile { it.copy(infoBarShape = v) } } }
     fun setControllerLayout(v: String) { _controllerLayout.value = v; viewModelScope.launch { settingsRepo.setControllerLayout(v) } }
     fun setLeftHanded(v: Boolean) { _leftHanded.value = v; viewModelScope.launch { settingsRepo.setLeftHanded(v) } }
+    fun setSwipeControls(v: Boolean) { _swipeControls.value = v; viewModelScope.launch { settingsRepo.setSwipeControls(v) } }
     fun setInfinityTimer(v: Int) { _infinityTimer.value = v; viewModelScope.launch { settingsRepo.setInfinityTimer(v) } }
     fun dismissOnboarding() { _showOnboarding.value = false; viewModelScope.launch { settingsRepo.setOnboardingComplete(true) } }
 

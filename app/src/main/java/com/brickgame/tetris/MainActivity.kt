@@ -208,6 +208,7 @@ class MainActivity : ComponentActivity() {
             val infoBarShape by vm.infoBarShape.collectAsState()
             val controllerLayoutMode by vm.controllerLayout.collectAsState()
             val leftHanded by vm.leftHanded.collectAsState()
+            val swipeControls by vm.swipeControls.collectAsState()
             val infinityTimer by vm.infinityTimer.collectAsState()
             val infinityTimerEnabled by vm.infinityTimerEnabled.collectAsState()
             val showOnboarding by vm.showOnboarding.collectAsState()
@@ -386,7 +387,9 @@ class MainActivity : ComponentActivity() {
                             infinityTimerEnabled = infinityTimerEnabled,
                             onSetInfinityTimerEnabled = vm::setInfinityTimerEnabled,
                             leftHanded = leftHanded,
-                            onSetLeftHanded = vm::setLeftHanded
+                            onSetLeftHanded = vm::setLeftHanded,
+                            swipeControls = swipeControls,
+                            onSetSwipeControls = vm::setSwipeControls
                         )
                     }
 
@@ -402,6 +405,7 @@ class MainActivity : ComponentActivity() {
                         controllerConnected = controllerConnected,
                         pieceMaterial = pieceMaterial, highContrast = highContrast,
                         uiScale = uiScale, leftHanded = leftHanded,
+                        swipeControls = swipeControls,
                         showOnboarding = showOnboarding,
                         onCloseApp = { this@MainActivity.finishAndRemoveTask() }
                     )
@@ -427,7 +431,7 @@ private fun PlayScreen(
     freeformElements: Map<String, com.brickgame.tetris.data.FreeformElement>, levelEvents: Boolean,
     buttonStyle: String, boardShape: String, infoBarShape: String, infoBarType: String,
     controllerLayoutMode: String, controllerConnected: Boolean, pieceMaterial: String,
-    highContrast: Boolean, uiScale: Float, leftHanded: Boolean, showOnboarding: Boolean,
+    highContrast: Boolean, uiScale: Float, leftHanded: Boolean, swipeControls: Boolean, showOnboarding: Boolean,
     onCloseApp: () -> Unit
 ) {
     val game3DState by vm.game3DState.collectAsState()
@@ -473,6 +477,7 @@ private fun PlayScreen(
         uiScale = uiScale,
         leftHanded = leftHanded,
         portraitLayout = portraitLayout,
+        swipeControls = swipeControls,
         onCloseApp = onCloseApp,
         showOnboarding = showOnboarding,
         onDismissOnboarding = vm::dismissOnboarding,

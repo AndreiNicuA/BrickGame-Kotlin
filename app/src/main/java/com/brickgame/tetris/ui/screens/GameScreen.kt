@@ -26,7 +26,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import com.brickgame.tetris.input.SwipeAction
+import com.brickgame.tetris.input.detectSwipeControls
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.geometry.CornerRadius
@@ -480,6 +483,8 @@ fun GameScreen(
     uiScale: Float = 1.0f,
     leftHanded: Boolean = false,
     portraitLayout: LayoutPreset = LayoutPreset.PORTRAIT_CLASSIC,
+    /** Swipe-only controls: the whole board is the controller, no buttons */
+    swipeControls: Boolean = false,
     onCloseApp: () -> Unit = {},
     showOnboarding: Boolean = false,
     onDismissOnboarding: () -> Unit = {},
@@ -582,7 +587,9 @@ fun GameScreen(
         } else {
             // Normal game content
             Box(Modifier.fillMaxSize().background(theme.backgroundColor).systemBarsPadding()) {
-                if (customLayout != null) {
+                if (swipeControls) {
+                    SwipeLayout(gameState, effectiveGhost, animationStyle, animationDuration, onRotate, onHardDrop, effectiveHold, onLeftPress, onLeftRelease, onRightPress, onRightRelease, onDownPress, onDownRelease, onPause, boardDimAlpha, effectiveNextCount)
+                } else if (customLayout != null) {
                     CustomGameLayout(gameState, customLayout, effectiveGhost, animationStyle, animationDuration, onRotate, onHardDrop, effectiveHold, onLeftPress, onLeftRelease, onRightPress, onRightRelease, onDownPress, onDownRelease, onPause, onOpenSettings, onStartGame)
                 } else when (layoutPreset) {
                     LayoutPreset.PORTRAIT_CLASSIC -> ClassicLayout(gameState, dpadStyle, effectiveGhost, animationStyle, animationDuration, onRotate, onHardDrop, effectiveHold, onLeftPress, onLeftRelease, onRightPress, onRightRelease, onDownPress, onDownRelease, onPause, onOpenSettings, onStartGame, boardDimAlpha, effectiveNextCount)
@@ -596,13 +603,13 @@ fun GameScreen(
                 }
                 if (gameState.status == GameStatus.PAUSED) PauseOverlay(onResume, onOpenSettings, onQuit)
                 // Classic layout handles its own game-over with LCD curtain animation
-                if (gameState.status == GameStatus.GAME_OVER && layoutPreset != LayoutPreset.PORTRAIT_CLASSIC)
+                if (gameState.status == GameStatus.GAME_OVER && (layoutPreset != LayoutPreset.PORTRAIT_CLASSIC || swipeControls))
                     GameOverOverlay(gameState.score, gameState.level, gameState.lines, gameState.highScore, gameState.comboCount, gameState.backToBackCount, gameState.elapsedTimeMs, onStartGame, onOpenSettings, onQuit)
             }
         }
         // Modern notifications — hidden in Classic layout (portrait and landscape) to maintain authentic LCD feel
-        val isClassicStyle = layoutPreset == LayoutPreset.PORTRAIT_CLASSIC ||
-            (layoutPreset.isLandscape && portraitLayout == LayoutPreset.PORTRAIT_CLASSIC)
+        val isClassicStyle = !swipeControls && (layoutPreset == LayoutPreset.PORTRAIT_CLASSIC ||
+            (layoutPreset.isLandscape && portraitLayout == LayoutPreset.PORTRAIT_CLASSIC))
         if (!isClassicStyle) {
             ActionPopup(gameState.lastActionLabel, gameState.linesCleared, gameState.actionEvent, gameState.status)
             // Combo counter display (top of screen)
@@ -979,6 +986,107 @@ fun GameScreen(
 
             // === Controls ===
             FullControls(dp, onHD, onHold, onLP, onLR, onRP, onRR, onDP, onDR, onRotate, onPause, onSet, onStart, gs.status)
+        }
+    }
+}
+
+// === SWIPE: no buttons — the whole board is the controller ===
+@Composable private fun SwipeLayout(
+    gs: GameState, ghost: Boolean, anim: AnimationStyle, ad: Float,
+    onRotate: () -> Unit, onHD: () -> Unit, onHold: () -> Unit,
+    onLP: () -> Unit, onLR: () -> Unit, onRP: () -> Unit, onRR: () -> Unit,
+    onDP: () -> Unit, onDR: () -> Unit, onPause: () -> Unit,
+    boardDimAlpha: Float = 1f, nextCount: Int = 3
+) {
+    val theme = LocalGameTheme.current
+    val isDark = com.brickgame.tetris.ui.theme.LocalIsDarkMode.current
+    val fx = rememberGameEffects(gs, shakeDelay = 20L)
+    val ink = if (isDark) Color.White else Color.Black
+
+    // Each swipe step is one cell: press+release = exactly one move (no auto-repeat)
+    val onAction by rememberUpdatedState<(SwipeAction) -> Unit> { action ->
+        when (action) {
+            SwipeAction.LEFT -> { onLP(); onLR() }
+            SwipeAction.RIGHT -> { onRP(); onRR() }
+            SwipeAction.SOFT_DROP -> { onDP(); onDR() }
+            SwipeAction.HARD_DROP -> onHD()
+            SwipeAction.ROTATE -> onRotate()
+            SwipeAction.HOLD -> onHold()
+        }
+    }
+
+    Box(Modifier.fillMaxSize()) {
+        val bgSpeed = if (gs.level >= 10) 1f + (gs.level - 10) * 0.15f else 1f
+        FallingPiecesBackground(theme, isDark, bgSpeed, opacity = if (isDark) 0.3f else 0.18f, modifier = Modifier.matchParentSize())
+
+        Column(Modifier.fillMaxSize()) {
+            // Slim HUD — kept outside the swipe area so its button never fights the gestures
+            Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("HOLD", fontSize = 9.sp, color = ink.copy(0.55f), fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                    HoldPiecePreview(gs.holdPiece?.shape, gs.holdUsed, Modifier.size(30.dp))
+                }
+                Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                    RollingScore(gs.score, fontSize = 20.sp, fontWeight = FontWeight.ExtraBold,
+                        fontFamily = FontFamily.Monospace, color = ink.copy(0.92f), letterSpacing = 1.sp)
+                    Text("LV ${gs.level} · ${gs.lines} LINES", fontSize = 11.sp, color = ink.copy(0.6f),
+                        fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                }
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("NEXT", fontSize = 9.sp, color = ink.copy(0.55f), fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                    Row(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
+                        gs.nextPieces.take(nextCount.coerceAtMost(3)).forEachIndexed { i, p ->
+                            NextPiecePreview(p.shape, Modifier.size(if (i == 0) 30.dp else 20.dp), if (i == 0) 1f else 0.5f)
+                        }
+                    }
+                }
+                Spacer(Modifier.width(8.dp))
+                Box(Modifier.size(44.dp).clip(RoundedCornerShape(14.dp))
+                    .background(ink.copy(0.08f))
+                    .clickable(onClickLabel = "Pause") { onPause() },
+                    contentAlignment = Alignment.Center) {
+                    Canvas(Modifier.size(16.dp)) {
+                        val w = size.width * 0.28f
+                        drawRoundRect(ink.copy(0.85f), Offset(size.width * 0.12f, 0f), Size(w, size.height), CornerRadius(2f))
+                        drawRoundRect(ink.copy(0.85f), Offset(size.width * 0.6f, 0f), Size(w, size.height), CornerRadius(2f))
+                    }
+                }
+            }
+
+            BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
+                val density = LocalDensity.current
+                // One cell of finger travel per move (slightly less, so it feels responsive)
+                val stepPx = with(density) { minOf(maxWidth / TetrisGame.BOARD_WIDTH, maxHeight / TetrisGame.BOARD_HEIGHT).toPx() } * 0.85f
+                Box(Modifier.fillMaxSize()
+                    .pointerInput(stepPx) { detectSwipeControls(stepPx) { onAction(it) } }
+                    .graphicsLayer { translationX = fx.screenShakeX; translationY = fx.screenShakeY }) {
+                    GameBoard(gs.board, Modifier.fillMaxSize().alpha(boardDimAlpha), gs.currentPiece, gs.ghostY, ghost,
+                        gs.clearedLineRows, anim, ad, multiColor = LocalMultiColor.current,
+                        hardDropTrail = gs.hardDropTrail, lockEvent = gs.lockEvent,
+                        pieceMaterial = LocalPieceMaterial.current, highContrast = LocalHighContrast.current,
+                        boardOpacity = if (isDark) 0.12f else 0.18f, gameLevel = gs.level)
+                    GameEffectsLayer(fx, gs, Modifier.matchParentSize())
+                }
+                // Gesture reminder for the first few pieces of every game
+                if (gs.status == GameStatus.PLAYING && gs.spawnEvent <= 3) {
+                    SwipeHints(Modifier.align(Alignment.BottomCenter).padding(12.dp), ink)
+                }
+            }
+        }
+    }
+}
+
+@Composable private fun SwipeHints(modifier: Modifier, ink: Color) {
+    Row(modifier.fillMaxWidth()
+        .background(if (ink == Color.White) Color(0xF0141A2E) else Color(0xF0FFFFFF), RoundedCornerShape(16.dp))
+        .padding(vertical = 10.dp, horizontal = 8.dp),
+        horizontalArrangement = Arrangement.SpaceEvenly) {
+        listOf("↔" to "Drag: move", "•" to "Tap: rotate", "↓" to "Flick: drop", "↑" to "Swipe up: hold").forEach { (glyph, label) ->
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(glyph, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color(0xFF22D3EE))
+                Text(label, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = ink.copy(0.85f))
+            }
         }
     }
 }

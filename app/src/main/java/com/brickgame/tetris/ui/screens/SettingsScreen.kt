@@ -110,7 +110,9 @@ fun SettingsScreen(
     infinityTimerEnabled: Boolean = false,
     onSetInfinityTimerEnabled: (Boolean) -> Unit = {},
     leftHanded: Boolean = false,
-    onSetLeftHanded: (Boolean) -> Unit = {}
+    onSetLeftHanded: (Boolean) -> Unit = {},
+    swipeControls: Boolean = false,
+    onSetSwipeControls: (Boolean) -> Unit = {}
 ) {
     Box(Modifier.fillMaxSize().background(bg()).systemBarsPadding()) {
         Crossfade(targetState = page, animationSpec = tween(220), label = "settingsPage") { currentPage ->
@@ -120,7 +122,7 @@ fun SettingsScreen(
                 GameViewModel.SettingsPage.PROFILE -> ProfilePage(playerName, highScore, scoreHistory, onSetPlayerName, onClearHistory) { onNavigate(GameViewModel.SettingsPage.MAIN) }
                 GameViewModel.SettingsPage.THEME -> ThemePage(currentTheme, customThemes, multiColorEnabled, pieceMaterial, onSetTheme, onSetMultiColorEnabled, onSetPieceMaterial, onNewTheme, onEditTheme, onDeleteTheme) { onNavigate(GameViewModel.SettingsPage.MAIN) }
                 GameViewModel.SettingsPage.THEME_EDITOR -> if (editingTheme != null) ThemeEditorScreen(editingTheme, onUpdateEditingTheme, onSaveTheme) { onNavigate(GameViewModel.SettingsPage.THEME) }
-                GameViewModel.SettingsPage.LAYOUT -> LayoutPage(portraitLayout, landscapeLayout, dpadStyle, buttonStyle, customLayouts, activeCustomLayout, onSetPortraitLayout, onSetLandscapeLayout, onSetDPadStyle, onSetButtonStyle, onNewLayout, onEditLayout, onSelectCustomLayout, onClearCustomLayout, onDeleteLayout, leftHanded = leftHanded, onSetLeftHanded = onSetLeftHanded, onEditFreeform = { onEditFreeform() }) { onNavigate(GameViewModel.SettingsPage.MAIN) }
+                GameViewModel.SettingsPage.LAYOUT -> LayoutPage(portraitLayout, landscapeLayout, dpadStyle, buttonStyle, customLayouts, activeCustomLayout, onSetPortraitLayout, onSetLandscapeLayout, onSetDPadStyle, onSetButtonStyle, onNewLayout, onEditLayout, onSelectCustomLayout, onClearCustomLayout, onDeleteLayout, leftHanded = leftHanded, onSetLeftHanded = onSetLeftHanded, swipeControls = swipeControls, onSetSwipeControls = onSetSwipeControls, onEditFreeform = { onEditFreeform() }) { onNavigate(GameViewModel.SettingsPage.MAIN) }
                 GameViewModel.SettingsPage.LAYOUT_EDITOR -> if (editingLayout != null) LayoutEditorScreen(editingLayout, currentTheme, portraitLayout, dpadStyle, onUpdateEditingLayout, onSaveLayout) { onNavigate(GameViewModel.SettingsPage.LAYOUT) }
                 GameViewModel.SettingsPage.GAMEPLAY -> GameplayPage(difficulty, gameMode, ghostEnabled, levelEventsEnabled, infinityTimer, infinityTimerEnabled, onSetDifficulty, onSetGameMode, onSetGhostEnabled, onSetLevelEventsEnabled, onSetInfinityTimer, onSetInfinityTimerEnabled) { onNavigate(GameViewModel.SettingsPage.MAIN) }
                 GameViewModel.SettingsPage.EXPERIENCE -> ExperiencePage(animationStyle, animationDuration, soundEnabled, soundVolume, soundStyle, vibrationEnabled, vibrationIntensity, vibrationStyle, onSetAnimationStyle, onSetAnimationDuration, onSetSoundEnabled, onSetSoundVolume, onSetSoundStyle, onSetVibrationEnabled, onSetVibrationIntensity, onSetVibrationStyle) { onNavigate(GameViewModel.SettingsPage.MAIN) }
@@ -429,9 +431,13 @@ fun SettingsScreen(
                                     onP: (LayoutPreset) -> Unit, onL: (LayoutPreset) -> Unit, onD: (DPadStyle) -> Unit, onSetButtonStyle: (String) -> Unit,
                                     onNew: () -> Unit, onEdit: (CustomLayoutData) -> Unit, onSelect: (CustomLayoutData) -> Unit, onClear: () -> Unit, onDelete: (String) -> Unit,
                                     leftHanded: Boolean = false, onSetLeftHanded: (Boolean) -> Unit = {},
+                                    swipeControls: Boolean = false, onSetSwipeControls: (Boolean) -> Unit = {},
                                     onEditFreeform: () -> Unit = {}, onBack: () -> Unit) {
     LazyColumn(Modifier.fillMaxSize().padding(20.dp)) {
         item { Header("Layout", onBack) }
+        item { Lbl("Controls") }
+        item { Sel("Buttons — D-pad and action buttons", !swipeControls) { onSetSwipeControls(false) } }
+        item { Sel("Swipe — drag to move, tap to rotate, flick down to drop, swipe up to hold", swipeControls) { onSetSwipeControls(true) } }
         item { Lbl("Portrait") }
         items(LayoutPreset.portraitPresets().size) { i -> val x = LayoutPreset.portraitPresets()[i]; Sel(x.displayName, x == p && active == null) { onClear(); onP(x) } }
         if (p == LayoutPreset.PORTRAIT_FREEFORM && active == null) {
