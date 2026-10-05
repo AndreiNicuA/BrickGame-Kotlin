@@ -1,5 +1,10 @@
 package com.brickgame.tetris.ui.screens
 
+import com.brickgame.tetris.ui.brand.Bw
+import com.brickgame.tetris.ui.brand.BwDarkSystemBars
+import com.brickgame.tetris.ui.brand.BwIcon
+import com.brickgame.tetris.ui.brand.BwIconKind
+import com.brickgame.tetris.ui.brand.BwType
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.*
@@ -39,13 +44,14 @@ import com.brickgame.tetris.ui.theme.GameThemes
 import com.brickgame.tetris.ui.theme.LocalIsDarkMode
 
 // Adaptive colors — respond to light/dark mode via LocalIsDarkMode
-@Composable private fun bg() = if (LocalIsDarkMode.current) Color(0xFF0D0D0D) else Color(0xFFF5F5F5)
-@Composable private fun card() = if (LocalIsDarkMode.current) Color(0xFF1A1A1A) else Color(0xFFFFFFFF)
-@Composable private fun acc() = if (LocalIsDarkMode.current) Color(0xFFF4D03F) else Color(0xFFB8860B)
-@Composable private fun tx() = if (LocalIsDarkMode.current) Color(0xFFE8E8E8) else Color(0xFF1A1A1A)
-@Composable private fun dim() = if (LocalIsDarkMode.current) Color(0xFF888888) else Color(0xFF666666)
-@Composable private fun selBg() = if (LocalIsDarkMode.current) acc().copy(0.15f) else acc().copy(0.12f)
-@Composable private fun cardBorder() = if (LocalIsDarkMode.current) Color.Transparent else Color(0xFFE0E0E0)
+// Settings use the Brickwell design system (same look as the menu and intro)
+@Composable private fun bg() = Bw.Ground
+@Composable private fun card() = Bw.Surface
+@Composable private fun acc() = Bw.Cyan
+@Composable private fun tx() = Bw.Text
+@Composable private fun dim() = Bw.TextMuted
+@Composable private fun selBg() = Bw.Cyan.copy(0.15f)
+@Composable private fun cardBorder() = Bw.Line
 
 @Composable
 fun SettingsScreen(
@@ -114,7 +120,9 @@ fun SettingsScreen(
     swipeControls: Boolean = false,
     onSetSwipeControls: (Boolean) -> Unit = {}
 ) {
-    Box(Modifier.fillMaxSize().background(bg()).systemBarsPadding()) {
+    BwDarkSystemBars()
+    CompositionLocalProvider(androidx.compose.material3.LocalTextStyle provides TextStyle(fontFamily = Bw.Body, fontWeight = FontWeight.Medium)) {
+    Box(Modifier.fillMaxSize().background(bg()).safeDrawingPadding()) {
         Crossfade(targetState = page, animationSpec = tween(220), label = "settingsPage") { currentPage ->
             when (currentPage) {
                 GameViewModel.SettingsPage.MAIN -> MainPage(onNavigate, onBack, on3DMode)
@@ -131,6 +139,7 @@ fun SettingsScreen(
                 GameViewModel.SettingsPage.HOW_TO_PLAY -> HowToPlayPage { onNavigate(GameViewModel.SettingsPage.MAIN) }
             }
         }
+    }
     }
 }
 
@@ -751,10 +760,29 @@ fun SettingsScreen(
 }
 
 // ===== REUSABLE =====
-@Composable private fun Header(t: String, onBack: () -> Unit) { val a = acc(); val t2 = tx(); Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { Text("←", color = a, fontSize = 24.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { onBack() }.padding(8.dp)); Spacer(Modifier.width(12.dp)); Text(t, color = t2, fontSize = 22.sp, fontWeight = FontWeight.Bold) } }
-@Composable private fun MenuItem(t: String, sub: String, onClick: () -> Unit) { val c = card(); val t2 = tx(); val d = dim(); Row(Modifier.fillMaxWidth().padding(vertical = 4.dp).clip(RoundedCornerShape(12.dp)).background(c).clickable { onClick() }.padding(16.dp), verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text(t, color = t2, fontWeight = FontWeight.Bold, fontSize = 16.sp); Text(sub, color = d, fontSize = 12.sp) }; Text("›", color = d, fontSize = 20.sp) } }
-@Composable private fun Card(content: @Composable ColumnScope.() -> Unit) { val c = card(); val bd = cardBorder(); Column(Modifier.fillMaxWidth().padding(vertical = 4.dp).clip(RoundedCornerShape(12.dp)).background(c).then(if (bd != Color.Transparent) Modifier.border(1.dp, bd, RoundedCornerShape(12.dp)) else Modifier).padding(16.dp), content = content) }
-@Composable private fun Lbl(t: String) { Text(t, color = acc(), fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)) }
+@Composable private fun Header(t: String, onBack: () -> Unit) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(Bw.Surface).border(1.dp, Bw.Line, RoundedCornerShape(14.dp))
+            .clickable(onClickLabel = "Back") { onBack() }, contentAlignment = Alignment.Center) {
+            BwIcon(BwIconKind.CHEVRON_LEFT, Bw.Text)
+        }
+        Spacer(Modifier.width(14.dp))
+        Text(t, style = BwType.Title.copy(fontSize = 26.sp))
+    }
+}
+@Composable private fun MenuItem(t: String, sub: String, onClick: () -> Unit) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp).clip(RoundedCornerShape(16.dp)).background(Bw.Surface)
+        .border(1.dp, Bw.Line, RoundedCornerShape(16.dp)).clickable { onClick() }.padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text(t, style = BwType.CardTitle.copy(fontSize = 17.sp))
+            Text(sub, style = BwType.Small)
+        }
+        BwIcon(BwIconKind.CHEVRON_RIGHT, Bw.TextMuted, size = 18.dp)
+    }
+}
+@Composable private fun Card(content: @Composable ColumnScope.() -> Unit) { val c = card(); val bd = cardBorder(); Column(Modifier.fillMaxWidth().padding(vertical = 4.dp).clip(RoundedCornerShape(16.dp)).background(c).then(if (bd != Color.Transparent) Modifier.border(1.dp, bd, RoundedCornerShape(16.dp)) else Modifier).padding(16.dp), content = content) }
+@Composable private fun Lbl(t: String) { Text(t.uppercase(), style = BwType.Overline.copy(color = Bw.Cyan), modifier = Modifier.padding(top = 18.dp, bottom = 8.dp)) }
 @Composable private fun Sel(text: String, sel: Boolean, onClick: () -> Unit) { val a = acc(); val c = card(); val t2 = tx(); val sb = selBg(); Row(Modifier.fillMaxWidth().padding(vertical = 2.dp).clip(RoundedCornerShape(8.dp)).background(if (sel) sb else c).clickable { onClick() }.padding(12.dp), verticalAlignment = Alignment.CenterVertically) { Text(text, color = t2, fontSize = 14.sp, modifier = Modifier.weight(1f)); if (sel) Text("✓", color = a, fontWeight = FontWeight.Bold) } }
 @Composable private fun Toggle(label: String, v: Boolean, on: (Boolean) -> Unit) { val a = acc(); val t2 = tx(); Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) { Text(label, color = t2, fontSize = 14.sp); Switch(v, on, colors = SwitchDefaults.colors(checkedTrackColor = a)) } }
 @Composable private fun Info(l: String, v: String) { val d = dim(); val t2 = tx(); Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), Arrangement.SpaceBetween) { Text(l, color = d, fontSize = 14.sp); Text(v, color = t2, fontSize = 14.sp, fontFamily = FontFamily.Monospace) } }
