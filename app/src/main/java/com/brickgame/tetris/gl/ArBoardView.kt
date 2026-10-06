@@ -38,6 +38,15 @@ import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.hypot
 
+/** Handle the screen keeps to drive the AR renderer's play-area setup. */
+class ArBoardController {
+    @Volatile var renderer: ArBoardRenderer? = null
+    fun startBoundary() { renderer?.startBoundary() }
+    fun undoBoundaryCorner() { renderer?.undoBoundaryCorner() }
+    fun finishBoundary() { renderer?.finishBoundary() }
+    fun clearBoundary() { renderer?.clearBoundary() }
+}
+
 /** Whether this phone can run the AR mode. */
 enum class ArSupport { CHECKING, SUPPORTED, UNSUPPORTED }
 
@@ -136,7 +145,11 @@ fun ArBoardView(
     onTap: () -> Unit,
     onHardDrop: () -> Unit,
     onHeat: (ArHeatInfo) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    /** Lets the screen drive the play-area setup (start / undo / done / clear). */
+    controller: ArBoardController? = null,
+    onBoundary: (BoundaryInfo) -> Unit = {},
+    onPlacementBlocked: () -> Unit = {}
 ) {
     val latestStatus by rememberUpdatedState(onStatus)
     val latestAngle by rememberUpdatedState(onViewAngle)
@@ -145,6 +158,8 @@ fun ArBoardView(
     val latestHardDrop by rememberUpdatedState(onHardDrop)
     val latestCell by rememberUpdatedState(onCellMeters)
     val latestHeat by rememberUpdatedState(onHeat)
+    val latestBoundary by rememberUpdatedState(onBoundary)
+    val latestBlocked by rememberUpdatedState(onPlacementBlocked)
     val latestState by rememberUpdatedState(state)
     val viewRef = remember { mutableStateOf<GLSurfaceView?>(null) }
     val rendererRef = remember { mutableStateOf<ArBoardRenderer?>(null) }
@@ -196,6 +211,7 @@ fun ArBoardView(
             lifecycleOwner.lifecycle.removeObserver(observer)
             viewRef.value?.onPause()          // stops the GL thread before the session goes away
             rendererRef.value?.release()
+            controller?.renderer = null
             session.pause()
             session.close()
         }
@@ -209,7 +225,10 @@ fun ArBoardView(
                     onStatus = { s -> view.post { latestStatus(s) } },
                     onViewAngle = { az, el -> view.post { latestAngle(az, el) } },
                     rotationProvider = { view.display?.rotation ?: 0 },
-                    onPieceOffScreen = { d -> view.post { offScreen = d } })
+                    onPieceOffScreen = { d -> view.post { offScreen = d } },
+                    onBoundary = { b -> view.post { latestBoundary(b) } },
+                    onPlacementBlocked = { view.post { latestBlocked() } })
+                controller?.renderer = renderer
                 renderer.updateState(state, material, true, themeColor)
                 renderer.cellMeters = cellMeters
                 view.preserveEGLContextOnPause = true
@@ -288,7 +307,7 @@ private class ArTouch(
                 downX = e.x; downY = e.y; downTime = e.eventTime
                 dragging = false; multi = false; moving = false
             }
-            MotionEvent.ACTION_POINTER_DOWN -> if (e.pointerCount == 2 && renderer.isPlaced) {
+            MotionEvent.ACTION_POINTER_DOWN -> if (e.pointerCount == 2 && renderer.isPlaced && !renderer.boundaryDrawing) {
                 multi = true; dragging = false; moving = false
                 startSpan = span(e); startAngle = angle(e)
                 startCell = renderer.cellMeters; startYaw = renderer.yawDegrees
@@ -308,7 +327,7 @@ private class ArTouch(
                         moving = true; renderer.gestureMoving = true
                     }
                     if (moving) renderer.queueMove(midX(e), midY(e))
-                } else if (!multi && renderer.isPlaced) {
+                } else if (!multi && renderer.isPlaced && !renderer.boundaryDrawing) {
                     if (!dragging && hypot(e.x - downX, e.y - downY) > slop) dragging = true
                     // A fast downward swipe may become a flick-to-drop: don't slide the piece yet
                     val dx = e.x - downX; val dy = e.y - downY
@@ -328,11 +347,12 @@ private class ArTouch(
                 // Flick down: a short, fast, mostly vertical swipe drops the piece
                 val dx = e.x - downX; val dy = e.y - downY
                 val density = v.resources.displayMetrics.density
-                val isFlick = !multi && renderer.isPlaced && dy > 70f * density &&
+                val isFlick = !multi && renderer.isPlaced && !renderer.boundaryDrawing && dy > 70f * density &&
                     dy > 2 * kotlin.math.abs(dx) && e.eventTime - downTime < 300
                 if (isFlick) onHardDrop()
                 if (isTap) {
-                    if (renderer.isPlaced) onTap() else renderer.queueTap(e.x, e.y)
+                    // Setting up the play area: taps are corners
+                    if (renderer.isPlaced && !renderer.boundaryDrawing) onTap() else renderer.queueTap(e.x, e.y)
                     v.performClick()
                 }
                 multi = false; dragging = false; moving = false

@@ -20,6 +20,13 @@ import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.sqrt
 
+/**
+ * Play-area state for the UI: [drawing] while the player taps corners, [corners] so far,
+ * [set] once finished, and [distance] = metres from the phone to the nearest edge
+ * (negative = outside), null when no area is set or tracking is lost.
+ */
+data class BoundaryInfo(val drawing: Boolean = false, val corners: Int = 0, val set: Boolean = false, val distance: Float? = null)
+
 /** What the AR view is doing, for the on-screen hints. */
 enum class ArStatus { STARTING, SEARCHING, READY_TO_PLACE, PLACED, FINDING_FLOOR, TRACKING_LOST, FAILED }
 
@@ -48,16 +55,37 @@ class ArBoardRenderer(
      * Where the falling piece is on screen: null while it is visible, otherwise the direction
      * (x right, y down, unit length) from the screen centre towards it — for an edge arrow.
      */
-    private val onPieceOffScreen: (FloatArray?) -> Unit = {}
+    private val onPieceOffScreen: (FloatArray?) -> Unit = {},
+    private val onBoundary: (BoundaryInfo) -> Unit = {},
+    /** A placement was refused because the well would stick out of the play area. */
+    private val onPlacementBlocked: () -> Unit = {}
 ) : GLSurfaceView.Renderer {
 
     companion object {
         private const val TAG = "ArBoardRenderer"
+        private val CYAN = floatArrayOf(0.133f, 0.827f, 0.933f)
+        private val PINK = floatArrayOf(0.957f, 0.447f, 0.714f)
         const val MIN_CELL = 0.012f
         const val MAX_CELL = 0.25f
     }
 
     private val board = BoardRenderer(context)
+    private val boundary = BoundaryRenderer()
+
+    // ===== Play area (all touched on the GL thread; the UI posts commands) =====
+    private val commands = ConcurrentLinkedQueue<() -> Unit>()
+    private var boundaryAnchor: Anchor? = null
+    private val bxs = ArrayList<Float>()
+    private val bzs = ArrayList<Float>()
+    private var playArea: PlayArea? = null
+    /** True while the player is tapping the corners of their play area. */
+    @Volatile var boundaryDrawing = false
+        private set
+    private var lastBoundaryReport = 0L
+    private var lastBoundaryInfo: BoundaryInfo? = null
+    private val boundaryMatrix = FloatArray(16)
+    private val boundaryInv = FloatArray(16)
+    private val boundaryMvp = FloatArray(16)
     private var background: ArBackground? = null
 
     private val taps = ConcurrentLinkedQueue<FloatArray>()
@@ -113,6 +141,36 @@ class ArBoardRenderer(
         }
     }
 
+    /** Start (or redo) the play area: the next taps on the floor are its corners. */
+    fun startBoundary() = commands.offer {
+        boundaryAnchor?.detach(); boundaryAnchor = null
+        bxs.clear(); bzs.clear(); playArea = null
+        boundaryDrawing = true
+        setPlaneFinding(true)
+        pushBoundaryInfo(null)
+    }
+    /** Remove the last corner. */
+    fun undoBoundaryCorner() = commands.offer {
+        if (bxs.isNotEmpty()) { bxs.removeAt(bxs.lastIndex); bzs.removeAt(bzs.lastIndex) }
+        pushBoundaryInfo(null)
+    }
+    /** Close the outline (needs 3 corners). */
+    fun finishBoundary() = commands.offer {
+        if (bxs.size >= 3) { playArea = PlayArea(bxs.toList(), bzs.toList()); boundaryDrawing = false }
+        pushBoundaryInfo(null)
+    }
+    /** Forget the play area. */
+    fun clearBoundary() = commands.offer {
+        boundaryAnchor?.detach(); boundaryAnchor = null
+        bxs.clear(); bzs.clear(); playArea = null; boundaryDrawing = false
+        pushBoundaryInfo(null)
+    }
+
+    private fun pushBoundaryInfo(distance: Float?) {
+        val info = BoundaryInfo(boundaryDrawing, bxs.size, playArea != null, distance)
+        if (info != lastBoundaryInfo) { lastBoundaryInfo = info; onBoundary(info) }
+    }
+
     /** Put the well on the floor around the player (they stand in its centre). */
     fun requestInside() { insideRequested = true }
 
@@ -157,6 +215,7 @@ class ArBoardRenderer(
         GLES20.glClearColor(0f, 0f, 0f, 1f)
         board.initGl()
         board.contactShadow = true
+        boundary.init()
         background = ArBackground().also { session.setCameraTextureName(it.textureId) }
         report(ArStatus.SEARCHING)
     }
@@ -199,6 +258,19 @@ class ArBoardRenderer(
             return
         }
 
+        while (true) { val c = commands.poll() ?: break; c() }
+        camera.getViewMatrix(view, 0)
+        camera.getProjectionMatrix(proj, 0, 0.03f, 50f)
+        Matrix.multiplyMM(viewProj, 0, proj, 0, view, 0)
+        if (boundaryDrawing) {
+            // Taps add corners instead of placing the well
+            while (true) {
+                val tap = taps.poll() ?: break
+                hitPlane(frame, tap[0], tap[1])?.let { addBoundaryCorner(it.hitPose) }
+            }
+        }
+        drawBoundary(frame)
+
         if (replaceRequested) {
             anchor?.detach(); anchor = null; isPlaced = false; insideMode = false; replaceRequested = false
             setPlaneFinding(true)
@@ -212,34 +284,36 @@ class ArBoardRenderer(
                 return
             }
             val cam = camera.pose
-            setAnchor(session.createAnchor(com.google.ar.core.Pose.makeTranslation(cam.tx(), floorY, cam.tz())))
-            insideMode = true
+            val pose = com.google.ar.core.Pose.makeTranslation(cam.tx(), floorY, cam.tz())
             insideRequested = false
+            if (fitsPlayArea(pose)) {
+                setAnchor(session.createAnchor(pose))
+                insideMode = true
+            } else onPlacementBlocked()
         }
 
         // Taps: place the well under the finger, or at the previewed spot
         while (true) {
             val tap = taps.poll() ?: break
             val hit = hitPlane(frame, tap[0], tap[1])
-            if (hit != null) placeAt(hit) else previewPose?.let { (plane, pose) -> setAnchor(plane.createAnchor(pose)) }
+            val pose = hit?.hitPose ?: previewPose?.second ?: continue
+            if (!fitsPlayArea(pose)) { onPlacementBlocked(); continue }
+            if (hit != null) placeAt(hit) else previewPose?.let { (plane, p) -> setAnchor(plane.createAnchor(p)) }
         }
         // Two-finger drag: slide the well (needs surfaces, so detection is on while moving)
         if (gestureMoving) setPlaneFinding(true)
         moveTarget?.let { m ->
             moveTarget = null
-            hitPlane(frame, m[0], m[1])?.let { placeAt(it) }
+            hitPlane(frame, m[0], m[1])?.let { if (fitsPlayArea(it.hitPose)) placeAt(it) }
         }
 
         val a = anchor
         if (a == null) {
             // Preview: show the well where the screen centre meets a surface; a tap places it there
             val preview = hitPlane(frame, width / 2f, height / 2f)
-            if (preview != null) {
+            if (preview != null && !boundaryDrawing) {
                 report(ArStatus.READY_TO_PLACE)
                 previewPose = (preview.trackable as Plane) to preview.hitPose
-                camera.getViewMatrix(view, 0)
-                camera.getProjectionMatrix(proj, 0, 0.03f, 50f)
-                Matrix.multiplyMM(viewProj, 0, proj, 0, view, 0)
                 preview.hitPose.toMatrix(anchorMatrix, 0)
                 buildBase()
                 val camPose = camera.pose
@@ -253,12 +327,9 @@ class ArBoardRenderer(
         if (a.trackingState != TrackingState.TRACKING) { report(ArStatus.TRACKING_LOST); return }
         report(ArStatus.PLACED)
         // Placed and not being moved: stop looking for surfaces to save power and heat
-        if (!gestureMoving) setPlaneFinding(false)
+        if (!gestureMoving && !boundaryDrawing) setPlaneFinding(false)
 
         // board → world: anchor × turn × scale × centre the footprint on the anchor
-        camera.getViewMatrix(view, 0)
-        camera.getProjectionMatrix(proj, 0, 0.03f, 50f)
-        Matrix.multiplyMM(viewProj, 0, proj, 0, view, 0)
         a.pose.toMatrix(anchorMatrix, 0)
         buildBase()
 
@@ -303,6 +374,92 @@ class ArBoardRenderer(
                 }
                 reportPieceOnScreen()
             }
+        }
+    }
+
+    private fun addBoundaryCorner(pose: com.google.ar.core.Pose) {
+        var a = boundaryAnchor
+        if (a == null) {
+            // Axis-aligned anchor at the first corner; corners are kept in its space (it follows tracking fixes)
+            a = session.createAnchor(com.google.ar.core.Pose.makeTranslation(pose.tx(), pose.ty(), pose.tz()))
+            boundaryAnchor = a
+        }
+        a.pose.toMatrix(boundaryMatrix, 0)
+        if (!Matrix.invertM(boundaryInv, 0, boundaryMatrix, 0)) return
+        val l = FloatArray(4)
+        Matrix.multiplyMV(l, 0, boundaryInv, 0, floatArrayOf(pose.tx(), pose.ty(), pose.tz(), 1f), 0)
+        bxs.add(l[0]); bzs.add(l[2])
+        pushBoundaryInfo(null)
+    }
+
+    /** World point → play-area (x, z), or null without an anchor. */
+    private fun toBoundaryLocal(x: Float, y: Float, z: Float): FloatArray? {
+        val a = boundaryAnchor ?: return null
+        a.pose.toMatrix(boundaryMatrix, 0)
+        if (!Matrix.invertM(boundaryInv, 0, boundaryMatrix, 0)) return null
+        val l = FloatArray(4)
+        Matrix.multiplyMV(l, 0, boundaryInv, 0, floatArrayOf(x, y, z, 1f), 0)
+        return floatArrayOf(l[0], l[2])
+    }
+
+    /** Would the well, anchored at [pose] with the current size and turn, stay inside the play area? */
+    private fun fitsPlayArea(pose: com.google.ar.core.Pose): Boolean {
+        val area = playArea ?: return true
+        val m = FloatArray(16)
+        pose.toMatrix(m, 0)
+        Matrix.rotateM(m, 0, yawDegrees, 0f, 1f, 0f)
+        Matrix.scaleM(m, 0, cellMeters, cellMeters, cellMeters)
+        Matrix.translateM(m, 0, -Tetris3DGame.BOARD_W / 2f, 0f, -Tetris3DGame.BOARD_D / 2f)
+        val w = Tetris3DGame.BOARD_W.toFloat(); val d = Tetris3DGame.BOARD_D.toFloat()
+        val corners = listOf(0f to 0f, w to 0f, w to d, 0f to d).map { (cx, cz) ->
+            val out = FloatArray(4)
+            Matrix.multiplyMV(out, 0, m, 0, floatArrayOf(cx, 0f, cz, 1f), 0)
+            val l = toBoundaryLocal(out[0], out[1], out[2]) ?: return true
+            l[0] to l[1]
+        }
+        return area.containsAll(corners)
+    }
+
+    /**
+     * Draw the play area and report how close the phone is to its edge. While setting up, a
+     * cursor shows where the screen centre meets the floor.
+     */
+    private fun drawBoundary(frame: com.google.ar.core.Frame) {
+        val a = boundaryAnchor
+        val cam = frame.camera.pose
+        if (a == null || a.trackingState != TrackingState.TRACKING) {
+            if (boundaryDrawing) {
+                // No corner yet: just the cursor, drawn at the hit itself
+                val hit = hitPlane(frame, width / 2f, height / 2f) ?: return
+                val m = FloatArray(16)
+                Matrix.setIdentityM(m, 0); Matrix.translateM(m, 0, hit.hitPose.tx(), hit.hitPose.ty(), hit.hitPose.tz())
+                Matrix.multiplyMM(boundaryMvp, 0, viewProj, 0, m, 0)
+                boundary.draw(boundaryMvp, FloatArray(0), FloatArray(0), 0, false, CYAN, 0.95f, 0f, cursor = floatArrayOf(0f, 0f))
+            }
+            if (playArea != null) pushBoundaryInfo(null)
+            return
+        }
+        a.pose.toMatrix(boundaryMatrix, 0)
+        Matrix.multiplyMM(boundaryMvp, 0, viewProj, 0, boundaryMatrix, 0)
+        val xs = bxs.toFloatArray(); val zs = bzs.toFloatArray()
+        if (boundaryDrawing) {
+            val hit = hitPlane(frame, width / 2f, height / 2f)
+            val cursor = hit?.let { toBoundaryLocal(it.hitPose.tx(), it.hitPose.ty(), it.hitPose.tz()) }
+            boundary.draw(boundaryMvp, xs, zs, xs.size, false, CYAN, 0.95f, 0.35f, wallHeight = 0.5f, cursor = cursor)
+            return
+        }
+        val area = playArea ?: return
+        val me = toBoundaryLocal(cam.tx(), cam.ty(), cam.tz()) ?: return
+        val dist = area.signedDistance(me[0], me[1])
+        // The wall fades in from 1 m away and is fully there at the edge
+        val wallAlpha = ((1f - dist) / 0.8f).coerceIn(0f, 1f)
+        val rgb = if (dist < 0.4f) PINK else CYAN
+        boundary.draw(boundaryMvp, xs, zs, xs.size, true, rgb, 0.35f + 0.5f * wallAlpha, wallAlpha)
+        val now = System.currentTimeMillis()
+        if (now - lastBoundaryReport > 150) {
+            lastBoundaryReport = now
+            // Rounded so the UI only hears about real changes
+            pushBoundaryInfo(kotlin.math.round(dist * 20f) / 20f)
         }
     }
 
@@ -390,5 +547,8 @@ class ArBoardRenderer(
     }
 
     /** Release ARCore objects held by the renderer (session is closed by its owner). */
-    fun release() { anchor?.detach(); anchor = null; isPlaced = false; insideMode = false }
+    fun release() {
+        anchor?.detach(); anchor = null; isPlaced = false; insideMode = false
+        boundaryAnchor?.detach(); boundaryAnchor = null
+    }
 }

@@ -23,7 +23,9 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.brickgame.tetris.gl.ArBoardController
 import com.brickgame.tetris.gl.ArBoardView
+import com.brickgame.tetris.gl.BoundaryInfo
 import com.brickgame.tetris.gl.ArHeat
 import com.brickgame.tetris.gl.ArHeatInfo
 import com.brickgame.tetris.ui.brand.Bw
@@ -121,6 +123,10 @@ fun Game3DScreen(
     var arReplace by remember { mutableIntStateOf(0) }
     var arInsideKey by remember { mutableIntStateOf(0) }
     var arInside by remember { mutableStateOf(false) }
+    // Play area (like a VR guardian): set up by tapping floor corners; lives as long as the AR session
+    val arController = remember { ArBoardController() }
+    var boundary by remember { mutableStateOf(BoundaryInfo()) }
+    var outOfArea by remember { mutableStateOf(false) }
     var arMessage by remember { mutableStateOf<String?>(null) }
     var arInstallPending by remember { mutableStateOf(false) }
     var arCell by remember { mutableFloatStateOf(0.03f) }
@@ -153,6 +159,20 @@ fun Game3DScreen(
         if (dz != 0) onMoveZ(if (dz > 0) 1 else -1)
     }
     val arOn = arSession != null
+    LaunchedEffect(arOn) { if (!arOn) { boundary = BoundaryInfo(); outOfArea = false } }
+    // Near the edge: buzz once. Past it: pause the game until the player steps back in.
+    val view = androidx.compose.ui.platform.LocalView.current
+    val nearEdge = boundary.distance?.let { it < 0.4f } == true
+    LaunchedEffect(nearEdge) {
+        if (nearEdge) view.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
+    }
+    LaunchedEffect(boundary.distance) {
+        val d = boundary.distance ?: return@LaunchedEffect
+        if (d < 0f && !outOfArea) {
+            outOfArea = true
+            if (state.status == GameStatus.PLAYING) onPause()
+        } else if (d >= 0.1f) outOfArea = false
+    }
 
     fun startAr(userRequestedInstall: Boolean) {
         val activity = context as? Activity ?: return
@@ -268,6 +288,9 @@ fun Game3DScreen(
             Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 2.dp),
                 horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 if (arSupport == ArSupport.SUPPORTED) ModeChip("AR", arOn, Bw.Cyan) { toggleAr() }
+                if (arOn) ModeChip(if (boundary.set) "Play area ✓" else "Play area", boundary.drawing || boundary.set, Bw.Lime) {
+                    arController.startBoundary()
+                }
                 if (hasMotionSensor && !arOn) ModeChip("Motion view", motionView, Bw.Violet) { setMotionView(!motionView) }
                 if (!arOn) ModeChip("Camera", showCamSettings, Bw.Amber) { showCamSettings = !showCamSettings }
                 ModeChip("Freeze gravity", !state.autoGravity, Color(0xFF38BDF8)) { onToggleGravity() }
@@ -296,7 +319,13 @@ fun Game3DScreen(
                         onTap = onRotateXZ,
                         onHardDrop = onHardDrop,
                         onHeat = { onHeatInfo(it) },
-                        modifier = Modifier.fillMaxSize()
+                        modifier = Modifier.fillMaxSize(),
+                        controller = arController,
+                        onBoundary = { boundary = it },
+                        onPlacementBlocked = {
+                            arInside = false
+                            arMessage = "The well doesn't fit inside your play area. Pick a smaller size or another spot."
+                        }
                     )
                 } else if (starWars) {
                     StarWarsBoardCanvas(state, Modifier.fillMaxSize().padding(2.dp), true, theme.pixelOn)
@@ -333,7 +362,10 @@ fun Game3DScreen(
                                 listOf("Table" to 0.03f, "Big" to 0.08f, "Room" to 0.2f).forEach { (label, cell) ->
                                     ArChip(label, !arInside && kotlin.math.abs(arCell - cell) < 0.004f) { arCell = cell }
                                 }
-                                ArChip("Inside", arInside) { arCell = INSIDE_CELL; arInside = true; arInsideKey++ }
+                                ArChip("Inside", arInside) {
+                                    arCell = INSIDE_CELL; arInside = true; arInsideKey++
+                                    if (!boundary.set) arMessage = "Tip: set a Play area first (chip below) so you're warned before you walk into furniture."
+                                }
                             }
                         }
                         // Gesture help: shown for a few seconds after placing, then out of the way
@@ -352,6 +384,12 @@ fun Game3DScreen(
                         arHeat?.let { h -> HeatChip(h, heatLimit) { onArHeatLimit(nextHeatLimit(heatLimit)) } }
                     }
                 }
+                if (arOn) PlayAreaLayer(
+                    boundary = boundary, outOfArea = outOfArea,
+                    onUndo = arController::undoBoundaryCorner,
+                    onDone = arController::finishBoundary,
+                    onCancel = arController::clearBoundary
+                )
                 arMessage?.let { msg ->
                     Text(msg, color = Color.White, fontSize = 13.sp,
                         modifier = Modifier.align(Alignment.TopCenter).padding(top = 10.dp)
@@ -696,6 +734,55 @@ private fun ArStatusBar(status: ArStatus, modifier: Modifier, onReplace: () -> U
 private const val AR_HARD_LIMIT_C = 46
 
 /** Player-selectable AR heat limits, cycled by tapping the temperature chip. */
+/**
+ * Play-area UI over the AR view: the setup card while tapping corners, a pink glow on the
+ * screen edges near the boundary, and a banner when the player has stepped outside.
+ */
+@Composable
+private fun BoxScope.PlayAreaLayer(
+    boundary: BoundaryInfo, outOfArea: Boolean,
+    onUndo: () -> Unit, onDone: () -> Unit, onCancel: () -> Unit
+) {
+    val d = boundary.distance
+    if (d != null && d < 0.6f) {
+        val k = ((0.6f - d) / 0.6f).coerceIn(0f, 1f)
+        Canvas(Modifier.matchParentSize()) {
+            val edge = size.minDimension * 0.18f
+            val c = Bw.Pink.copy(alpha = 0.55f * k)
+            drawRect(androidx.compose.ui.graphics.Brush.verticalGradient(listOf(c, Color.Transparent), 0f, edge))
+            drawRect(androidx.compose.ui.graphics.Brush.verticalGradient(listOf(Color.Transparent, c), size.height - edge, size.height))
+            drawRect(androidx.compose.ui.graphics.Brush.horizontalGradient(listOf(c, Color.Transparent), 0f, edge))
+            drawRect(androidx.compose.ui.graphics.Brush.horizontalGradient(listOf(Color.Transparent, c), size.width - edge, size.width))
+        }
+    }
+    if (outOfArea) {
+        Column(Modifier.align(Alignment.Center).padding(24.dp).clip(RoundedCornerShape(18.dp))
+            .background(Bw.Ground.copy(alpha = 0.92f)).border(2.dp, Bw.Pink, RoundedCornerShape(18.dp)).padding(18.dp),
+            horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("OUT OF YOUR PLAY AREA", style = BwType.Label.copy(color = Bw.Pink))
+            Text("Step back inside the lines. The game is paused.", style = BwType.Small)
+        }
+    }
+    if (boundary.drawing) {
+        Column(Modifier.align(Alignment.BottomCenter).padding(start = 12.dp, end = 12.dp, bottom = 56.dp).fillMaxWidth()
+            .clip(RoundedCornerShape(18.dp)).background(Bw.Ground.copy(alpha = 0.9f)).border(1.dp, Bw.Line, RoundedCornerShape(18.dp))
+            .padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("SET YOUR PLAY AREA", style = BwType.Overline.copy(color = Bw.Lime))
+            Text(when (boundary.corners) {
+                0 -> "Point at the floor at one corner of your free space and tap."
+                1, 2 -> "Walk along the edge and tap the next corner. (${boundary.corners} so far)"
+                else -> "${boundary.corners} corners. Tap more corners, or Done to close the area."
+            }, style = BwType.Small.copy(color = Bw.Text))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                ArChip("Cancel", false, onCancel)
+                if (boundary.corners > 0) ArChip("Undo", false, onUndo)
+                Spacer(Modifier.weight(1f))
+                if (boundary.corners >= 3) ArChip("Done", true, onDone)
+            }
+        }
+    }
+}
+
 /** Cube size for stand-inside mode: a 1.2 m square well, 2.8 m tall, centred on the player. */
 private const val INSIDE_CELL = 0.2f
 
