@@ -601,6 +601,7 @@ private fun BrandScreens(
             activeId = playersState.activeId,
             onPick = { id -> vm.switchPlayer(id) },
             onAdd = { n -> vm.addPlayer(n) },
+            onRemove = vm::removePlayer,
             onClose = { showPlayers = false }
         )
         else -> {

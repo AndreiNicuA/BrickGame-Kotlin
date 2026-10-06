@@ -38,18 +38,29 @@ fun PlayersScreen(
     activeId: String?,
     onPick: (String) -> Unit,
     onAdd: (String) -> Unit,
-    onClose: () -> Unit
+    onClose: () -> Unit,
+    onRemove: (String) -> Unit = {}
 ) {
     BackHandler(onBack = onClose)
     var adding by remember { mutableStateOf(false) }
     var newName by remember { mutableStateOf("") }
+    var editing by remember { mutableStateOf(false) }
+    var confirmId by remember { mutableStateOf<String?>(null) }
     val active = players.firstOrNull { it.player.id == activeId } ?: players.firstOrNull()
     val accent = active?.let { Bw.playerColor(it.player.colorIndex) } ?: Bw.Cyan
 
     Column(Modifier.fillMaxSize().background(Bw.Ground).safeDrawingPadding().imePadding().padding(horizontal = 20.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text("BRICKWELL", style = BwType.Wordmark, color = accent, modifier = Modifier.padding(top = 12.dp))
+            Row(Modifier.fillMaxWidth().padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("BRICKWELL", style = BwType.Wordmark, color = accent, modifier = Modifier.weight(1f))
+                if (players.size > 1) {
+                    Text(if (editing) "Done" else "Edit", style = BwType.Label.copy(color = if (editing) accent else Bw.TextMuted),
+                        modifier = Modifier.clip(RoundedCornerShape(999.dp))
+                            .clickable(role = Role.Button) { editing = !editing; confirmId = null }
+                            .padding(horizontal = 14.dp, vertical = 10.dp))
+                }
+            }
             Text("Who's playing?", style = BwType.Title.copy(fontSize = 34.sp), modifier = Modifier.padding(top = 12.dp))
             Text("Every player keeps their own scores, controls and style.", style = BwType.Body, modifier = Modifier.padding(bottom = 10.dp))
 
@@ -64,8 +75,22 @@ fun PlayersScreen(
                         Text(p.name, style = BwType.Label.copy(fontSize = 17.sp))
                         Text(if (s.best > 0) "Best ${"%,d".format(s.best)}${lastPlayedText(s.lastPlayed)}" else "No games yet", style = BwType.Small)
                     }
-                    Text(when (p.style) { PlayStyle.CLASSIC -> "CLASSIC"; PlayStyle.NEON -> "NEON"; PlayStyle.THREE_D -> "3D" },
-                        style = BwType.Overline.copy(color = color))
+                    if (editing && players.size > 1) {
+                        // Two taps to remove, so a slip doesn't delete anyone
+                        val sure = confirmId == p.id
+                        Box(Modifier.clip(RoundedCornerShape(999.dp))
+                            .background(if (sure) Bw.Pink else Bw.Surface)
+                            .border(1.dp, if (sure) Bw.Pink else Bw.Line, RoundedCornerShape(999.dp))
+                            .clickable(role = Role.Button, onClickLabel = "Remove ${p.name}") {
+                                if (sure) { onRemove(p.id); confirmId = null } else confirmId = p.id
+                            }
+                            .heightIn(min = 40.dp).padding(horizontal = 14.dp), contentAlignment = Alignment.Center) {
+                            Text(if (sure) "REMOVE?" else "Remove", style = BwType.Label.copy(fontSize = 13.sp, color = if (sure) Bw.Ground else Bw.Text))
+                        }
+                    } else {
+                        Text(when (p.style) { PlayStyle.CLASSIC -> "CLASSIC"; PlayStyle.NEON -> "NEON"; PlayStyle.THREE_D -> "3D" },
+                            style = BwType.Overline.copy(color = color))
+                    }
                 }
             }
 

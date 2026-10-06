@@ -209,6 +209,15 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /** Remove a player (never the last one); their old scores stay in the records. */
+    fun removePlayer(id: String) {
+        viewModelScope.launch {
+            val wasActive = players.value.active?.id == id
+            playersRepo.removePlayer(id)
+            if (wasActive) players.first { s -> s.players.none { it.id == id } }.active?.let { applyPlayer(it) }
+        }
+    }
+
     private suspend fun applyPlayer(p: LocalPlayer) {
         playerRepo.setPlayerName(p.name)
         _swipeControls.value = p.swipeControls; settingsRepo.setSwipeControls(p.swipeControls)
