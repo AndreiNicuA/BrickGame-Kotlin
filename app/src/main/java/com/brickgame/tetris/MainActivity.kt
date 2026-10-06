@@ -534,7 +534,8 @@ private fun VersusLayer(vm: GameViewModel) {
                 Modifier.align(Alignment.TopCenter).padding(top = 84.dp))
         } else {
             VersusResultOverlay(
-                won = v.result == GameViewModel.VersusResult.WIN, opponent = opponent,
+                won = v.result == GameViewModel.VersusResult.WIN,
+                dropped = v.result == GameViewModel.VersusResult.DROPPED, opponent = opponent,
                 wins = v.wins, losses = v.losses,
                 connected = phase == com.brickgame.tetris.net.VersusLink.Phase.CONNECTED,
                 onRematch = vm::versusStartRound, onLobby = vm::versusBackToLobby
@@ -583,8 +584,8 @@ private fun BrandScreens(
             myName = active?.name ?: playerName,
             myColor = Bw.playerColor(active?.colorIndex ?: 0),
             phase = versusPhase, peer = versusPeer, style = style,
-            wins = versus.wins, losses = versus.losses,
-            onSelectStyle = vm::selectStyle,
+            wins = versus.wins, losses = versus.losses, countdown = versus.countdown,
+            onSelectStyle = vm::versusPick,
             onSearch = vm::versusSearch,
             onStart = vm::versusStartRound,
             onLeave = { vm.versusLeave(); showVersus = false }

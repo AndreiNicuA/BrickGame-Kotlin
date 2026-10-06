@@ -35,6 +35,7 @@ fun VersusScreen(
     style: PlayStyle,
     wins: Int,
     losses: Int,
+    countdown: Int,
     onSelectStyle: (PlayStyle) -> Unit,
     onSearch: () -> Unit,
     onStart: () -> Unit,
@@ -52,6 +53,7 @@ fun VersusScreen(
         }
     }
 
+    Box(Modifier.fillMaxSize()) {
     Column(Modifier.fillMaxSize().background(Bw.Ground).safeDrawingPadding().padding(horizontal = 20.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -112,6 +114,27 @@ fun VersusScreen(
         }
         BwSecondaryButton("Leave Versus", onLeave, Modifier.fillMaxWidth())
     }
+    if (countdown > 0) CountdownOverlay(countdown, style)
+    }
+}
+
+/** Big 3-2-1 on both phones before a round, so nobody gets a head start. */
+@Composable
+private fun CountdownOverlay(n: Int, style: PlayStyle) {
+    val pop = remember { Animatable(0f) }
+    LaunchedEffect(n) { pop.snapTo(0f); pop.animateTo(1f, tween(500, easing = FastOutSlowInEasing)) }
+    Box(Modifier.fillMaxSize().background(Bw.Ground.copy(alpha = 0.92f)).clickable(enabled = false) {}, contentAlignment = Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text(when (style) { PlayStyle.CLASSIC -> "CLASSIC"; PlayStyle.NEON -> "NEON"; PlayStyle.THREE_D -> "3D" } + " VERSUS",
+                style = BwType.Overline)
+            Text("$n", style = BwType.Hero.copy(fontSize = 120.sp, lineHeight = 124.sp, color = Bw.Cyan),
+                modifier = Modifier.graphicsLayer {
+                    val k = pop.value
+                    scaleX = 1.6f - 0.6f * k; scaleY = scaleX; alpha = k
+                })
+            Text("Get ready", style = BwType.Body)
+        }
+    }
 }
 
 @Composable
@@ -165,16 +188,23 @@ fun VersusHud(opponent: String, score: Int, lines: Int, received: Int, sent: Int
 
 /** Round result on top of the game: who won, the running score, rematch / back. */
 @Composable
-fun VersusResultOverlay(won: Boolean, opponent: String, wins: Int, losses: Int, connected: Boolean,
+fun VersusResultOverlay(won: Boolean, dropped: Boolean, opponent: String, wins: Int, losses: Int, connected: Boolean,
                         onRematch: () -> Unit, onLobby: () -> Unit) {
     Box(Modifier.fillMaxSize().background(Bw.Ground.copy(alpha = 0.94f)).clickable(enabled = false) {}, contentAlignment = Alignment.Center) {
         Column(Modifier.widthIn(max = 360.dp).padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text(if (won) "YOU WIN!" else "$opponent WINS", style = BwType.Hero.copy(color = if (won) Bw.Lime else Bw.Pink))
+            when {
+                dropped -> {
+                    Text("CONNECTION LOST", style = BwType.Hero.copy(color = Bw.Amber, fontSize = 32.sp, lineHeight = 36.sp))
+                    Text("$opponent left or went out of range. This round doesn't count.", style = BwType.Small)
+                }
+                won -> Text("YOU WIN!", style = BwType.Hero.copy(color = Bw.Lime))
+                else -> Text("$opponent WINS", style = BwType.Hero.copy(color = Bw.Pink))
+            }
             Text("$wins – $losses", style = BwType.Title.copy(color = Bw.TextMuted))
             Spacer(Modifier.height(8.dp))
             if (connected) BwPrimaryButton("REMATCH", onRematch, Modifier.fillMaxWidth(), height = 60.dp)
-            else Text("Your friend disconnected.", style = BwType.Small)
+            else if (!dropped) Text("Your friend disconnected.", style = BwType.Small)
             BwSecondaryButton("Back to lobby", onLobby, Modifier.fillMaxWidth())
         }
     }

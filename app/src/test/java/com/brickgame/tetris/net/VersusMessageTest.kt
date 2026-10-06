@@ -11,6 +11,7 @@ class VersusMessageTest {
     @Test fun `every message survives encode and parse`() {
         roundTrip(VersusMessage.Hello("Andrei"))
         roundTrip(VersusMessage.Go("THREE_D"))
+        roundTrip(VersusMessage.Pick("CLASSIC"))
         roundTrip(VersusMessage.Attack(4))
         roundTrip(VersusMessage.Status(12840, 42, 7))
         roundTrip(VersusMessage.Over)

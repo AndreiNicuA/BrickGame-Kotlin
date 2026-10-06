@@ -11,6 +11,8 @@ sealed class VersusMessage {
     data class Go(val style: String) : VersusMessage()
     /** Send [rows] garbage rows (2D) or layers (3D) to the other player. */
     data class Attack(val rows: Int) : VersusMessage()
+    /** The sender picked this game style in the lobby, so both lobbies show the same choice. */
+    data class Pick(val style: String) : VersusMessage()
     /** Live stats for the opponent panel. */
     data class Status(val score: Int, val lines: Int, val level: Int) : VersusMessage()
     /** The sender topped out — the receiver wins the round. */
@@ -21,6 +23,7 @@ sealed class VersusMessage {
     fun encode(): String = when (this) {
         is Hello -> "HI|" + name.replace("|", " ").take(24)
         is Go -> "GO|$style"
+        is Pick -> "PICK|$style"
         is Attack -> "ATK|$rows"
         is Status -> "ST|$score|$lines|$level"
         Over -> "OVER"
@@ -35,6 +38,7 @@ sealed class VersusMessage {
                 when (f[0]) {
                     "HI" -> Hello(f.getOrElse(1) { "Player" }.ifBlank { "Player" })
                     "GO" -> Go(f[1])
+                    "PICK" -> Pick(f[1])
                     "ATK" -> Attack(f[1].toInt().coerceIn(0, 20))
                     "ST" -> Status(f[1].toInt(), f[2].toInt(), f[3].toInt())
                     "OVER" -> Over
