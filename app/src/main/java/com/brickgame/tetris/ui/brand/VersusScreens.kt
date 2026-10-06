@@ -165,7 +165,7 @@ private fun SearchingBadge(active: Boolean) {
 
 /** Opponent strip shown on top of the game during a Versus round. */
 @Composable
-fun VersusHud(opponent: String, score: Int, lines: Int, received: Int, sent: Int, modifier: Modifier = Modifier) {
+fun VersusHud(opponent: String, score: Int, lines: Int, received: Int, sent: Int, modifier: Modifier = Modifier, incoming: Int = 0) {
     // Flash when garbage arrives
     var lastReceived by remember { mutableIntStateOf(received) }
     val flash = remember { Animatable(0f) }
@@ -183,6 +183,23 @@ fun VersusHud(opponent: String, score: Int, lines: Int, received: Int, sent: Int
         Text("$lines L", style = BwType.Small)
         if (sent > 0) Text("↑$sent", style = BwType.Small.copy(color = Bw.Lime))
         if (received > 0) Text("↓$received", style = BwType.Small.copy(color = Bw.Pink))
+        if (incoming > 0) Text("⚠ +$incoming", style = BwType.Label.copy(color = Bw.Amber))
+    }
+}
+
+/**
+ * Warning meter on the screen edge: garbage that has arrived and will rise under your stack
+ * when the next piece appears. One segment per row/layer, pulsing.
+ */
+@Composable
+fun IncomingGarbageBar(rows: Int, modifier: Modifier = Modifier) {
+    val pulse by rememberInfiniteTransition(label = "incoming")
+        .animateFloat(0.5f, 1f, infiniteRepeatable(tween(450), RepeatMode.Reverse), label = "p")
+    Column(modifier.padding(start = 3.dp).graphicsLayer { alpha = pulse },
+        verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        repeat(rows.coerceAtMost(12)) {
+            Box(Modifier.size(7.dp, 18.dp).clip(RoundedCornerShape(3.dp)).background(if (rows >= 4) Bw.Pink else Bw.Amber))
+        }
     }
 }
 

@@ -261,6 +261,9 @@ class Tetris3DGame {
     /** Queue [n] garbage layers; they rise from the bottom when the next piece spawns. */
     fun queueGarbage(n: Int) { if (n > 0) pendingGarbage = (pendingGarbage + n).coerceAtMost(BOARD_H) }
 
+    /** Garbage layers waiting for the next spawn. */
+    fun pendingGarbageLayers(): Int = pendingGarbage
+
     /** Pushes the stack up by [n] and fills the bottom with layers that each have one hole. */
     internal fun applyGarbage(n: Int) {
         if (n <= 0) return

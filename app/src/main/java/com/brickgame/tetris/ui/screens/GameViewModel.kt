@@ -627,6 +627,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         val countdown: Int = 0,
         val opponentScore: Int = 0, val opponentLines: Int = 0, val opponentLevel: Int = 1,
         val received: Int = 0, val sent: Int = 0,
+        /** Garbage that has arrived but not landed yet (it rises at the next piece). */
+        val incoming: Int = 0,
         val result: VersusResult? = null,
         val wins: Int = 0, val losses: Int = 0
     )
@@ -641,6 +643,16 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             versusLink.phase.collect { if (it == VersusLink.Phase.DISCONNECTED) versusDropped() }
         }
+        // Incoming garbage drops to 0 when it lands (at the next spawn)
+        viewModelScope.launch { gameState.collect { syncIncoming() } }
+        viewModelScope.launch { game3DState.collect { syncIncoming() } }
+    }
+
+    private fun syncIncoming() {
+        val v = _versus.value
+        if (!v.active) return
+        val n = if (v.style == PlayStyle.THREE_D) game3D.pendingGarbageLayers() else game.pendingGarbageRows()
+        if (n != v.incoming) _versus.update { it.copy(incoming = n) }
     }
 
     /** Start looking for a friend's phone. */
@@ -684,7 +696,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         resetRunningGames()
         versusStatusJob?.cancel(); versusCountdownJob?.cancel()
         setPortraitLayout(layoutFor(style))
-        _versus.update { it.copy(active = true, style = style, countdown = 3, opponentScore = 0, opponentLines = 0, opponentLevel = 1, received = 0, sent = 0, result = null) }
+        _versus.update { it.copy(active = true, style = style, countdown = 3, opponentScore = 0, opponentLines = 0, opponentLevel = 1, received = 0, sent = 0, incoming = 0, result = null) }
         versusCountdownJob = viewModelScope.launch {
             for (n in 3 downTo 1) {
                 _versus.update { it.copy(countdown = n) }
@@ -748,6 +760,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 if (!_versus.value.active || _versus.value.result != null) return
                 if (_versus.value.style == PlayStyle.THREE_D) game3D.queueGarbage(m.rows) else game.queueGarbage(m.rows)
                 _versus.update { it.copy(received = it.received + m.rows) }
+                syncIncoming()
                 vibrationManager.vibrateDrop()
             }
             is VersusMessage.Status -> _versus.update { it.copy(opponentScore = m.score, opponentLines = m.lines, opponentLevel = m.level) }

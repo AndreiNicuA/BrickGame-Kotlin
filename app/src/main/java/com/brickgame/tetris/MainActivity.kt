@@ -57,6 +57,7 @@ import com.brickgame.tetris.ui.brand.MenuScreen
 import com.brickgame.tetris.ui.brand.OnboardingScreen
 import com.brickgame.tetris.ui.brand.PlayerSummary
 import com.brickgame.tetris.ui.brand.PlayersScreen
+import com.brickgame.tetris.ui.brand.IncomingGarbageBar
 import com.brickgame.tetris.ui.brand.VersusHud
 import com.brickgame.tetris.ui.brand.VersusResultOverlay
 import com.brickgame.tetris.ui.brand.VersusScreen
@@ -534,7 +535,8 @@ private fun VersusLayer(vm: GameViewModel) {
     Box(Modifier.fillMaxSize()) {
         if (v.result == null) {
             VersusHud(opponent, v.opponentScore, v.opponentLines, v.received, v.sent,
-                Modifier.align(Alignment.TopCenter).padding(top = 84.dp))
+                Modifier.align(Alignment.TopCenter).padding(top = 84.dp), incoming = v.incoming)
+            if (v.incoming > 0) IncomingGarbageBar(v.incoming, Modifier.align(Alignment.CenterStart))
         } else {
             VersusResultOverlay(
                 won = v.result == GameViewModel.VersusResult.WIN,
