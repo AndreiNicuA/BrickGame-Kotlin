@@ -136,40 +136,8 @@ fun NeonControls(
     accent: Color = Bw.Cyan,
     modifier: Modifier = Modifier
 ) {
-    val move = @Composable {
-        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                BwPadButton("Move left", Modifier.size(68.dp), RoundedCornerShape(22.dp), Bw.Raised, Bw.LineStrong, onLeftPress, onLeftRelease) {
-                    GlyphIcon(Glyph.LEFT, accent, 26.dp)
-                }
-                BwPadButton("Move right", Modifier.size(68.dp), RoundedCornerShape(22.dp), Bw.Raised, Bw.LineStrong, onRightPress, onRightRelease) {
-                    GlyphIcon(Glyph.RIGHT, accent, 26.dp)
-                }
-            }
-            BwPadButton("Soft drop", Modifier.size(144.dp, 52.dp), RoundedCornerShape(18.dp), Bw.Raised, Bw.LineStrong, onDownPress, onDownRelease) {
-                GlyphIcon(Glyph.DOWN, accent, 26.dp)
-            }
-        }
-    }
-    val act = @Composable {
-        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Bottom) {
-                BwPadButton("Hold piece", Modifier.size(56.dp), RoundedCornerShape(18.dp), Bw.Raised, Bw.LineStrong, onHold) {
-                    Text("HOLD", style = BwType.Overline.copy(color = Bw.Text, fontSize = 11.sp, letterSpacing = 1.sp))
-                }
-                BwPadButton("Rotate", Modifier.size(84.dp), CircleShape, accent, null, onRotate) {
-                    GlyphIcon(Glyph.ROTATE, Bw.Ground, 34.dp)
-                }
-            }
-            BwPadButton("Hard drop", Modifier.size(148.dp, 52.dp), RoundedCornerShape(18.dp), Bw.Pink, null, onHardDrop) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    GlyphIcon(Glyph.DROP, Bw.Ground, 18.dp)
-                    Spacer(Modifier.width(6.dp))
-                    Text("DROP", style = BwType.Button.copy(fontSize = 15.sp, letterSpacing = 2.sp, color = Bw.Ground))
-                }
-            }
-        }
-    }
+    val move = @Composable { NeonMovePad(onLeftPress, onLeftRelease, onRightPress, onRightRelease, onDownPress, onDownRelease, accent) }
+    val act = @Composable { NeonActionPad(onRotate, onHardDrop, onHold, accent) }
     Row(modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
         if (leftHanded) { act(); move() } else { move(); act() }
@@ -322,3 +290,116 @@ private fun Stat(label: String, value: String, color: Color, modifier: Modifier)
 
 /** Status helper so callers don't need GameStatus imports for the common checks. */
 fun GameState.isPlaying() = status == GameStatus.PLAYING
+
+/** Left half of the Neon deck: move left/right and soft drop. */
+@Composable
+fun NeonMovePad(
+    onLeftPress: () -> Unit, onLeftRelease: () -> Unit,
+    onRightPress: () -> Unit, onRightRelease: () -> Unit,
+    onDownPress: () -> Unit, onDownRelease: () -> Unit,
+    accent: Color = Bw.Cyan
+) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                BwPadButton("Move left", Modifier.size(68.dp), RoundedCornerShape(22.dp), Bw.Raised, Bw.LineStrong, onLeftPress, onLeftRelease) {
+                    GlyphIcon(Glyph.LEFT, accent, 26.dp)
+                }
+                BwPadButton("Move right", Modifier.size(68.dp), RoundedCornerShape(22.dp), Bw.Raised, Bw.LineStrong, onRightPress, onRightRelease) {
+                    GlyphIcon(Glyph.RIGHT, accent, 26.dp)
+                }
+            }
+            BwPadButton("Soft drop", Modifier.size(144.dp, 52.dp), RoundedCornerShape(18.dp), Bw.Raised, Bw.LineStrong, onDownPress, onDownRelease) {
+                GlyphIcon(Glyph.DOWN, accent, 26.dp)
+            }
+        }
+}
+
+/** Right half of the Neon deck: hold, rotate and hard drop. */
+@Composable
+fun NeonActionPad(onRotate: () -> Unit, onHardDrop: () -> Unit, onHold: () -> Unit, accent: Color = Bw.Cyan) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Bottom) {
+                BwPadButton("Hold piece", Modifier.size(56.dp), RoundedCornerShape(18.dp), Bw.Raised, Bw.LineStrong, onHold) {
+                    Text("HOLD", style = BwType.Overline.copy(color = Bw.Text, fontSize = 11.sp, letterSpacing = 1.sp))
+                }
+                BwPadButton("Rotate", Modifier.size(84.dp), CircleShape, accent, null, onRotate) {
+                    GlyphIcon(Glyph.ROTATE, Bw.Ground, 34.dp)
+                }
+            }
+            BwPadButton("Hard drop", Modifier.size(148.dp, 52.dp), RoundedCornerShape(18.dp), Bw.Pink, null, onHardDrop) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    GlyphIcon(Glyph.DROP, Bw.Ground, 18.dp)
+                    Spacer(Modifier.width(6.dp))
+                    Text("DROP", style = BwType.Button.copy(fontSize = 15.sp, letterSpacing = 2.sp, color = Bw.Ground))
+                }
+            }
+        }
+}
+
+/**
+ * One-thumb pad (Compact layout): every action within reach of one thumb.
+ *   [HOLD] [DROP]
+ *   [ ←  ] [ ⟳ ] [ → ]
+ *          [ ↓ ]
+ */
+@Composable
+fun NeonOneHandPad(
+    onLeftPress: () -> Unit, onLeftRelease: () -> Unit,
+    onRightPress: () -> Unit, onRightRelease: () -> Unit,
+    onDownPress: () -> Unit, onDownRelease: () -> Unit,
+    onRotate: () -> Unit, onHardDrop: () -> Unit, onHold: () -> Unit,
+    accent: Color = Bw.Cyan
+) {
+    val cell = 64.dp
+    val sq = RoundedCornerShape(20.dp)
+    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            BwPadButton("Hold piece", Modifier.size(cell), sq, Bw.Raised, Bw.LineStrong, onHold) {
+                Text("HOLD", style = BwType.Overline.copy(color = Bw.Text, fontSize = 11.sp, letterSpacing = 1.sp))
+            }
+            BwPadButton("Hard drop", Modifier.size(cell * 2 + 6.dp, cell), sq, Bw.Pink, null, onHardDrop) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    GlyphIcon(Glyph.DROP, Bw.Ground, 18.dp)
+                    Spacer(Modifier.width(6.dp))
+                    Text("DROP", style = BwType.Button.copy(fontSize = 15.sp, letterSpacing = 2.sp, color = Bw.Ground))
+                }
+            }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            BwPadButton("Move left", Modifier.size(cell), sq, Bw.Raised, Bw.LineStrong, onLeftPress, onLeftRelease) { GlyphIcon(Glyph.LEFT, accent, 26.dp) }
+            BwPadButton("Rotate", Modifier.size(cell), CircleShape, accent, null, onRotate) { GlyphIcon(Glyph.ROTATE, Bw.Ground, 30.dp) }
+            BwPadButton("Move right", Modifier.size(cell), sq, Bw.Raised, Bw.LineStrong, onRightPress, onRightRelease) { GlyphIcon(Glyph.RIGHT, accent, 26.dp) }
+        }
+        BwPadButton("Soft drop", Modifier.size(cell), sq, Bw.Raised, Bw.LineStrong, onDownPress, onDownRelease) { GlyphIcon(Glyph.DOWN, accent, 26.dp) }
+    }
+}
+
+/** Landscape info column: score, hold, next and pause stacked (Neon landscape). */
+@Composable
+fun NeonSideHud(gs: GameState, nextCount: Int, onPause: () -> Unit, modifier: Modifier = Modifier) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        HudBox(Modifier.fillMaxWidth()) {
+            BwRollingScore(gs.score, fontSize = 22)
+            Text(buildString {
+                append("LV ${gs.level}  ·  ${gs.lines} LINES")
+                if (gs.comboCount >= 2) append("  ·  x${gs.comboCount}")
+            }, style = BwType.Small.copy(fontSize = 11.sp))
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            HudBox(Modifier.weight(1f)) {
+                Text("HOLD", style = BwType.Overline.copy(fontSize = 10.sp, letterSpacing = 1.sp))
+                BwPiecePreview(gs.holdPiece, Modifier.size(40.dp, 26.dp), dim = gs.holdUsed)
+            }
+            HudBox(Modifier.weight(1f)) {
+                Text("NEXT", style = BwType.Overline.copy(fontSize = 10.sp, letterSpacing = 1.sp))
+                gs.nextPieces.take(nextCount.coerceIn(1, 2)).forEachIndexed { i, p ->
+                    BwPiecePreview(p, Modifier.size(if (i == 0) 40.dp else 30.dp, if (i == 0) 24.dp else 16.dp), dim = i > 0)
+                }
+            }
+            Box(Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(Bw.Surface)
+                .border(1.dp, Bw.Line, RoundedCornerShape(14.dp))
+                .clickable(role = Role.Button, onClick = onPause).semantics { contentDescription = "Pause" },
+                contentAlignment = Alignment.Center) { GlyphIcon(Glyph.PAUSE, Bw.Text, 18.dp) }
+        }
+    }
+}

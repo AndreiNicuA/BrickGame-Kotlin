@@ -32,7 +32,11 @@ import com.brickgame.tetris.input.SwipeAction
 import com.brickgame.tetris.ui.brand.Bw
 import com.brickgame.tetris.ui.brand.BwGameOverOverlay
 import com.brickgame.tetris.ui.brand.BwPauseOverlay
+import com.brickgame.tetris.ui.brand.NeonActionPad
 import com.brickgame.tetris.ui.brand.NeonControls
+import com.brickgame.tetris.ui.brand.NeonMovePad
+import com.brickgame.tetris.ui.brand.NeonOneHandPad
+import com.brickgame.tetris.ui.brand.NeonSideHud
 import com.brickgame.tetris.ui.brand.NeonHud
 import com.brickgame.tetris.input.detectSwipeControls
 import androidx.compose.ui.unit.Density
@@ -1042,57 +1046,14 @@ fun GameScreen(
             GameEffectsLayer(fx, gs, Modifier.matchParentSize())
         }
 
-        // Floating info bar — same style as Modern
-        Row(Modifier.fillMaxWidth().align(Alignment.TopCenter)
-            .shadow(6.dp)
-            .background((if (isDark) Color.Black else Color.White).copy(0.55f))
-            .padding(horizontal = 6.dp, vertical = 3.dp),
-            verticalAlignment = Alignment.CenterVertically) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("HOLD", fontSize = 6.sp, color = (if (isDark) Color.White else Color.Black).copy(0.45f),
-                    fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, letterSpacing = 0.5.sp)
-                HoldPiecePreview(gs.holdPiece?.shape, gs.holdUsed, Modifier.size(28.dp))
-            }
-            Spacer(Modifier.width(4.dp))
-            Row(Modifier.weight(1f), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("LVL", fontSize = 6.sp, color = (if (isDark) Color.White else Color.Black).copy(0.4f),
-                        fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
-                    Text("${gs.level}", fontSize = 14.sp, fontWeight = FontWeight.ExtraBold,
-                        fontFamily = FontFamily.Monospace, color = theme.accentColor)
-                }
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("SCORE", fontSize = 6.sp, color = (if (isDark) Color.White else Color.Black).copy(0.4f),
-                        fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
-                    RollingScore(gs.score, fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace,
-                        color = (if (isDark) Color.White else Color.Black).copy(0.9f), letterSpacing = 1.sp)
-                }
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("LINES", fontSize = 6.sp, color = (if (isDark) Color.White else Color.Black).copy(0.4f),
-                        fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
-                    Text("${gs.lines}", fontSize = 13.sp, fontWeight = FontWeight.Bold,
-                        fontFamily = FontFamily.Monospace, color = (if (isDark) Color.White else Color.Black).copy(0.7f))
-                }
-            }
-            Spacer(Modifier.width(4.dp))
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("NEXT", fontSize = 6.sp, color = (if (isDark) Color.White else Color.Black).copy(0.45f),
-                    fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
-                Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                    gs.nextPieces.take(nextCount.coerceAtMost(3)).forEachIndexed { i, p ->
-                        NextPiecePreview(p.shape, Modifier.size(if (i == 0) 28.dp else 20.dp), if (i == 0) 1f else 0.5f)
-                    }
-                }
-            }
+        // Brickwell HUD floating over the board
+        Box(Modifier.align(Alignment.TopCenter).fillMaxWidth().background(Bw.Ground.copy(alpha = 0.55f))) {
+            NeonHud(gs, nextCount, onPause)
         }
 
-        // Ghost outline controls — force OUTLINE shape, very transparent
-        CompositionLocalProvider(LocalButtonShape provides ButtonShape.OUTLINE) {
-            Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().alpha(0.35f)) {
-                FullControls(dp, onHD, onHold, onLP, onLR, onRP, onRR, onDP, onDR, onRotate, onPause, onSet, onStart, gs.status)
-            }
-        }
+        // Neon controls, see-through so the board stays visible underneath
+        NeonControls(LocalLeftHanded.current, onLP, onLR, onRP, onRR, onDP, onDR, onRotate, onHD, onHold,
+            modifier = Modifier.align(Alignment.BottomCenter).alpha(0.55f))
     }
 }
 
@@ -1103,98 +1064,30 @@ fun GameScreen(
     onLP: () -> Unit, onLR: () -> Unit, onRP: () -> Unit, onRR: () -> Unit,
     onDP: () -> Unit, onDR: () -> Unit, onPause: () -> Unit, onSet: () -> Unit, onStart: () -> Unit
 ) {
-    val theme = LocalGameTheme.current
     val isDark = com.brickgame.tetris.ui.theme.LocalIsDarkMode.current
     val fx = rememberGameEffects(gs, shakeSteps = 14, shakeDelay = 20L, shakeMultiplier = 0.8f)
+    val theme = LocalGameTheme.current
 
     Box(Modifier.fillMaxSize()) {
-        // Falling pieces background
         val bgSpeed = if (gs.level >= 10) 1f + (gs.level - 10) * 0.15f else 1f
         FallingPiecesBackground(theme, isDark, bgSpeed, opacity = if (isDark) 0.3f else 0.2f, modifier = Modifier.matchParentSize())
 
-        // Dynamic level tint — subtle hue shift
-        val levelHue = (gs.level * 27f) % 360f
-        val tintColor = if (isDark) Color.hsl(levelHue, 0.25f, 0.06f) else Color.hsl(levelHue, 0.1f, 0.92f)
-
         Column(Modifier.fillMaxSize()) {
-            // Info bar — Modern style with dynamic tint
-            Row(Modifier.fillMaxWidth()
-                .shadow(6.dp)
-                .background(tintColor.copy(0.7f))
-                .padding(horizontal = 6.dp, vertical = 3.dp),
-                verticalAlignment = Alignment.CenterVertically) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("HOLD", fontSize = 6.sp, color = (if (isDark) Color.White else Color.Black).copy(0.45f),
-                        fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, letterSpacing = 0.5.sp)
-                    HoldPiecePreview(gs.holdPiece?.shape, gs.holdUsed, Modifier.size(28.dp))
-                }
-                Spacer(Modifier.width(4.dp))
-                Row(Modifier.weight(1f), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("LVL", fontSize = 6.sp, color = (if (isDark) Color.White else Color.Black).copy(0.4f),
-                            fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
-                        Text("${gs.level}", fontSize = 14.sp, fontWeight = FontWeight.ExtraBold,
-                            fontFamily = FontFamily.Monospace, color = theme.accentColor)
-                    }
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("SCORE", fontSize = 6.sp, color = (if (isDark) Color.White else Color.Black).copy(0.4f),
-                            fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
-                        RollingScore(gs.score, fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace,
-                            color = (if (isDark) Color.White else Color.Black).copy(0.9f), letterSpacing = 1.sp)
-                    }
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("LINES", fontSize = 6.sp, color = (if (isDark) Color.White else Color.Black).copy(0.4f),
-                            fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
-                        Text("${gs.lines}", fontSize = 13.sp, fontWeight = FontWeight.Bold,
-                            fontFamily = FontFamily.Monospace, color = (if (isDark) Color.White else Color.Black).copy(0.7f))
-                    }
-                }
-                Spacer(Modifier.width(4.dp))
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("NEXT", fontSize = 6.sp, color = (if (isDark) Color.White else Color.Black).copy(0.45f),
-                        fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
-                    Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                        gs.nextPieces.take(2).forEachIndexed { i, p ->
-                            NextPiecePreview(p.shape, Modifier.size(if (i == 0) 28.dp else 20.dp), if (i == 0) 1f else 0.5f)
-                        }
-                    }
-                }
-            }
+            NeonHud(gs, 2, onPause)
 
-            // Board with shake — transparent modern grid
             Box(Modifier.weight(1f).fillMaxWidth()
                 .graphicsLayer { translationX = fx.screenShakeX; translationY = fx.screenShakeY }) {
                 GameBoard(gs.board, Modifier.fillMaxSize(), gs.currentPiece, gs.ghostY, ghost, gs.clearedLineRows, anim, ad,
                     multiColor = LocalMultiColor.current, pieceMaterial = LocalPieceMaterial.current, highContrast = LocalHighContrast.current,
                     boardOpacity = if (isDark) 0.12f else 0.18f, gameLevel = gs.level,
                     hardDropTrail = gs.hardDropTrail, lockEvent = gs.lockEvent)
-
                 GameEffectsLayer(fx, gs, Modifier.matchParentSize())
             }
 
-            // Controls — same Compact style DPad layout, respects handedness
-            val lh = LocalLeftHanded.current
-            Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), Arrangement.SpaceBetween, Alignment.CenterVertically) {
-                if (!lh) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        ActionButton("HOLD", onHold, fireOnPress = true, width = 64.dp, height = 30.dp)
-                        ActionButton(if (gs.status == GameStatus.MENU) "START" else "PAUSE",
-                            { if (gs.status == GameStatus.MENU) onStart() else onPause() }, width = 64.dp, height = 30.dp)
-                        ActionButton("···", onSet, width = 44.dp, height = 24.dp, backgroundColor = LocalGameTheme.current.buttonSecondary)
-                    }
-                } else { Spacer(Modifier.width(64.dp)) }
-                DPad(64.dp, rotateInCenter = true, horizontalSpread = 18.dp,
-                    onUpPress = onHD, onDownPress = onDP, onDownRelease = onDR,
-                    onLeftPress = onLP, onLeftRelease = onLR, onRightPress = onRP, onRightRelease = onRR, onRotate = onRotate)
-                if (lh) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        ActionButton("HOLD", onHold, fireOnPress = true, width = 64.dp, height = 30.dp)
-                        ActionButton(if (gs.status == GameStatus.MENU) "START" else "PAUSE",
-                            { if (gs.status == GameStatus.MENU) onStart() else onPause() }, width = 64.dp, height = 30.dp)
-                        ActionButton("···", onSet, width = 44.dp, height = 24.dp, backgroundColor = LocalGameTheme.current.buttonSecondary)
-                    }
-                } else { Spacer(Modifier.width(64.dp)) }
+            // All controls under one thumb, on the playing hand's side
+            Box(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp),
+                contentAlignment = if (LocalLeftHanded.current) Alignment.CenterStart else Alignment.CenterEnd) {
+                NeonOneHandPad(onLP, onLR, onRP, onRR, onDP, onDR, onRotate, onHD, onHold)
             }
         }
     }
@@ -1673,109 +1566,37 @@ fun GameScreen(
     val theme = LocalGameTheme.current
     val isDark = com.brickgame.tetris.ui.theme.LocalIsDarkMode.current
     val lh = LocalLeftHanded.current
-    val fx = rememberGameEffects(gs, shakeSteps = 14, shakeDelay = 20L, shakeMultiplier = 0.7f, flashMultiplier = 0.85f)
-
-    val bgSpeed = if (gs.level >= 10) 1f + (gs.level - 10) * 0.15f else 1f
-    val textColor = if (isDark) Color.White else Color.Black
-    // Dynamic level tint
-    val levelHue = (gs.level * 27f) % 360f
-    val infoPanelTint = if (isDark) Color.hsl(levelHue, 0.2f, 0.08f) else Color.hsl(levelHue, 0.1f, 0.9f)
-
-    // DPad block
-    val dpadBlock: @Composable () -> Unit = {
-        Column(Modifier.fillMaxHeight().padding(4.dp),
-            horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-            DPad(58.dp, rotateInCenter = dp == DPadStyle.ROTATE_CENTRE,
-                onUpPress = onHD, onDownPress = onDP, onDownRelease = onDR,
-                onLeftPress = onLP, onLeftRelease = onLR, onRightPress = onRP, onRightRelease = onRR, onRotate = onRotate)
-        }
-    }
-    // Buttons block — HOLD above, Rotate center-aligned with DPad, PAUSE+menu below
-    val buttonsBlock: @Composable () -> Unit = {
-        Column(Modifier.fillMaxHeight().padding(4.dp),
-            horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-            ActionButton("HOLD", onHold, fireOnPress = true, width = 78.dp, height = 34.dp)
-            Spacer(Modifier.height(8.dp))
-            if (dp == DPadStyle.STANDARD) RotateButton(onRotate, 68.dp)
-            Spacer(Modifier.height(8.dp))
-            ActionButton(if (gs.status == GameStatus.MENU) "START" else "PAUSE",
-                { if (gs.status == GameStatus.MENU) onStart() else onPause() },
-                width = 78.dp, height = 34.dp)
-            Spacer(Modifier.height(4.dp))
-            ActionButton("···", onSet, width = 48.dp, height = 24.dp, backgroundColor = theme.buttonSecondary)
-        }
-    }
+    val fx = rememberGameEffects(gs, shakeDelay = 20L)
 
     Box(Modifier.fillMaxSize()) {
-        // Falling pieces background
-        FallingPiecesBackground(theme, isDark, bgSpeed, opacity = if (isDark) 0.25f else 0.15f, modifier = Modifier.matchParentSize())
+        val bgSpeed = if (gs.level >= 10) 1f + (gs.level - 10) * 0.15f else 1f
+        FallingPiecesBackground(theme, isDark, bgSpeed, opacity = if (isDark) 0.3f else 0.2f, modifier = Modifier.matchParentSize())
 
-        Row(Modifier.fillMaxSize().padding(horizontal = 2.dp, vertical = 2.dp),
-            verticalAlignment = Alignment.CenterVertically) {
-            // LEFT — DPad or Buttons, centered in outer third
-            Box(Modifier.weight(1f).fillMaxHeight(), Alignment.Center) {
-                if (!lh) dpadBlock() else buttonsBlock()
+        val movePad = @Composable {
+            Column(Modifier.fillMaxHeight().width(200.dp), verticalArrangement = Arrangement.Center,
+                horizontalAlignment = Alignment.CenterHorizontally) {
+                NeonMovePad(onLP, onLR, onRP, onRR, onDP, onDR)
             }
-
-            // CENTER — Board (full height) + vertical info panel
-            Row(Modifier.weight(1f).fillMaxHeight()) {
-                // Board with shake + effects — fills full height
-                Box(Modifier.weight(1f).fillMaxHeight()
-                    .graphicsLayer { translationX = fx.screenShakeX; translationY = fx.screenShakeY }) {
-                    GameBoard(gs.board, Modifier.fillMaxSize().alpha(boardDimAlpha), gs.currentPiece, gs.ghostY, ghost,
-                        gs.clearedLineRows, anim, ad, multiColor = LocalMultiColor.current,
-                        hardDropTrail = gs.hardDropTrail, lockEvent = gs.lockEvent,
-                        pieceMaterial = LocalPieceMaterial.current, highContrast = LocalHighContrast.current,
-                        boardOpacity = if (isDark) 0.12f else 0.18f, gameLevel = gs.level)
-
-                    GameEffectsLayer(fx, gs, Modifier.matchParentSize())
-                }
-
-                // Vertical info panel — flush against board, with dynamic level tint
-                Column(Modifier.fillMaxHeight().width(90.dp)
-                    .background(infoPanelTint.copy(0.55f), RoundedCornerShape(topEnd = 6.dp, bottomEnd = 6.dp))
-                    .padding(horizontal = 6.dp, vertical = 6.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.SpaceEvenly) {
-                    // HOLD
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("HOLD", fontSize = 7.sp, color = textColor.copy(0.45f), fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
-                        HoldPiecePreview(gs.holdPiece?.shape, gs.holdUsed, Modifier.size(32.dp))
-                    }
-                    // LVL
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
-                        Text("LVL ", fontSize = 7.sp, color = textColor.copy(0.4f), fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
-                        Text("${gs.level}", fontSize = 18.sp, fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace, color = theme.accentColor)
-                    }
-                    // SCORE
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("SCORE", fontSize = 7.sp, color = textColor.copy(0.4f), fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
-                        RollingScore(gs.score, fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace,
-                            color = textColor.copy(0.9f), letterSpacing = 0.5.sp)
-                    }
-                    // LINES
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
-                        Text("LNS ", fontSize = 7.sp, color = textColor.copy(0.4f), fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
-                        Text("${gs.lines}", fontSize = 16.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, color = textColor.copy(0.7f))
-                    }
-                    // NEXT — horizontal row
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("NEXT", fontSize = 7.sp, color = textColor.copy(0.45f), fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
-                        Spacer(Modifier.height(2.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                            gs.nextPieces.take(nextCount.coerceAtMost(3)).forEachIndexed { i, p ->
-                                NextPiecePreview(p.shape, Modifier.size(if (i == 0) 26.dp else 20.dp), if (i == 0) 1f else 0.5f)
-                            }
-                        }
-                    }
-                }
+        }
+        val actionSide = @Composable {
+            Column(Modifier.fillMaxHeight().width(200.dp), verticalArrangement = Arrangement.SpaceBetween,
+                horizontalAlignment = Alignment.CenterHorizontally) {
+                NeonSideHud(gs, nextCount, onPause, Modifier.fillMaxWidth())
+                NeonActionPad(onRotate, onHD, onHold)
             }
-
-            // RIGHT — Buttons or DPad, centered in outer third
-            Box(Modifier.weight(1f).fillMaxHeight(), Alignment.Center) {
-                if (!lh) buttonsBlock() else dpadBlock()
+        }
+        Row(Modifier.fillMaxSize().padding(horizontal = 12.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            if (lh) actionSide() else movePad()
+            Box(Modifier.weight(1f).fillMaxHeight()
+                .graphicsLayer { translationX = fx.screenShakeX; translationY = fx.screenShakeY }) {
+                GameBoard(gs.board, Modifier.fillMaxSize().alpha(boardDimAlpha), gs.currentPiece, gs.ghostY, ghost,
+                    gs.clearedLineRows, anim, ad, multiColor = LocalMultiColor.current,
+                    hardDropTrail = gs.hardDropTrail, lockEvent = gs.lockEvent,
+                    pieceMaterial = LocalPieceMaterial.current, highContrast = LocalHighContrast.current,
+                    boardOpacity = if (isDark) 0.12f else 0.18f, gameLevel = gs.level)
+                GameEffectsLayer(fx, gs, Modifier.matchParentSize())
             }
+            if (lh) movePad() else actionSide()
         }
     }
 }
