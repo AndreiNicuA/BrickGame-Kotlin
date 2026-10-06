@@ -459,7 +459,6 @@ private fun RollingScore(
         modifier = if (g > 0.01f) modifier.graphicsLayer { scaleX = 1f + g * 0.15f; scaleY = 1f + g * 0.15f } else modifier)
 }
 
-
 @Composable
 fun GameScreen(
     gameState: GameState,
@@ -551,7 +550,7 @@ fun GameScreen(
     val isMenu = gameState.status == GameStatus.MENU
     Box(Modifier.fillMaxSize()) {
         if (isMenu) {
-            MenuOverlay(gameState.highScore, scoreHistory, onStartGame, onOpenSettings)
+            // The menu is drawn by the brand screens (MainActivity); nothing to show here
         } else if (useControllerLayout) {
             // Controller-optimized: full-screen board + floating HUD + pause only
             Box(Modifier.fillMaxSize().background(theme.backgroundColor)) {
@@ -665,10 +664,6 @@ fun GameScreen(
         }
         // Timer expired — blocks all gameplay
         if (timerExpired) TimerExpiredOverlay(onCloseApp)
-        // Onboarding overlay
-        if (showOnboarding && gameState.status == GameStatus.MENU) {
-            OnboardingOverlay(onDismissOnboarding)
-        }
     }
     } // end CompositionLocalProvider
 }
@@ -1868,126 +1863,6 @@ fun GameScreen(
     }
 }
 
-// === CUSTOM LAYOUT: Position-based, uses normalized coordinates ===
-@Composable private fun CustomLayout(
-    gs: GameState, dp: DPadStyle, ghost: Boolean, anim: AnimationStyle, ad: Float,
-    cl: CustomLayoutData,
-    onRotate: () -> Unit, onHD: () -> Unit, onHold: () -> Unit,
-    onLP: () -> Unit, onLR: () -> Unit, onRP: () -> Unit, onRR: () -> Unit,
-    onDP: () -> Unit, onDR: () -> Unit, onPause: () -> Unit, onSet: () -> Unit, onStart: () -> Unit
-) {
-    val theme = LocalGameTheme.current
-    val dpadSz = when (cl.sizeFor(LayoutElements.DPAD)) { "SMALL" -> 44.dp; "LARGE" -> 62.dp; else -> 54.dp }
-    val rotSz = when (cl.sizeFor(LayoutElements.ROTATE_BTN)) { "SMALL" -> 52.dp; "LARGE" -> 74.dp; else -> 66.dp }
-    val vis = cl.visibility
-    val pos = cl.positions
-
-    fun isVisible(elem: String) = vis.getOrDefault(elem, true)
-
-    BoxWithConstraints(Modifier.fillMaxSize()) {
-        val maxW = maxWidth; val maxH = maxHeight
-
-        // Board — centered, takes most space
-        if (isVisible(LayoutElements.BOARD)) {
-            val bp = pos[LayoutElements.BOARD] ?: ElementPosition(0.5f, 0.38f)
-            Box(Modifier.size(maxW * 0.85f, maxH * 0.6f).offset(x = maxW * bp.x - maxW * 0.425f, y = maxH * bp.y - maxH * 0.3f)) {
-                GameBoard(gs.board, Modifier.fillMaxSize(), gs.currentPiece, gs.ghostY, ghost, gs.clearedLineRows, anim, ad, multiColor = LocalMultiColor.current, pieceMaterial = LocalPieceMaterial.current, highContrast = LocalHighContrast.current)
-            }
-        }
-        // Score
-        if (isVisible(LayoutElements.SCORE)) {
-            val sp = pos[LayoutElements.SCORE] ?: ElementPosition(0.5f, 0.02f)
-            Text(gs.score.toString().padStart(7, '0'), Modifier.offset(x = maxW * sp.x - 40.dp, y = maxH * sp.y),
-                fontSize = 16.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, color = theme.accentColor)
-        }
-        // Level
-        if (isVisible(LayoutElements.LEVEL)) {
-            val lp = pos[LayoutElements.LEVEL] ?: ElementPosition(0.15f, 0.02f)
-            Tag("LV${gs.level}", Modifier.offset(x = maxW * lp.x - 16.dp, y = maxH * lp.y))
-        }
-        // Lines
-        if (isVisible(LayoutElements.LINES)) {
-            val lp = pos[LayoutElements.LINES] ?: ElementPosition(0.85f, 0.02f)
-            Tag("${gs.lines}L", Modifier.offset(x = maxW * lp.x - 16.dp, y = maxH * lp.y))
-        }
-        // Hold preview
-        if (isVisible(LayoutElements.HOLD_PREVIEW)) {
-            val hp = pos[LayoutElements.HOLD_PREVIEW] ?: ElementPosition(0.08f, 0.08f)
-            Column(Modifier.offset(x = maxW * hp.x - 24.dp, y = maxH * hp.y - 12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Tag("HOLD"); HoldPiecePreview(gs.holdPiece?.shape, gs.holdUsed, Modifier.size(40.dp))
-            }
-        }
-        // Next preview
-        if (isVisible(LayoutElements.NEXT_PREVIEW)) {
-            val np = pos[LayoutElements.NEXT_PREVIEW] ?: ElementPosition(0.92f, 0.08f)
-            Column(Modifier.offset(x = maxW * np.x - 24.dp, y = maxH * np.y - 12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Tag("NEXT"); gs.nextPieces.take(cl.nextQueueSize).forEachIndexed { i, p -> NextPiecePreview(p.shape, Modifier.size(if (i == 0) 34.dp else 24.dp), if (i == 0) 1f else 0.5f) }
-            }
-        }
-        // D-Pad
-        if (isVisible(LayoutElements.DPAD)) {
-            val dp2 = pos[LayoutElements.DPAD] ?: ElementPosition(0.18f, 0.85f)
-            Box(Modifier.offset(x = maxW * dp2.x - 70.dp, y = maxH * dp2.y - 70.dp)) {
-                DPad(dpadSz, rotateInCenter = dp == DPadStyle.ROTATE_CENTRE,
-                    onUpPress = onHD, onDownPress = onDP, onDownRelease = onDR,
-                    onLeftPress = onLP, onLeftRelease = onLR, onRightPress = onRP, onRightRelease = onRR, onRotate = onRotate)
-            }
-        }
-        // Rotate
-        if (isVisible(LayoutElements.ROTATE_BTN) && dp == DPadStyle.STANDARD) {
-            val rp = pos[LayoutElements.ROTATE_BTN] ?: ElementPosition(0.85f, 0.85f)
-            Box(Modifier.offset(x = maxW * rp.x - rotSz / 2, y = maxH * rp.y - rotSz / 2)) { RotateButton(onRotate, rotSz) }
-        }
-        // Hold button
-        if (isVisible(LayoutElements.HOLD_BTN)) {
-            val hb = pos[LayoutElements.HOLD_BTN] ?: ElementPosition(0.5f, 0.80f)
-            Box(Modifier.offset(x = maxW * hb.x - 39.dp, y = maxH * hb.y - 17.dp)) { ActionButton("HOLD", onHold, fireOnPress = true, width = 78.dp, height = 34.dp) }
-        }
-        // Pause
-        if (isVisible(LayoutElements.PAUSE_BTN)) {
-            val pb = pos[LayoutElements.PAUSE_BTN] ?: ElementPosition(0.5f, 0.87f)
-            Box(Modifier.offset(x = maxW * pb.x - 39.dp, y = maxH * pb.y - 17.dp)) {
-                ActionButton(if (gs.status == GameStatus.MENU) "START" else "PAUSE",
-                    { if (gs.status == GameStatus.MENU) onStart() else onPause() }, width = 78.dp, height = 34.dp)
-            }
-        }
-        // Menu (always visible — sandwich icon style)
-        val mp = pos[LayoutElements.MENU_BTN] ?: ElementPosition(0.5f, 0.94f)
-        Box(Modifier.offset(x = maxW * mp.x - 23.dp, y = maxH * mp.y - 12.dp)) { ActionButton("≡", onSet, width = 46.dp, height = 24.dp, backgroundColor = LocalGameTheme.current.buttonSecondary) }
-    }
-}
-
-// === Helpers ===
-@Composable private fun OnboardingOverlay(onDismiss: () -> Unit) {
-    var page by remember { mutableIntStateOf(0) }
-    val pages = listOf(
-        Triple("Welcome!", "Swipe or use the D-Pad to move pieces\nTap rotate to spin them", "🎮"),
-        Triple("Hold Piece", "Press HOLD to save a piece for later\n(Classic mode has no Hold)", "📦"),
-        Triple("Ready?", "Customize everything in Settings\nChoose your layout and theme", "⚙️")
-    )
-    Box(Modifier.fillMaxSize().background(Color.Black.copy(0.88f)).clickable {
-        if (page < pages.size - 1) page++ else onDismiss()
-    }, Alignment.Center) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(32.dp)) {
-            Text(pages[page].third, fontSize = 48.sp)
-            Spacer(Modifier.height(16.dp))
-            Text(pages[page].first, fontSize = 24.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, color = Color(0xFFF4D03F))
-            Spacer(Modifier.height(12.dp))
-            Text(pages[page].second, fontSize = 14.sp, fontFamily = FontFamily.Monospace, color = Color.White.copy(0.8f),
-                textAlign = androidx.compose.ui.text.style.TextAlign.Center)
-            Spacer(Modifier.height(32.dp))
-            // Page indicators
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                pages.forEachIndexed { i, _ ->
-                    Box(Modifier.size(8.dp).clip(CircleShape).background(if (i == page) Color(0xFFF4D03F) else Color.White.copy(0.3f)))
-                }
-            }
-            Spacer(Modifier.height(16.dp))
-            Text(if (page < pages.size - 1) "Tap to continue" else "Tap to start!", color = Color.White.copy(0.5f), fontSize = 12.sp, fontFamily = FontFamily.Monospace)
-        }
-    }
-}
-
 /** LCD-style number display — ghost "8" segments behind active digits, like real Brick Game */
 @Composable private fun LCDNumber(value: Int, digits: Int, activeColor: Color, ghostColor: Color, fontSize: androidx.compose.ui.unit.TextUnit) {
     val str = value.toString()
@@ -2048,114 +1923,6 @@ fun GameScreen(
 }
 
 @Composable private fun Tag(t: String, modifier: Modifier = Modifier) { Text(t, modifier = modifier, fontSize = 9.sp, color = LocalGameTheme.current.textSecondary, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, letterSpacing = 0.5.sp) }
-@Composable private fun ScoreBlock(score: Int, level: Int, lines: Int) {
-    val theme = LocalGameTheme.current
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(score.toString().padStart(7, '0'), fontSize = 15.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, color = theme.pixelOn, letterSpacing = 1.sp)
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) { Tag("LV${level}"); Tag("${lines}L") }
-    }
-}
-
-// === Overlays ===
-@Composable private fun MenuOverlay(hs: Int, scoreHistory: List<com.brickgame.tetris.data.ScoreEntry>, onStart: () -> Unit, onSet: () -> Unit) {
-    val theme = LocalGameTheme.current
-    val isDark = com.brickgame.tetris.ui.theme.LocalIsDarkMode.current
-    val bgColor = if (isDark) theme.backgroundColor else Color(0xFFF2F2F2)
-
-    // Staggered entrance animation
-    var visible by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) { visible = true }
-    val titleAlpha by animateFloatAsState(if (visible) 1f else 0f, tween(500), label = "mta")
-    val titleScale by animateFloatAsState(if (visible) 1f else 0.8f, tween(600, easing = FastOutSlowInEasing), label = "mts")
-    val scoreAlpha by animateFloatAsState(if (visible) 1f else 0f, tween(400, delayMillis = 200), label = "msa")
-    // Item 1: Staggered button entry — each button fades in with a 80ms delay
-    val btn1Alpha by animateFloatAsState(if (visible) 1f else 0f, tween(350, delayMillis = 400), label = "mb1")
-    val btn1Slide by animateFloatAsState(if (visible) 0f else 24f, tween(350, delayMillis = 400, easing = FastOutSlowInEasing), label = "ms1")
-    val btn2Alpha by animateFloatAsState(if (visible) 1f else 0f, tween(350, delayMillis = 480), label = "mb2")
-    val btn2Slide by animateFloatAsState(if (visible) 0f else 24f, tween(350, delayMillis = 480, easing = FastOutSlowInEasing), label = "ms2")
-    val leaderAlpha by animateFloatAsState(if (visible) 1f else 0f, tween(400, delayMillis = 560), label = "mla")
-
-    // Item 1: Pulsing play button glow — theme-aware
-    val inf = rememberInfiniteTransition(label = "menuPulse")
-    val playPulse by inf.animateFloat(1f, 1.06f, infiniteRepeatable(tween(1200, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "pp")
-    val playGlow by inf.animateFloat(0.3f, 0.8f, infiniteRepeatable(tween(1200), RepeatMode.Reverse), label = "pg")
-
-    // Item 3: Color-coded button accents
-    val playColor = if (isDark) theme.accentColor else Color(0xFFB8860B)
-    val settingsColor = if (isDark) theme.buttonSecondary else Color(0xFFE0E0E0)
-
-    Box(Modifier.fillMaxSize().background(bgColor)) {
-        FallingPiecesBackground(theme, isDark)
-        Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-            // Title with entrance animation
-            Column(horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.graphicsLayer { scaleX = titleScale; scaleY = titleScale; alpha = titleAlpha }) {
-                Text("BRICK", fontSize = 38.sp, fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace,
-                    color = if (isDark) theme.textPrimary.copy(alpha = 0.9f) else Color(0xFF2A2A2A), letterSpacing = 8.sp)
-                Text("WELL", fontSize = 38.sp, fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace,
-                    color = if (isDark) theme.accentColor else Color(0xFFB8860B), letterSpacing = 8.sp)
-            }
-            Spacer(Modifier.height(32.dp))
-            // High score with fade-in
-            if (hs > 0) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier.graphicsLayer { alpha = scoreAlpha }) {
-                    val bestEntry = scoreHistory.maxByOrNull { it.score }
-                    Text("$hs", fontSize = 28.sp, fontFamily = FontFamily.Monospace,
-                        color = if (isDark) theme.accentColor else Color(0xFFB8860B), fontWeight = FontWeight.Bold)
-                    if (bestEntry != null) {
-                        val sdf = java.text.SimpleDateFormat("dd.MM.yyyy", java.util.Locale.getDefault())
-                        val dateStr = sdf.format(java.util.Date(bestEntry.timestamp))
-                        Text("${bestEntry.playerName} \u00b7 $dateStr", fontSize = 11.sp, fontFamily = FontFamily.Monospace,
-                            color = if (isDark) theme.textSecondary else Color(0xFF666666))
-                    }
-                    Spacer(Modifier.height(4.dp))
-                    Text("HIGH SCORE", fontSize = 10.sp, fontFamily = FontFamily.Monospace,
-                        color = if (isDark) theme.textSecondary.copy(alpha = 0.6f) else Color(0xFF999999), letterSpacing = 4.sp)
-                }
-                Spacer(Modifier.height(32.dp))
-            }
-            // Item 2: Staggered PLAY button with glow pulse
-            Box(contentAlignment = Alignment.Center,
-                modifier = Modifier.graphicsLayer { translationY = btn1Slide; alpha = btn1Alpha }) {
-                // Glow layer behind
-                Box(Modifier.matchParentSize()
-                    .graphicsLayer { scaleX = playPulse + 0.08f; scaleY = playPulse + 0.08f; alpha = playGlow * 0.3f }
-                    .background(playColor.copy(alpha = 0.2f), RoundedCornerShape(12.dp)))
-                Box(Modifier.graphicsLayer { scaleX = playPulse; scaleY = playPulse }) {
-                    ActionButton("PLAY", onStart, width = 180.dp, height = 52.dp, backgroundColor = playColor)
-                }
-            }
-            Spacer(Modifier.height(12.dp))
-            // Item 2: Settings button with own staggered delay
-            Box(modifier = Modifier.graphicsLayer { translationY = btn2Slide; alpha = btn2Alpha }) {
-                ActionButton("SETTINGS", onSet, width = 180.dp, height = 44.dp, backgroundColor = settingsColor)
-            }
-            // Mini leaderboard
-            if (scoreHistory.size > 1) {
-                Spacer(Modifier.height(20.dp))
-                Column(horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier.graphicsLayer { alpha = leaderAlpha }) {
-                    Text("RECENT BEST", fontSize = 9.sp, fontFamily = FontFamily.Monospace,
-                        color = if (isDark) theme.textSecondary.copy(0.5f) else Color(0xFF999999), letterSpacing = 3.sp)
-                    Spacer(Modifier.height(6.dp))
-                    val top3 = scoreHistory.sortedByDescending { it.score }.take(3)
-                    top3.forEachIndexed { i, entry ->
-                        val medal = when (i) { 0 -> "#1"; 1 -> "#2"; 2 -> "#3"; else -> "" }
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Text(medal, fontSize = 12.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace,
-                                color = if (isDark) theme.accentColor.copy(0.6f) else Color(0xFFB8860B))
-                            Text(entry.score.toString(), fontSize = 14.sp, fontFamily = FontFamily.Monospace,
-                                fontWeight = FontWeight.Bold, color = if (isDark) theme.textPrimary.copy(0.7f) else Color(0xFF444444))
-                            Text("Lv${entry.level}", fontSize = 11.sp, fontFamily = FontFamily.Monospace,
-                                color = if (isDark) theme.textSecondary.copy(0.4f) else Color(0xFF888888))
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
 
 // Falling translucent pieces — matrix rain style with colored pieces, fading trails and sparkle.
 // Kept deliberately cheap: it runs behind gameplay, so it must stay far below the frame budget
@@ -2252,25 +2019,6 @@ private fun FallingPiecesBackground(
     }
 }
 
-@Composable private fun PauseOverlay(onResume: () -> Unit, onSet: () -> Unit, onQuit: () -> Unit) {
-    // Entrance animation — fade in + slide up
-    var visible by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) { visible = true }
-    val bgAlpha by animateFloatAsState(if (visible) 0.75f else 0f, tween(300), label = "pbg")
-    val contentAlpha by animateFloatAsState(if (visible) 1f else 0f, tween(350, delayMillis = 80), label = "pca")
-    val slideUp by animateFloatAsState(if (visible) 0f else 40f, tween(350, delayMillis = 80, easing = FastOutSlowInEasing), label = "psl")
-
-    Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = bgAlpha)), Alignment.Center) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.graphicsLayer { translationY = slideUp; alpha = contentAlpha }) {
-            Text("PAUSED", fontSize = 28.sp, fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace, color = Color.White, letterSpacing = 4.sp)
-            Spacer(Modifier.height(28.dp)); ActionButton("RESUME", onResume, width = 160.dp, height = 48.dp)
-            Spacer(Modifier.height(12.dp)); ActionButton("SETTINGS", onSet, width = 160.dp, height = 42.dp, backgroundColor = LocalGameTheme.current.buttonSecondary)
-            Spacer(Modifier.height(12.dp)); ActionButton("LEAVE", onQuit, width = 160.dp, height = 42.dp, backgroundColor = Color(0xFFB91C1C))
-        }
-    }
-}
-
 @Composable private fun TimerExpiredOverlay(onLeave: () -> Unit) {
     Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.92f)), Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -2283,140 +2031,6 @@ private fun FallingPiecesBackground(
             Spacer(Modifier.height(32.dp))
             ActionButton("LEAVE", onLeave, width = 180.dp, height = 52.dp, backgroundColor = Color(0xFFB91C1C))
         }
-    }
-}
-
-@Composable private fun GameOverOverlay(
-    score: Int, level: Int, lines: Int,
-    highScore: Int = 0, maxCombo: Int = 0, backToBack: Int = 0, elapsedMs: Long = 0,
-    onRestart: () -> Unit, onMenu: () -> Unit, onLeave: () -> Unit
-) {
-    val theme = LocalGameTheme.current
-    val isNewBest = score > 0 && score >= highScore
-
-    // Entrance animation — staggered reveal
-    var visible by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) { visible = true }
-    val bgAlpha by animateFloatAsState(if (visible) 0.88f else 0f, tween(400), label = "gobg")
-    val titleAlpha by animateFloatAsState(if (visible) 1f else 0f, tween(350, delayMillis = 100), label = "gotitle")
-    val titleScale by animateFloatAsState(if (visible) 1f else 1.4f, tween(500, delayMillis = 100, easing = FastOutSlowInEasing), label = "gots")
-    // Item 4: Each stat row fades in with increasing delay
-    val stat1Alpha by animateFloatAsState(if (visible) 1f else 0f, tween(280, delayMillis = 300), label = "gs1")
-    val stat1Slide by animateFloatAsState(if (visible) 0f else 20f, tween(280, delayMillis = 300, easing = FastOutSlowInEasing), label = "gss1")
-    val stat2Alpha by animateFloatAsState(if (visible) 1f else 0f, tween(280, delayMillis = 380), label = "gs2")
-    val stat2Slide by animateFloatAsState(if (visible) 0f else 20f, tween(280, delayMillis = 380, easing = FastOutSlowInEasing), label = "gss2")
-    val stat3Alpha by animateFloatAsState(if (visible) 1f else 0f, tween(280, delayMillis = 460), label = "gs3")
-    val stat3Slide by animateFloatAsState(if (visible) 0f else 20f, tween(280, delayMillis = 460, easing = FastOutSlowInEasing), label = "gss3")
-    val stat4Alpha by animateFloatAsState(if (visible) 1f else 0f, tween(280, delayMillis = 540), label = "gs4")
-    val stat4Slide by animateFloatAsState(if (visible) 0f else 20f, tween(280, delayMillis = 540, easing = FastOutSlowInEasing), label = "gss4")
-    val buttonsAlpha by animateFloatAsState(if (visible) 1f else 0f, tween(300, delayMillis = 650), label = "gobtn")
-    val buttonsSlide by animateFloatAsState(if (visible) 0f else 20f, tween(300, delayMillis = 650, easing = FastOutSlowInEasing), label = "gobs")
-
-    // Title pulse
-    val inf = rememberInfiniteTransition(label = "go")
-    val titlePulse by inf.animateFloat(0.8f, 1f, infiniteRepeatable(tween(600), RepeatMode.Reverse), label = "gp")
-
-    // Item 5: New best pulsing glow
-    val bestGlow by inf.animateFloat(0.4f, 1f, infiniteRepeatable(tween(800), RepeatMode.Reverse), label = "bg")
-
-    // Item 4: Per-stat accent colors derived from theme
-    val scoreColor = theme.accentColor
-    val levelColor = Color(0xFF4ECDC4) // teal
-    val linesColor = Color(0xFFFF6B6B) // coral
-    val timeColor = Color(0xFF74B9FF)  // sky blue
-
-    // Format elapsed time
-    val timeStr = remember(elapsedMs) {
-        val totalSec = (elapsedMs / 1000).toInt()
-        val min = totalSec / 60; val sec = totalSec % 60
-        "%02d:%02d".format(min, sec)
-    }
-
-    Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = bgAlpha)), Alignment.Center) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 24.dp)) {
-            Spacer(Modifier.height(16.dp))
-            // Title with scale entrance
-            Column(horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.graphicsLayer { scaleX = titleScale; scaleY = titleScale; alpha = titleAlpha }) {
-                Text("GAME", fontSize = 34.sp, fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace,
-                    color = Color(0xFFFF4444).copy(alpha = titlePulse), letterSpacing = 6.sp)
-                Text("OVER", fontSize = 34.sp, fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace,
-                    color = Color(0xFFFF4444).copy(alpha = titlePulse), letterSpacing = 6.sp)
-            }
-
-            // Item 5: New personal best badge
-            if (isNewBest) {
-                Spacer(Modifier.height(8.dp))
-                Text("NEW BEST!", fontSize = 13.sp, fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace,
-                    color = theme.accentColor.copy(alpha = bestGlow), letterSpacing = 4.sp)
-            }
-
-            Spacer(Modifier.height(20.dp))
-
-            // Animated score counter
-            val animatedGoScore by animateIntAsState(if (visible) score else 0, tween(800, delayMillis = 400), label = "gosc")
-            Text(animatedGoScore.toString(), fontSize = 32.sp, fontFamily = FontFamily.Monospace,
-                color = scoreColor, fontWeight = FontWeight.ExtraBold)
-
-            Spacer(Modifier.height(16.dp))
-
-            // Item 4: Stats with per-stat accent colors and individual staggered animations
-            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                GameOverStatRow("LEVEL", "$level", levelColor,
-                    Modifier.graphicsLayer { translationY = stat1Slide; alpha = stat1Alpha })
-                GameOverStatRow("LINES", "$lines", linesColor,
-                    Modifier.graphicsLayer { translationY = stat2Slide; alpha = stat2Alpha })
-                GameOverStatRow("TIME", timeStr, timeColor,
-                    Modifier.graphicsLayer { translationY = stat3Slide; alpha = stat3Alpha })
-                if (maxCombo > 1 || backToBack > 0) {
-                    val extraText = buildString {
-                        if (maxCombo > 1) append("${maxCombo}x Combo")
-                        if (backToBack > 0) {
-                            if (isNotEmpty()) append("  \u00b7  ")
-                            append("${backToBack}x B2B")
-                        }
-                    }
-                    GameOverStatRow("BEST", extraText, Color(0xFFFFAA00),
-                        Modifier.graphicsLayer { translationY = stat4Slide; alpha = stat4Alpha })
-                }
-            }
-
-            Spacer(Modifier.height(24.dp))
-
-            // Buttons with fade-in
-            Column(horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.graphicsLayer { translationY = buttonsSlide; alpha = buttonsAlpha }) {
-                ActionButton("AGAIN", onRestart, width = 160.dp, height = 48.dp, backgroundColor = theme.accentColor)
-                Spacer(Modifier.height(10.dp))
-                ActionButton("LEAVE", onLeave, width = 160.dp, height = 42.dp, backgroundColor = Color(0xFFB91C1C))
-            }
-            Spacer(Modifier.height(16.dp))
-        }
-    }
-}
-
-/** Item 4: Individual stat row for Game Over — colored label + value on a dark chip */
-@Composable private fun GameOverStatRow(label: String, value: String, accentColor: Color, modifier: Modifier = Modifier) {
-    Row(
-        modifier = modifier.fillMaxWidth(0.75f)
-            .background(Color.White.copy(0.06f), RoundedCornerShape(8.dp))
-            .padding(horizontal = 14.dp, vertical = 8.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(label, fontSize = 10.sp, color = Color.White.copy(0.5f), fontWeight = FontWeight.Bold,
-            fontFamily = FontFamily.Monospace, letterSpacing = 2.sp)
-        Text(value, fontSize = 16.sp, color = accentColor, fontWeight = FontWeight.Bold,
-            fontFamily = FontFamily.Monospace)
-    }
-}
-
-@Composable private fun StatChip(label: String, value: String) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.background(Color.White.copy(0.08f), RoundedCornerShape(8.dp)).padding(horizontal = 12.dp, vertical = 6.dp)) {
-        Text(label, fontSize = 8.sp, color = Color.White.copy(0.5f), fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, letterSpacing = 1.sp)
-        Text(value, fontSize = 16.sp, color = Color.White, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
     }
 }
 
