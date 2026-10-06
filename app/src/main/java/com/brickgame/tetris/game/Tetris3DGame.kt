@@ -17,6 +17,8 @@ class Tetris3DGame {
         const val BOARD_W = 6  // X axis
         const val BOARD_D = 6  // Z axis
         const val BOARD_H = 14 // Y axis (height)
+        /** Colour index used for garbage cubes (renders in the "other" colour). */
+        const val GARBAGE_COLOR = 8
     }
 
     // 3D board: board[y][z][x] — 0 = empty, >0 = filled (color index)
@@ -48,7 +50,7 @@ class Tetris3DGame {
 
     fun start() {
         board = Array(BOARD_H) { Array(BOARD_D) { IntArray(BOARD_W) } }
-        score = 0; level = 1; layers = 0; holdType = null; holdUsed = false
+        score = 0; level = 1; layers = 0; holdType = null; holdUsed = false; pendingGarbage = 0
         status = GameStatus.PLAYING; dropTimer = 0L; lockTimer = 0L; isLocking = false
         bag.clear(); nextPieces.clear()
         repeat(3) { nextPieces.add(nextFromBag()) }
@@ -252,8 +254,27 @@ class Tetris3DGame {
         return true
     }
 
+    // ===== Versus: garbage layers sent by the opponent =====
+    private var pendingGarbage = 0
+    private val garbageRandom = kotlin.random.Random
+
+    /** Queue [n] garbage layers; they rise from the bottom when the next piece spawns. */
+    fun queueGarbage(n: Int) { if (n > 0) pendingGarbage = (pendingGarbage + n).coerceAtMost(BOARD_H) }
+
+    /** Pushes the stack up by [n] and fills the bottom with layers that each have one hole. */
+    internal fun applyGarbage(n: Int) {
+        if (n <= 0) return
+        // Anything pushed past the top is lost — that's the danger of being attacked
+        for (y in BOARD_H - 1 downTo n) board[y] = board[y - n]
+        for (y in 0 until n) {
+            val hx = garbageRandom.nextInt(BOARD_W); val hz = garbageRandom.nextInt(BOARD_D)
+            board[y] = Array(BOARD_D) { z -> IntArray(BOARD_W) { x -> if (x == hx && z == hz) 0 else GARBAGE_COLOR } }
+        }
+    }
+
     private fun spawnPiece() {
-        val type = nextPieces.removeFirst()
+        if (pendingGarbage > 0) { applyGarbage(pendingGarbage); pendingGarbage = 0 }
+        val type = nextPieces.removeAt(0)
         nextPieces.add(nextFromBag())
         val piece = createPiece(type)
         currentPiece = piece
@@ -277,7 +298,7 @@ class Tetris3DGame {
         if (bag.isEmpty()) {
             bag.addAll(Piece3DType.entries.toList().shuffled())
         }
-        return bag.removeFirst()
+        return bag.removeAt(0)
     }
 
     private fun dropSpeed(): Long = maxOf(100L, 1000L - (level - 1) * 80L)

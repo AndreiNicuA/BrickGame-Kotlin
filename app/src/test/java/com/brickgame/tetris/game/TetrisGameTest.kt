@@ -156,4 +156,37 @@ class TetrisGameTest {
         assertEquals(first, state.holdPiece!!.type)
         assertFalse(game.holdCurrentPiece())
     }
+
+    @Test
+    fun `garbage rises from the bottom when the next piece spawns`() {
+        game.startGame()
+        game.setUpForTest(emptyBoard(), TetrominoType.O)
+        game.queueGarbage(2)
+        assertEquals(2, game.pendingGarbageRows())
+        game.hardDrop()   // locking spawns the next piece, which applies the garbage
+        assertEquals(0, game.pendingGarbageRows())
+        val bottom = state.board.takeLast(2)
+        val holes = bottom.map { row -> row.indexOf(0) }
+        for (row in bottom) {
+            assertEquals(1, row.count { it == 0 })
+            assertEquals(TetrisGame.BOARD_WIDTH - 1, row.count { it == TetrisGame.GARBAGE_CELL })
+        }
+        assertEquals(holes[0], holes[1])   // one gap column for the whole batch
+    }
+
+    @Test
+    fun `garbage pushes the existing stack up`() {
+        val rows = emptyBoard()
+        rows[TetrisGame.TOTAL_HEIGHT - 1][0] = 3
+        game.startGame()
+        game.setUpForTest(rows, TetrominoType.O)
+        game.applyGarbage(3, holeColumn = 5)
+        game.moveLeft()   // emits a fresh state
+        val b = state.board
+        assertEquals(3, b[TetrisGame.BOARD_HEIGHT - 4][0])
+        for (y in TetrisGame.BOARD_HEIGHT - 3 until TetrisGame.BOARD_HEIGHT) {
+            assertEquals(0, b[y][5])
+            assertEquals(TetrisGame.GARBAGE_CELL, b[y][0])
+        }
+    }
 }

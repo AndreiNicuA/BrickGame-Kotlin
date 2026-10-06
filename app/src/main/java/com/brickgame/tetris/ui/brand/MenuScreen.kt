@@ -41,7 +41,8 @@ fun MenuScreen(
     onSwitchPlayer: () -> Unit,
     onSettings: () -> Unit,
     onRecords: () -> Unit,
-    onHowToPlay: () -> Unit
+    onHowToPlay: () -> Unit,
+    onVersus: () -> Unit = {}
 ) {
     // Gentle entrance: content rises in once
     var shown by remember { mutableStateOf(false) }
@@ -112,9 +113,8 @@ fun MenuScreen(
                 leading = { BwIcon(BwIconKind.PLAY, Bw.Ground, size = 20.dp) }
             )
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                BwSecondaryButton("Versus", {}, Modifier.weight(1f),
-                    leading = { BwIcon(BwIconKind.SWORDS, Bw.Text, size = 18.dp) },
-                    trailing = { Text("SOON", style = BwType.Overline.copy(fontSize = 10.sp)) })
+                BwSecondaryButton("Versus", onVersus, Modifier.weight(1f),
+                    leading = { BwIcon(BwIconKind.SWORDS, Bw.Text, size = 18.dp) })
                 BwSecondaryButton("Records", onRecords, Modifier.weight(1f),
                     leading = { BwIcon(BwIconKind.CHART, Bw.Text, size = 18.dp) })
             }

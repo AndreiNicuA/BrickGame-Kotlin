@@ -20,6 +20,8 @@ class TetrisGame(private val clock: () -> Long = { System.nanoTime() / 1_000_000
         const val LOCK_DELAY_MS = 500L
         const val MAX_LOCK_MOVES = 15
         const val ULTRA_TIME_LIMIT_MS = 120_000L
+        /** Board value for garbage cells (outside the 1..7 piece range; drawn in the theme colour). */
+        const val GARBAGE_CELL = 8
 
         // SRS-compliant spawn shapes (all in bounding boxes)
         val TETROMINOS = mapOf(
@@ -132,6 +134,7 @@ class TetrisGame(private val clock: () -> Long = { System.nanoTime() / 1_000_000
         nextQueue.clear()
         spawnCounter = 0
         holdCounter = 0
+        pendingGarbage = 0
         actionCounter = 0
         gameStartTime = clock()
 
@@ -460,6 +463,7 @@ class TetrisGame(private val clock: () -> Long = { System.nanoTime() / 1_000_000
     }
 
     private fun spawnPiece() {
+        if (pendingGarbage > 0) { applyGarbage(pendingGarbage); pendingGarbage = 0 }
         if (nextQueue.isEmpty()) nextQueue.add(generateFromBag())
         currentPiece = nextQueue.removeAt(0)
         while (nextQueue.size < NEXT_QUEUE_SIZE) nextQueue.add(generateFromBag())
@@ -722,6 +726,28 @@ class TetrisGame(private val clock: () -> Long = { System.nanoTime() / 1_000_000
             }
         }
         return display.map { it.asList() }  // wraps the arrays, no per-cell copy
+    }
+
+    // ===== Versus: garbage rows sent by the opponent =====
+    private var pendingGarbage = 0
+    private var garbageRandom: kotlin.random.Random = kotlin.random.Random
+
+    /** Queue [n] garbage rows; they rise from the bottom when the next piece spawns. */
+    fun queueGarbage(n: Int) { if (n > 0) pendingGarbage = (pendingGarbage + n).coerceAtMost(BOARD_HEIGHT) }
+
+    /** Rows waiting to rise (for the versus HUD). */
+    fun pendingGarbageRows(): Int = pendingGarbage
+
+    /**
+     * Pushes the stack up by [n] rows and fills the bottom with garbage that has one gap, in the
+     * same column for the whole batch (so a single I piece can dig through it).
+     */
+    internal fun applyGarbage(n: Int, holeColumn: Int = garbageRandom.nextInt(BOARD_WIDTH)) {
+        if (n <= 0) return
+        for (y in 0 until TOTAL_HEIGHT - n) board[y] = board[y + n]
+        for (y in TOTAL_HEIGHT - n until TOTAL_HEIGHT) {
+            board[y] = IntArray(BOARD_WIDTH) { x -> if (x == holeColumn) 0 else GARBAGE_CELL }
+        }
     }
 
     /** Test hook: replace the board ([TOTAL_HEIGHT] rows) and make [type] the current piece. */

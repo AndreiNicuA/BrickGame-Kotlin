@@ -75,8 +75,8 @@ fun LayoutEditorScreen(
     fun withUndo(newLayout: CustomLayoutData) {
         undoStack.add(layout); redoStack.clear(); onUpdateLayout(newLayout)
     }
-    fun undo() { if (undoStack.isNotEmpty()) { redoStack.add(layout); onUpdateLayout(undoStack.removeLast()) } }
-    fun redo() { if (redoStack.isNotEmpty()) { undoStack.add(layout); onUpdateLayout(redoStack.removeLast()) } }
+    fun undo() { if (undoStack.isNotEmpty()) { redoStack.add(layout); onUpdateLayout(undoStack.removeAt(undoStack.lastIndex)) } }
+    fun redo() { if (redoStack.isNotEmpty()) { undoStack.add(layout); onUpdateLayout(redoStack.removeAt(redoStack.lastIndex)) } }
 
     fun selectAndOpenMenu(elem: String?) { selectedElement = elem; if (elem != null) showSideMenu = true }
 

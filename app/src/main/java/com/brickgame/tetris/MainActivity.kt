@@ -57,6 +57,9 @@ import com.brickgame.tetris.ui.brand.MenuScreen
 import com.brickgame.tetris.ui.brand.OnboardingScreen
 import com.brickgame.tetris.ui.brand.PlayerSummary
 import com.brickgame.tetris.ui.brand.PlayersScreen
+import com.brickgame.tetris.ui.brand.VersusHud
+import com.brickgame.tetris.ui.brand.VersusResultOverlay
+import com.brickgame.tetris.ui.brand.VersusScreen
 import com.brickgame.tetris.data.LocalPlayer
 import com.brickgame.tetris.data.PlayStyle
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -447,6 +450,7 @@ private fun PlayScreen(
     val game3DState by vm.game3DState.collectAsState()
     if (is3D && game3DState.status != GameStatus.MENU) {
         val arHeatLimit by vm.arHeatLimit.collectAsState()
+        Box(Modifier.fillMaxSize()) {
         Game3DScreen(
             arHeatLimit = arHeatLimit,
             onArHeatLimit = vm::setArHeatLimit,
@@ -466,6 +470,8 @@ private fun PlayScreen(
             currentPiece = { vm.game3DState.value.currentPiece },
             material = PieceMaterial.entries.find { it.name == pieceMaterial } ?: PieceMaterial.CLASSIC
         )
+        VersusLayer(vm)
+        }
         return
     }
     val gs by vm.gameState.collectAsState()
@@ -475,6 +481,7 @@ private fun PlayScreen(
     }
     val timerExpired by vm.timerExpired.collectAsState()
     val remainingSeconds by vm.remainingSeconds.collectAsState()
+    Box(Modifier.fillMaxSize()) {
     GameScreen(
         gameState = gs.copy(highScore = hs), layoutPreset = activeLayout, dpadStyle = dpadStyle,
         ghostEnabled = ghost, animationStyle = anim, animationDuration = animDur,
@@ -509,6 +516,31 @@ private fun PlayScreen(
         onOpenSettings = vm::openSettings, onToggleSound = vm::toggleSound,
         onQuit = vm::quitGame
     )
+    VersusLayer(vm)
+    }
+}
+
+/** Versus extras on top of a running game: opponent strip and the round result. */
+@Composable
+private fun VersusLayer(vm: GameViewModel) {
+    val v by vm.versus.collectAsState()
+    if (!v.active && v.result == null) return
+    val peer by vm.versusLink.peer.collectAsState()
+    val phase by vm.versusLink.phase.collectAsState()
+    val opponent = peer?.name ?: "Friend"
+    Box(Modifier.fillMaxSize()) {
+        if (v.result == null) {
+            VersusHud(opponent, v.opponentScore, v.opponentLines, v.received, v.sent,
+                Modifier.align(Alignment.TopCenter).padding(top = 84.dp))
+        } else {
+            VersusResultOverlay(
+                won = v.result == GameViewModel.VersusResult.WIN, opponent = opponent,
+                wins = v.wins, losses = v.losses,
+                connected = phase == com.brickgame.tetris.net.VersusLink.Phase.CONNECTED,
+                onRematch = vm::versusStartRound, onLobby = vm::versusBackToLobby
+            )
+        }
+    }
 }
 
 /** Menu, intro and "Who's playing?" — the brand screens shown while no game is running. */
@@ -522,6 +554,10 @@ private fun BrandScreens(
     val playerName by vm.playerName.collectAsState()
     val difficulty by vm.difficulty.collectAsState()
     var showPlayers by rememberSaveable { mutableStateOf(false) }
+    var showVersus by rememberSaveable { mutableStateOf(false) }
+    val versusPhase by vm.versusLink.phase.collectAsState()
+    val versusPeer by vm.versusLink.peer.collectAsState()
+    val versus by vm.versus.collectAsState()
     val style = when (portraitLayout) {
         LayoutPreset.PORTRAIT_CLASSIC -> PlayStyle.CLASSIC
         LayoutPreset.PORTRAIT_3D -> PlayStyle.THREE_D
@@ -541,6 +577,17 @@ private fun BrandScreens(
             initialDifficulty = difficulty,
             onFinish = { n, sw, st, d -> vm.completeOnboarding(n, sw, st, d) },
             onSkip = vm::dismissOnboarding
+        )
+        // While searching or connected you stay in the lobby (also after a round ends)
+        showVersus || versusPhase != com.brickgame.tetris.net.VersusLink.Phase.IDLE -> VersusScreen(
+            myName = active?.name ?: playerName,
+            myColor = Bw.playerColor(active?.colorIndex ?: 0),
+            phase = versusPhase, peer = versusPeer, style = style,
+            wins = versus.wins, losses = versus.losses,
+            onSelectStyle = vm::selectStyle,
+            onSearch = vm::versusSearch,
+            onStart = vm::versusStartRound,
+            onLeave = { vm.versusLeave(); showVersus = false }
         )
         showPlayers -> PlayersScreen(
             players = playersState.players.map { p ->
@@ -566,7 +613,8 @@ private fun BrandScreens(
                 onSwitchPlayer = { showPlayers = true },
                 onSettings = vm::openSettings,
                 onRecords = { vm.openSettings(); vm.navigateSettings(GameViewModel.SettingsPage.PROFILE) },
-                onHowToPlay = vm::replayOnboarding
+                onHowToPlay = vm::replayOnboarding,
+                onVersus = { showVersus = true }
             )
         }
     }

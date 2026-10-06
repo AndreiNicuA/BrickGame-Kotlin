@@ -15,6 +15,8 @@ import com.brickgame.tetris.ui.styles.VibrationStyle
 import com.brickgame.tetris.ui.theme.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
+import com.brickgame.tetris.net.VersusLink
+import com.brickgame.tetris.net.VersusMessage
 
 class GameViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -351,7 +353,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 if (game.isPendingLineClear() && !handlingLineClear) {
                     handlingLineClear = true
                     val prevLevel = gameState.value.level; val lc = gameState.value.linesCleared
-                    if (lc > 0) { soundManager.playClear(lc); vibrationManager.vibrateClear(lc) }
+                    if (lc > 0) { soundManager.playClear(lc); vibrationManager.vibrateClear(lc); versusAttack(VersusMessage.attackFor2DClear(lc)) }
                     delay((_animationDuration.value * 500).toLong().coerceAtLeast(200))
                     game.completePendingLineClear(); handlingLineClear = false
                     if (gameState.value.level > prevLevel) { soundManager.playLevelUp(); vibrationManager.vibrateLevelUp() }
@@ -376,6 +378,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         gameOverHandled = true
         stopGameLoop(); stopDAS(); countdownJob?.cancel()
         soundManager.playGameOver(); vibrationManager.vibrateGameOver()
+        versusLost()
         val s = gameState.value
         viewModelScope.launch { if (s.score > _highScore.value) settingsRepo.setHighScore(s.score); playerRepo.addScore(playerName.value, s.score, s.level, s.lines, activePlayerId()) }
     }
@@ -542,6 +545,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 // Layer clear
                 val clearedNow = s.layers - prev3DLayers
                 if (clearedNow > 0 && prev3DLayers >= 0) {
+                    versusAttack(VersusMessage.attackFor3DClear(clearedNow))
                     soundManager.playClear(clearedNow); vibrationManager.vibrateClear(clearedNow)
                 }
                 prev3DLayers = s.layers
@@ -552,6 +556,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 prev3DLevel = s.level
                 // Game over
                 if (s.status == GameStatus.GAME_OVER && prev3DStatus == GameStatus.PLAYING) {
+                    versusLost()
                     soundManager.playGameOver(); vibrationManager.vibrateGameOver()
                 }
                 prev3DStatus = s.status
@@ -563,6 +568,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Quit 2D game — save score to history, return to menu */
     fun quitGame() {
+        versusLost()  // leaving a versus round counts as losing it
         stopGameLoop(); stopDAS(); countdownJob?.cancel()
         val s = gameState.value
         // A finished game was already saved by onGameOver()
@@ -577,6 +583,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Quit 3D game — save score to history, return to menu */
     fun quit3DGame() {
+        versusLost()
         game3DJob?.cancel()
         sound3DJob?.cancel()
         val s = game3DState.value
@@ -597,5 +604,109 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     fun softDrop3D() { game3D.softDrop() }
     fun toggle3DGravity() { game3D.toggleGravity() }
 
-    override fun onCleared() { super.onCleared(); stopGameLoop(); game3DJob?.cancel(); sound3DJob?.cancel(); soundManager.release() }
+    // ===== Versus: two phones in the same room (Nearby, no internet) =====
+    enum class VersusResult { WIN, LOSE }
+    data class VersusRound(
+        val active: Boolean = false,
+        val style: PlayStyle = PlayStyle.NEON,
+        val opponentScore: Int = 0, val opponentLines: Int = 0, val opponentLevel: Int = 1,
+        val received: Int = 0, val sent: Int = 0,
+        val result: VersusResult? = null,
+        val wins: Int = 0, val losses: Int = 0
+    )
+    val versusLink = VersusLink(application)
+    private val _versus = MutableStateFlow(VersusRound())
+    val versus: StateFlow<VersusRound> = _versus.asStateFlow()
+    private var versusStatusJob: Job? = null
+
+    init { versusLink.onMessage = ::onVersusMessage }
+
+    /** Start looking for a friend's phone. */
+    fun versusSearch() { versusLink.start(players.value.active?.name ?: playerName.value) }
+
+    /** Start a round on both phones, in the style currently selected on this phone. */
+    fun versusStartRound() {
+        val style = styleFor(_portraitLayout.value)
+        versusLink.send(VersusMessage.Go(style.name))
+        beginVersusRound(style)
+    }
+
+    /** Leave Versus completely (hang up). */
+    fun versusLeave() {
+        versusLink.send(VersusMessage.Bye)
+        endVersusRound()
+        versusLink.stop()
+        _versus.value = VersusRound()
+    }
+
+    /** Back to the Versus lobby after a round (connection stays up for a rematch). */
+    fun versusBackToLobby() {
+        endVersusRound()
+        if (game3DState.value.status != GameStatus.MENU) { game3DJob?.cancel(); sound3DJob?.cancel(); game3D.resetToMenu() }
+        if (gameState.value.status != GameStatus.MENU) { stopGameLoop(); stopDAS(); game.resetToMenu() }
+    }
+
+    private fun beginVersusRound(style: PlayStyle) {
+        // Leave whatever was running, then start fresh on both phones
+        if (game3DState.value.status != GameStatus.MENU) { game3DJob?.cancel(); sound3DJob?.cancel(); game3D.resetToMenu() }
+        if (gameState.value.status != GameStatus.MENU) { stopGameLoop(); stopDAS(); game.resetToMenu() }
+        setPortraitLayout(layoutFor(style))
+        _versus.update { it.copy(active = true, style = style, opponentScore = 0, opponentLines = 0, opponentLevel = 1, received = 0, sent = 0, result = null) }
+        if (style == PlayStyle.THREE_D) start3DGame() else startGame()
+        versusStatusJob?.cancel()
+        versusStatusJob = viewModelScope.launch {
+            while (isActive && _versus.value.active && _versus.value.result == null) {
+                val three = _versus.value.style == PlayStyle.THREE_D
+                if (three) game3DState.value.let { versusLink.send(VersusMessage.Status(it.score, it.layers, it.level)) }
+                else gameState.value.let { versusLink.send(VersusMessage.Status(it.score, it.lines, it.level)) }
+                delay(1000)
+            }
+        }
+    }
+
+    private fun endVersusRound() {
+        versusStatusJob?.cancel()
+        _versus.update { it.copy(active = false) }
+    }
+
+    private fun versusAttack(rows: Int) {
+        val v = _versus.value
+        if (!v.active || v.result != null || rows <= 0) return
+        versusLink.send(VersusMessage.Attack(rows))
+        _versus.update { it.copy(sent = it.sent + rows) }
+    }
+
+    private fun versusLost() {
+        val v = _versus.value
+        if (!v.active || v.result != null) return
+        versusLink.send(VersusMessage.Over)
+        _versus.update { it.copy(result = VersusResult.LOSE, losses = it.losses + 1) }
+        versusStatusJob?.cancel()
+    }
+
+    private fun onVersusMessage(m: VersusMessage) {
+        when (m) {
+            is VersusMessage.Hello -> {}
+            is VersusMessage.Go -> beginVersusRound(PlayStyle.entries.find { it.name == m.style } ?: PlayStyle.NEON)
+            is VersusMessage.Attack -> {
+                if (!_versus.value.active || _versus.value.result != null) return
+                if (_versus.value.style == PlayStyle.THREE_D) game3D.queueGarbage(m.rows) else game.queueGarbage(m.rows)
+                _versus.update { it.copy(received = it.received + m.rows) }
+                vibrationManager.vibrateDrop()
+            }
+            is VersusMessage.Status -> _versus.update { it.copy(opponentScore = m.score, opponentLines = m.lines, opponentLevel = m.level) }
+            VersusMessage.Over -> {
+                val v = _versus.value
+                if (!v.active || v.result != null) return
+                _versus.update { it.copy(result = VersusResult.WIN, wins = it.wins + 1) }
+                versusStatusJob?.cancel()
+                // Freeze my board under the result screen
+                if (v.style == PlayStyle.THREE_D) pause3D() else { stopGameLoop(); stopDAS(); game.pauseGame() }
+                soundManager.playNewHighScore()
+            }
+            VersusMessage.Bye -> { endVersusRound() }
+        }
+    }
+
+    override fun onCleared() { super.onCleared(); stopGameLoop(); game3DJob?.cancel(); sound3DJob?.cancel(); soundManager.release(); versusLink.stop() }
 }
