@@ -30,6 +30,14 @@ class BoardRenderer(private val context: Context) : GLSurfaceView.Renderer {
     private var viewportHeight = 1
 
     private val modelMatrix = FloatArray(16)
+    private val cameraPos = FloatArray(3)
+
+    /** modelMatrix = base × translate(x, y, z): one board cell in world space. */
+    private fun cellModel(x: Float, y: Float, z: Float) {
+        Matrix.setIdentityM(cellMatrix, 0)
+        Matrix.translateM(cellMatrix, 0, x, y, z)
+        Matrix.multiplyMM(modelMatrix, 0, baseMatrix, 0, cellMatrix, 0)
+    }
     private val mvpMatrix = FloatArray(16)
     private val lightDir = floatArrayOf(0.35f, 0.75f, -0.55f)
 
@@ -42,7 +50,10 @@ class BoardRenderer(private val context: Context) : GLSurfaceView.Renderer {
         camera.panX = panX; camera.panY = panY; camera.zoom = zoom
     }
 
-    override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
+    override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) = initGl()
+
+    /** Creates shaders, geometry and textures. Must run on the GL thread (also used by the AR renderer). */
+    fun initGl() {
         GLES20.glClearColor(0.04f, 0.04f, 0.04f, 1f)
         GLES20.glEnable(GLES20.GL_DEPTH_TEST)
         GLES20.glDepthFunc(GLES20.GL_LEQUAL)
@@ -75,6 +86,28 @@ class BoardRenderer(private val context: Context) : GLSurfaceView.Renderer {
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT or GLES20.GL_DEPTH_BUFFER_BIT)
 
         camera.update()
+        Matrix.setIdentityM(identity, 0)
+        drawScene(camera.getViewProjection(), identity, camera.position[0], camera.position[1], camera.position[2])
+    }
+
+    private val identity = FloatArray(16).also { Matrix.setIdentityM(it, 0) }
+    private val baseMatrix = FloatArray(16)
+    private val vpBase = FloatArray(16)
+    private var vpMatrix = FloatArray(16)
+    private val cellMatrix = FloatArray(16)
+
+    /**
+     * Draws the well: grid, locked cubes, the falling piece and its ghost.
+     * @param viewProj camera view-projection
+     * @param base board → world transform (identity for the orbit camera; anchor pose × scale in AR)
+     * @param camX camera position in world space (for specular lighting)
+     */
+    fun drawScene(viewProj: FloatArray, base: FloatArray, camX: Float, camY: Float, camZ: Float) {
+        vpMatrix = viewProj
+        System.arraycopy(base, 0, baseMatrix, 0, 16)
+        Matrix.multiplyMM(vpBase, 0, viewProj, 0, base, 0)
+        cameraPos[0] = camX; cameraPos[1] = camY; cameraPos[2] = camZ
+        GLES20.glEnable(GLES20.GL_DEPTH_TEST)
         val state = currentState
         val material = currentMaterial
         val matParams = textures.getParams(material)
@@ -82,7 +115,7 @@ class BoardRenderer(private val context: Context) : GLSurfaceView.Renderer {
         // Grid (needs blending for alpha lines)
         GLES20.glEnable(GLES20.GL_BLEND)
         GLES20.glBlendFunc(GLES20.GL_SRC_ALPHA, GLES20.GL_ONE_MINUS_SRC_ALPHA)
-        grid.draw(gridShader, camera.getViewProjection())
+        grid.draw(gridShader, vpBase)
         GLES20.glDisable(GLES20.GL_BLEND)
 
         // Solid cubes (NO blending)
@@ -90,7 +123,7 @@ class BoardRenderer(private val context: Context) : GLSurfaceView.Renderer {
         textures.bind(material)
         cubeShader.setUniform1i("uTexture", 0)
         cubeShader.setUniform3f("uLightDir", lightDir[0], lightDir[1], lightDir[2])
-        cubeShader.setUniform3f("uCameraPos", camera.position[0], camera.position[1], camera.position[2])
+        cubeShader.setUniform3f("uCameraPos", cameraPos[0], cameraPos[1], cameraPos[2])
         cubeShader.setUniform1f("uTextureStrength", matParams.textureStrength)
         cubeShader.setUniform1f("uSpecularPower", matParams.specularPower)
         cubeShader.setUniform1f("uSpecularStrength", matParams.specularStrength)
@@ -147,9 +180,8 @@ class BoardRenderer(private val context: Context) : GLSurfaceView.Renderer {
     }
 
     private fun drawCube(x: Float, y: Float, z: Float, rgb: FloatArray, alpha: Float, clearing: Float) {
-        Matrix.setIdentityM(modelMatrix, 0)
-        Matrix.translateM(modelMatrix, 0, x, y, z)
-        camera.getMVP(modelMatrix, mvpMatrix)
+        cellModel(x, y, z)
+        Matrix.multiplyMM(mvpMatrix, 0, vpMatrix, 0, modelMatrix, 0)
         cubeShader.setUniformMatrix4fv("uMVPMatrix", mvpMatrix)
         cubeShader.setUniformMatrix4fv("uModelMatrix", modelMatrix)
         cubeShader.setUniform3f("uBaseColor", rgb[0], rgb[1], rgb[2])
@@ -161,9 +193,8 @@ class BoardRenderer(private val context: Context) : GLSurfaceView.Renderer {
     /** Draw only visible faces of a cube — skips internal shared faces to prevent Z-fighting */
     private fun drawCubeSelective(x: Float, y: Float, z: Float, rgb: FloatArray, alpha: Float, clearing: Float,
                                   top: Boolean, bot: Boolean, front: Boolean, back: Boolean, left: Boolean, right: Boolean) {
-        Matrix.setIdentityM(modelMatrix, 0)
-        Matrix.translateM(modelMatrix, 0, x, y, z)
-        camera.getMVP(modelMatrix, mvpMatrix)
+        cellModel(x, y, z)
+        Matrix.multiplyMM(mvpMatrix, 0, vpMatrix, 0, modelMatrix, 0)
         cubeShader.setUniformMatrix4fv("uMVPMatrix", mvpMatrix)
         cubeShader.setUniformMatrix4fv("uModelMatrix", modelMatrix)
         cubeShader.setUniform3f("uBaseColor", rgb[0], rgb[1], rgb[2])
@@ -178,14 +209,13 @@ class BoardRenderer(private val context: Context) : GLSurfaceView.Renderer {
         for (b in piece.blocks) {
             val px = piece.x + b.x; val py = state.ghostY + b.y; val pz = piece.z + b.z
             if (py >= 0) {
-                Matrix.setIdentityM(modelMatrix, 0)
-                Matrix.translateM(modelMatrix, 0, px.toFloat(), py.toFloat(), pz.toFloat())
-                camera.getMVP(modelMatrix, mvpMatrix)
+                cellModel(px.toFloat(), py.toFloat(), pz.toFloat())
+                Matrix.multiplyMM(mvpMatrix, 0, vpMatrix, 0, modelMatrix, 0)
                 ghostShader.setUniformMatrix4fv("uMVPMatrix", mvpMatrix)
                 ghostShader.setUniformMatrix4fv("uModelMatrix", modelMatrix)
                 ghostShader.setUniform3f("uBaseColor", rgb[0], rgb[1], rgb[2])
                 ghostShader.setUniform1f("uAlpha", 0.25f)
-                ghostShader.setUniform3f("uCameraPos", camera.position[0], camera.position[1], camera.position[2])
+                ghostShader.setUniform3f("uCameraPos", cameraPos[0], cameraPos[1], cameraPos[2])
                 cube.draw(ghostShader)
             }
         }

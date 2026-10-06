@@ -13,7 +13,22 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import android.Manifest
+import android.app.Activity
 import android.content.Context
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.brickgame.tetris.gl.ArBoardView
+import com.brickgame.tetris.gl.ArStatus
+import com.brickgame.tetris.gl.ArSupport
+import com.brickgame.tetris.gl.createArSession
+import com.brickgame.tetris.gl.rememberArSupport
+import com.google.ar.core.Session
 import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
@@ -75,6 +90,51 @@ fun Game3DScreen(
     val motionBase = remember { FloatArray(2) }   // [azimuth, elevation] the motion is added to
     val motionLast = remember { FloatArray(2) }   // last applied motion offset [az, el] in degrees
 
+    // ===== AR mode (only offered where ARCore is supported) =====
+    val context = LocalContext.current
+    val arSupport = rememberArSupport()
+    var arSession by remember { mutableStateOf<Session?>(null) }
+    var arStatus by remember { mutableStateOf(ArStatus.STARTING) }
+    var arReplace by remember { mutableIntStateOf(0) }
+    var arMessage by remember { mutableStateOf<String?>(null) }
+    var arInstallPending by remember { mutableStateOf(false) }
+    val arOn = arSession != null
+
+    fun startAr(userRequestedInstall: Boolean) {
+        val activity = context as? Activity ?: return
+        try {
+            val session = createArSession(activity, userRequestedInstall)
+            if (session == null) { arInstallPending = true; return }   // Play Services for AR is installing
+            arStatus = ArStatus.STARTING
+            arMessage = null
+            arSession = session
+            if (state.status == GameStatus.PLAYING) onPause()   // place the well first, then resume
+        } catch (e: com.google.ar.core.exceptions.UnavailableUserDeclinedInstallationException) {
+            arMessage = "AR needs Google Play Services for AR"
+        } catch (e: com.google.ar.core.exceptions.UnavailableDeviceNotCompatibleException) {
+            arMessage = "This device doesn't support AR"
+        } catch (e: Exception) {
+            arMessage = "AR couldn't start on this device"
+        }
+    }
+    val cameraPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) startAr(true) else arMessage = "AR needs the camera to see your table"
+    }
+    fun toggleAr() {
+        if (arOn) { arSession = null; return }
+        val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+        if (granted) startAr(true) else cameraPermission.launch(Manifest.permission.CAMERA)
+    }
+    // Coming back from the Play Services for AR install screen: try again (without re-prompting)
+    val arLifecycle = LocalLifecycleOwner.current
+    DisposableEffect(arLifecycle) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME && arInstallPending) { arInstallPending = false; startAr(false) }
+        }
+        arLifecycle.lifecycle.addObserver(observer)
+        onDispose { arLifecycle.lifecycle.removeObserver(observer) }
+    }
+
     // Reference to the GL view for pushing camera changes from UI (sliders, zoom buttons)
     val glViewRef = remember { mutableStateOf<BoardGLSurfaceView?>(null) }
 
@@ -91,7 +151,7 @@ fun Game3DScreen(
         motionRecenter++
     }
 
-    MotionViewSensor(enabled = motionView && !starWars, recenterKey = motionRecenter) { yawDeg, pitchDeg ->
+    MotionViewSensor(enabled = motionView && !starWars && !arOn, recenterKey = motionRecenter) { yawDeg, pitchDeg ->
         // Turning the phone left walks the camera round to the board's left side; tilting the
         // top edge towards you looks down into the well.
         val dAz = -yawDeg * MOTION_GAIN
@@ -151,7 +211,20 @@ fun Game3DScreen(
 
             // 3D Board
             Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                if (starWars) {
+                val session = arSession
+                if (session != null) {
+                    ArBoardView(
+                        session = session,
+                        state = state,
+                        material = material,
+                        themeColor = theme.pixelOn.toArgb().toLong() and 0xFFFFFFFFL,
+                        replaceKey = arReplace,
+                        onStatus = { arStatus = it },
+                        // Walking around the well turns the D-pad with you
+                        onViewAngle = { az, el -> azimuth = az; elevation = el },
+                        modifier = Modifier.fillMaxSize()
+                    )
+                } else if (starWars) {
                     StarWarsBoardCanvas(state, Modifier.fillMaxSize().padding(2.dp), true, theme.pixelOn)
                 } else {
                     GLBoardView(
@@ -176,7 +249,16 @@ fun Game3DScreen(
                     )
                 }
 
-                if (!starWars) {
+                if (arOn) {
+                    ArStatusBar(arStatus, Modifier.align(Alignment.TopCenter).padding(top = 10.dp)) { arReplace++ }
+                }
+                arMessage?.let { msg ->
+                    Text(msg, color = Color.White, fontSize = 13.sp,
+                        modifier = Modifier.align(Alignment.TopCenter).padding(top = 10.dp)
+                            .background(Color(0xE6141A2E), RoundedCornerShape(12.dp))
+                            .clickable { arMessage = null }.padding(horizontal = 14.dp, vertical = 8.dp))
+                }
+                if (!starWars && !arOn) {
                     ViewCube(azimuth, elevation, Modifier.align(Alignment.TopEnd).padding(8.dp).size(60.dp))
                     Column(Modifier.align(Alignment.CenterEnd).padding(end = 6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Box(Modifier.size(32.dp).clip(CircleShape).background(Color.White.copy(0.1f))
@@ -307,8 +389,11 @@ fun Game3DScreen(
                         MiniToggle("SW", starWars, theme.accentColor) { starWars = !starWars }
                         MiniToggle("❄", !state.autoGravity, Color(0xFF38BDF8)) { onToggleGravity() }
                         MiniToggle("⚙", showCamSettings, Color(0xFFF59E0B)) { showCamSettings = !showCamSettings }
-                        if (hasMotionSensor) {
+                        if (hasMotionSensor && !arOn) {
                             MiniToggle("📱", motionView, Color(0xFFA78BFA)) { setMotionView(!motionView) }
+                        }
+                        if (arSupport == ArSupport.SUPPORTED) {
+                            MiniToggle("AR", arOn, Color(0xFF22D3EE)) { toggleAr() }
                         }
                     }
                     ActionButton("···", onOpenSettings, width = 36.dp, height = 18.dp)
@@ -441,5 +526,29 @@ private fun MotionViewSensor(enabled: Boolean, recenterKey: Int, onAngles: (yawD
         }
         sm.registerListener(listener, sensor, SensorManager.SENSOR_DELAY_GAME)
         onDispose { sm.unregisterListener(listener) }
+    }
+}
+
+// ===== AR status =====
+
+@Composable
+private fun ArStatusBar(status: ArStatus, modifier: Modifier, onReplace: () -> Unit) {
+    val text = when (status) {
+        ArStatus.STARTING -> "Starting camera…"
+        ArStatus.SEARCHING -> "Move your phone slowly over a table"
+        ArStatus.READY_TO_PLACE -> "Tap the table to place the well"
+        ArStatus.PLACED -> null
+        ArStatus.TRACKING_LOST -> "Lost track — point back at the table"
+        ArStatus.FAILED -> "AR stopped. Turn AR off and on again"
+    }
+    Row(modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (text != null) {
+            Text(text, color = Color.White, fontSize = 13.sp,
+                modifier = Modifier.background(Color(0xE6141A2E), RoundedCornerShape(12.dp)).padding(horizontal = 14.dp, vertical = 8.dp))
+        } else {
+            Text("Move", color = Color(0xFF0B0E1A), fontSize = 12.sp, fontWeight = FontWeight.Bold,
+                modifier = Modifier.background(Color(0xFF22D3EE), RoundedCornerShape(10.dp)).clickable { onReplace() }
+                    .padding(horizontal = 12.dp, vertical = 6.dp))
+        }
     }
 }
