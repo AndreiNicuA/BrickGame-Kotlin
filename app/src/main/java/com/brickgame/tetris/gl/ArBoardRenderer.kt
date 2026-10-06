@@ -21,7 +21,7 @@ import kotlin.math.atan2
 import kotlin.math.sqrt
 
 /** What the AR view is doing, for the on-screen hints. */
-enum class ArStatus { STARTING, SEARCHING, READY_TO_PLACE, PLACED, TRACKING_LOST, FAILED }
+enum class ArStatus { STARTING, SEARCHING, READY_TO_PLACE, PLACED, FINDING_FLOOR, TRACKING_LOST, FAILED }
 
 /**
  * AR renderer: camera image + the 3D well anchored on a real horizontal surface.
@@ -43,7 +43,12 @@ class ArBoardRenderer(
     /** Viewing direction relative to the well, in the orbit camera's terms (for D-pad mapping). */
     private val onViewAngle: (azimuthDeg: Float, elevationDeg: Float) -> Unit,
     /** Current display rotation (Surface.ROTATION_*); read whenever the surface changes size. */
-    private val rotationProvider: () -> Int = { 0 }
+    private val rotationProvider: () -> Int = { 0 },
+    /**
+     * Where the falling piece is on screen: null while it is visible, otherwise the direction
+     * (x right, y down, unit length) from the screen centre towards it — for an edge arrow.
+     */
+    private val onPieceOffScreen: (FloatArray?) -> Unit = {}
 ) : GLSurfaceView.Renderer {
 
     companion object {
@@ -63,6 +68,14 @@ class ArBoardRenderer(
     @Volatile var yawDegrees = 0f
     /** Set by the view while a two-finger move is in progress (surface detection stays on). */
     @Volatile var gestureMoving = false
+    /** Stand-inside mode: the well was placed on the floor centred on the player. */
+    @Volatile var insideMode = false
+        private set
+    @Volatile private var insideRequested = false
+    /** Falling piece centre in board units (x, y, z), from the latest state. */
+    @Volatile private var pieceCenter: FloatArray? = null
+    private var lastOffScreen: FloatArray? = null
+    private var reportedOnScreen = true
     /** True once the well stands somewhere (read by the touch handler). */
     @Volatile var isPlaced = false
         private set
@@ -89,8 +102,19 @@ class ArBoardRenderer(
     private var rayW = 1
     private var rayH = 1
 
-    fun updateState(state: Game3DState, material: PieceMaterial, ghost: Boolean, themeColor: Long) =
+    fun updateState(state: Game3DState, material: PieceMaterial, ghost: Boolean, themeColor: Long) {
         board.updateState(state, material, ghost, themeColor)
+        pieceCenter = state.currentPiece?.let { p ->
+            floatArrayOf(
+                p.x + p.blocks.map { it.x }.average().toFloat() + 0.5f,
+                p.y + p.blocks.map { it.y }.average().toFloat() + 0.5f,
+                p.z + p.blocks.map { it.z }.average().toFloat() + 0.5f
+            )
+        }
+    }
+
+    /** Put the well on the floor around the player (they stand in its centre). */
+    fun requestInside() { insideRequested = true }
 
     /** Screen tap (view pixels): place the well onto the surface under the finger. */
     fun queueTap(x: Float, y: Float) { taps.offer(floatArrayOf(x, y)) }
@@ -99,7 +123,7 @@ class ArBoardRenderer(
     fun queueMove(x: Float, y: Float) { moveTarget = floatArrayOf(x, y) }
 
     /** Forget the current placement so the next tap places the well again. */
-    fun requestReplace() { replaceRequested = true }
+    fun requestReplace() { replaceRequested = true; insideRequested = false }
 
     /**
      * Where a screen point hits the horizontal plane y = [boardY] inside the well, in board units
@@ -176,8 +200,21 @@ class ArBoardRenderer(
         }
 
         if (replaceRequested) {
-            anchor?.detach(); anchor = null; isPlaced = false; replaceRequested = false
+            anchor?.detach(); anchor = null; isPlaced = false; insideMode = false; replaceRequested = false
             setPlaneFinding(true)
+        }
+        if (insideRequested) {
+            val floorY = findFloorBelow(frame)
+            if (floorY == null) {
+                // Keep looking: the player points the phone at the floor around their feet
+                setPlaneFinding(true)
+                report(ArStatus.FINDING_FLOOR)
+                return
+            }
+            val cam = camera.pose
+            setAnchor(session.createAnchor(com.google.ar.core.Pose.makeTranslation(cam.tx(), floorY, cam.tz())))
+            insideMode = true
+            insideRequested = false
         }
 
         // Taps: place the well under the finger, or at the previewed spot
@@ -241,18 +278,81 @@ class ArBoardRenderer(
             lastAngleReport = now
             val invBase = FloatArray(16)
             if (Matrix.invertM(invBase, 0, base, 0)) {
-                val c = FloatArray(4)
-                Matrix.multiplyMV(c, 0, invBase, 0, floatArrayOf(camPose.tx(), camPose.ty(), camPose.tz(), 1f), 0)
-                // relative to the well's centre axis
-                val lx = c[0] - Tetris3DGame.BOARD_W / 2f
-                val lz = c[2] - Tetris3DGame.BOARD_D / 2f
-                val horiz = sqrt(lx * lx + lz * lz)
-                onViewAngle(
-                    Math.toDegrees(atan2(lx, lz).toDouble()).toFloat(),
-                    Math.toDegrees(atan2(c[1], horiz).toDouble()).toFloat()
-                )
+                if (insideMode) {
+                    // Standing in the middle: "away" is wherever you look. An orbit camera looking
+                    // that way would sit on the opposite side, so use the reversed view direction.
+                    val z = camera.displayOrientedPose.zAxis   // camera looks along -Z
+                    val f = FloatArray(4)
+                    Matrix.multiplyMV(f, 0, invBase, 0, floatArrayOf(z[0], z[1], z[2], 0f), 0)
+                    val horiz = sqrt(f[0] * f[0] + f[2] * f[2])
+                    onViewAngle(
+                        Math.toDegrees(atan2(f[0], f[2]).toDouble()).toFloat(),
+                        Math.toDegrees(atan2(f[1], horiz).toDouble()).toFloat()
+                    )
+                } else {
+                    val c = FloatArray(4)
+                    Matrix.multiplyMV(c, 0, invBase, 0, floatArrayOf(camPose.tx(), camPose.ty(), camPose.tz(), 1f), 0)
+                    // relative to the well's centre axis
+                    val lx = c[0] - Tetris3DGame.BOARD_W / 2f
+                    val lz = c[2] - Tetris3DGame.BOARD_D / 2f
+                    val horiz = sqrt(lx * lx + lz * lz)
+                    onViewAngle(
+                        Math.toDegrees(atan2(lx, lz).toDouble()).toFloat(),
+                        Math.toDegrees(atan2(c[1], horiz).toDouble()).toFloat()
+                    )
+                }
+                reportPieceOnScreen()
             }
         }
+    }
+
+    /** Project the falling piece; tell the UI which way to point when it is off screen. */
+    private fun reportPieceOnScreen() {
+        val pc = pieceCenter
+        var dir: FloatArray? = null
+        if (pc != null) {
+            val clip = FloatArray(4)
+            Matrix.multiplyMV(clip, 0, boardMvp, 0, floatArrayOf(pc[0], pc[1], pc[2], 1f), 0)
+            val w = clip[3]
+            val nx = clip[0] / abs(w).coerceAtLeast(1e-4f)
+            val ny = clip[1] / abs(w).coerceAtLeast(1e-4f)
+            val visible = w > 0f && abs(nx) <= 0.95f && abs(ny) <= 0.95f
+            if (!visible) {
+                // Behind the camera the projection is mirrored, so flip it
+                var dx = if (w > 0f) nx else -nx
+                var dy = if (w > 0f) -ny else ny            // screen y grows downward
+                if (abs(dx) < 1e-3f && abs(dy) < 1e-3f) dy = 1f
+                val len = sqrt(dx * dx + dy * dy)
+                dx /= len; dy /= len
+                dir = floatArrayOf(dx, dy)
+            }
+        }
+        if (dir == null) {
+            if (!reportedOnScreen) { reportedOnScreen = true; lastOffScreen = null; onPieceOffScreen(null) }
+        } else {
+            val last = lastOffScreen
+            if (reportedOnScreen || last == null || abs(last[0] - dir[0]) + abs(last[1] - dir[1]) > 0.05f) {
+                reportedOnScreen = false; lastOffScreen = dir; onPieceOffScreen(dir)
+            }
+        }
+    }
+
+    /**
+     * Height of the floor under the player: a straight-down hit from the phone, else the lowest
+     * detected horizontal surface well below the phone. Null until one is found.
+     */
+    private fun findFloorBelow(frame: com.google.ar.core.Frame): Float? {
+        val cam = frame.camera.pose
+        val down = try {
+            frame.hitTest(floatArrayOf(cam.tx(), cam.ty(), cam.tz()), 0, floatArrayOf(0f, -1f, 0f), 0)
+                .firstOrNull { h -> val t = h.trackable; t is Plane && t.type == Plane.Type.HORIZONTAL_UPWARD_FACING }
+        } catch (_: Exception) { null }
+        if (down != null && cam.ty() - down.hitPose.ty() > 0.6f) return down.hitPose.ty()
+        return session.getAllTrackables(Plane::class.java)
+            .filter { it.trackingState == TrackingState.TRACKING && it.type == Plane.Type.HORIZONTAL_UPWARD_FACING && it.subsumedBy == null }
+            .map { it.centerPose.ty() }
+            .filter { cam.ty() - it > 0.6f }
+            .minOrNull()
     }
 
     /** Surface + pose under the screen centre while placing (a fresh anchor can be made from it later). */
@@ -277,15 +377,18 @@ class ArBoardRenderer(
 
     private fun setAnchor(newAnchor: Anchor) {
         anchor?.detach()
+        insideMode = false
         anchor = newAnchor
         isPlaced = true
         previewPose = null
     }
 
     private fun report(status: ArStatus) {
+        // No placed well → nothing to point at
+        if (status != ArStatus.PLACED && !reportedOnScreen) { reportedOnScreen = true; lastOffScreen = null; onPieceOffScreen(null) }
         if (status != lastStatus) { lastStatus = status; onStatus(status) }
     }
 
     /** Release ARCore objects held by the renderer (session is closed by its owner). */
-    fun release() { anchor?.detach(); anchor = null; isPlaced = false }
+    fun release() { anchor?.detach(); anchor = null; isPlaced = false; insideMode = false }
 }

@@ -7,7 +7,19 @@ import android.opengl.GLSurfaceView
 import android.os.Build
 import android.os.PowerManager
 import android.view.MotionEvent
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.*
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
@@ -22,6 +34,7 @@ import com.google.ar.core.CameraConfigFilter
 import com.google.ar.core.Config
 import com.google.ar.core.Session
 import java.util.EnumSet
+import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.hypot
 
@@ -112,6 +125,8 @@ fun ArBoardView(
     material: PieceMaterial,
     themeColor: Long,
     replaceKey: Int,
+    /** Bump to put the well on the floor around the player (stand-inside mode). */
+    insideKey: Int,
     cellMeters: Float,
     onCellMeters: (Float) -> Unit,
     onStatus: (ArStatus) -> Unit,
@@ -137,6 +152,9 @@ fun ArBoardView(
 
     LaunchedEffect(state, material, themeColor) { rendererRef.value?.updateState(state, material, true, themeColor) }
     LaunchedEffect(replaceKey) { if (replaceKey > 0) rendererRef.value?.requestReplace() }
+    LaunchedEffect(insideKey) { if (insideKey > 0) rendererRef.value?.requestInside() }
+    // Direction to the falling piece while it is off screen (null = visible)
+    var offScreen by remember { mutableStateOf<FloatArray?>(null) }
     LaunchedEffect(cellMeters) { rendererRef.value?.cellMeters = cellMeters }
 
     // Phone temperature, every few seconds: battery °C + Android's thermal status.
@@ -183,13 +201,15 @@ fun ArBoardView(
         }
     }
 
+    Box(modifier) {
     AndroidView(
         factory = { ctx: Context ->
             GLSurfaceView(ctx).also { view ->
                 val renderer = ArBoardRenderer(ctx, session,
                     onStatus = { s -> view.post { latestStatus(s) } },
                     onViewAngle = { az, el -> view.post { latestAngle(az, el) } },
-                    rotationProvider = { view.display?.rotation ?: 0 })
+                    rotationProvider = { view.display?.rotation ?: 0 },
+                    onPieceOffScreen = { d -> view.post { offScreen = d } })
                 renderer.updateState(state, material, true, themeColor)
                 renderer.cellMeters = cellMeters
                 view.preserveEGLContextOnPause = true
@@ -209,9 +229,38 @@ fun ArBoardView(
                 viewRef.value = view
             }
         },
-        modifier = modifier,
+        modifier = Modifier.fillMaxSize(),
         update = { }
     )
+    offScreen?.let { d -> PieceArrow(d[0], d[1]) }
+    }
+}
+
+/** Pulsing arrow on the screen edge pointing at the falling piece (look that way to find it). */
+@Composable
+private fun PieceArrow(dx: Float, dy: Float) {
+    val pulse by rememberInfiniteTransition(label = "arrow")
+        .animateFloat(0.55f, 1f, infiniteRepeatable(tween(600), RepeatMode.Reverse), label = "a")
+    Canvas(Modifier.fillMaxSize()) {
+        val margin = 40.dp.toPx()
+        val cx = size.width / 2f; val cy = size.height / 2f
+        // Walk from the centre along the direction until the margin box is reached
+        val kx = if (abs(dx) > 1e-4f) (cx - margin) / abs(dx) else Float.MAX_VALUE
+        val ky = if (abs(dy) > 1e-4f) (cy - margin) / abs(dy) else Float.MAX_VALUE
+        val k = minOf(kx, ky)
+        val tip = Offset(cx + dx * k, cy + dy * k)
+        val len = 26.dp.toPx(); val half = 15.dp.toPx()
+        val back = Offset(tip.x - dx * len, tip.y - dy * len)
+        val side = Offset(-dy * half, dx * half)
+        val path = Path().apply {
+            moveTo(tip.x, tip.y)
+            lineTo(back.x + side.x, back.y + side.y)
+            lineTo(back.x - side.x, back.y - side.y)
+            close()
+        }
+        drawCircle(Color(0xB30B0E1A), len * 0.95f, Offset(tip.x - dx * len * 0.55f, tip.y - dy * len * 0.55f))
+        drawPath(path, Color(0xFFF472B6).copy(alpha = pulse))
+    }
 }
 
 /** Touch handling for the AR view (see [ArBoardView] for the gestures). Runs on the UI thread. */

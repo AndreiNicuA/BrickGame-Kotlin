@@ -57,6 +57,8 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.brickgame.tetris.game.*
@@ -117,6 +119,8 @@ fun Game3DScreen(
     var arSession by remember { mutableStateOf<Session?>(null) }
     var arStatus by remember { mutableStateOf(ArStatus.STARTING) }
     var arReplace by remember { mutableIntStateOf(0) }
+    var arInsideKey by remember { mutableIntStateOf(0) }
+    var arInside by remember { mutableStateOf(false) }
     var arMessage by remember { mutableStateOf<String?>(null) }
     var arInstallPending by remember { mutableStateOf(false) }
     var arCell by remember { mutableFloatStateOf(0.03f) }
@@ -229,37 +233,51 @@ fun Game3DScreen(
         else onMoveZ(if (worldZ > 0) 1 else -1)
     }
 
-    BwDarkSystemBars()
-    Box(Modifier.fillMaxSize().background(Bw.Ground).safeDrawingPadding()) {
-        Column(Modifier.fillMaxSize()) {
-            // Info bar (Brickwell design)
-            Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+    // ===== Screen pieces (arranged differently in portrait and landscape) =====
+    val holdBox: @Composable () -> Unit = {
                 Hud3DBox(Modifier.width(58.dp)) {
                     Text("HOLD", style = BwType.Overline.copy(fontSize = 10.sp, letterSpacing = 1.sp))
-                    Mini3DPiecePreview(state.holdPiece, Modifier.size(28.dp), Bw.Cyan, if (state.holdUsed) 0.3f else 1f)
+                    Mini3DPiecePreview(state.holdPiece, Modifier.size(34.dp), Bw.Cyan, if (state.holdUsed) 0.3f else 1f)
                 }
-                Hud3DBox(Modifier.weight(1f)) {
+    }
+    val scoreBox: @Composable (Modifier) -> Unit = { mod ->
+                Hud3DBox(mod) {
                     BwRollingScore(state.score)
                     Text("LV ${state.level}  ·  ${state.layers} LAYERS", style = BwType.Small.copy(fontSize = 11.sp))
                 }
-                Hud3DBox(Modifier.width(74.dp)) {
+    }
+    val nextBox: @Composable () -> Unit = {
+                Hud3DBox(Modifier.width(88.dp)) {
                     Text("NEXT", style = BwType.Overline.copy(fontSize = 10.sp, letterSpacing = 1.sp))
                     Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                         state.nextPieces.take(2).forEachIndexed { i, type ->
-                            Mini3DPiecePreview(type, Modifier.size(if (i == 0) 28.dp else 20.dp), Bw.Cyan, if (i == 0) 1f else 0.4f)
+                            Mini3DPiecePreview(type, Modifier.size(if (i == 0) 38.dp else 26.dp), Bw.Cyan, if (i == 0) 1f else 0.6f)
                         }
                     }
                 }
+    }
+    val pauseButton: @Composable () -> Unit = {
                 Box(Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(Bw.Surface)
                     .border(1.dp, Bw.Line, RoundedCornerShape(14.dp))
                     .clickable(onClickLabel = "Pause") { onPause() }, contentAlignment = Alignment.Center) {
                     GlyphIcon(Glyph.PAUSE, Bw.Text, 18.dp)
                 }
+    }
+    // View & mode chips
+    val chipsRow: @Composable () -> Unit = {
+            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 2.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                if (arSupport == ArSupport.SUPPORTED) ModeChip("AR", arOn, Bw.Cyan) { toggleAr() }
+                if (hasMotionSensor && !arOn) ModeChip("Motion view", motionView, Bw.Violet) { setMotionView(!motionView) }
+                if (!arOn) ModeChip("Camera", showCamSettings, Bw.Amber) { showCamSettings = !showCamSettings }
+                ModeChip("Freeze gravity", !state.autoGravity, Color(0xFF38BDF8)) { onToggleGravity() }
+                if (!arOn) ModeChip("Flat view", starWars, Bw.Lime) { starWars = !starWars }
             }
+    }
 
             // 3D Board
-            Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+    val boardArea: @Composable (Modifier, Boolean) -> Unit = { mod, chipsInside ->
+            Box(mod, contentAlignment = Alignment.Center) {
                 val session = arSession
                 if (session != null) {
                     ArBoardView(
@@ -268,6 +286,7 @@ fun Game3DScreen(
                         material = material,
                         themeColor = theme.pixelOn.toArgb().toLong() and 0xFFFFFFFFL,
                         replaceKey = arReplace,
+                        insideKey = arInsideKey,
                         cellMeters = arCell,
                         onCellMeters = { arCell = it },
                         onStatus = { arStatus = it },
@@ -307,21 +326,28 @@ fun Game3DScreen(
                 if (arOn) {
                     Column(Modifier.align(Alignment.TopCenter).padding(top = 10.dp),
                         horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        ArStatusBar(arStatus, Modifier) { arReplace++ }
-                        if (arStatus == ArStatus.PLACED) {
-                            // Size presets: table-top, big, or a well you can stand inside
-                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        // Once placed: Move + sizes on one line. Inside = the well on the floor around you.
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                            ArStatusBar(arStatus, Modifier) { arInside = false; arReplace++ }
+                            if (arStatus == ArStatus.PLACED) {
                                 listOf("Table" to 0.03f, "Big" to 0.08f, "Room" to 0.2f).forEach { (label, cell) ->
-                                    val on = kotlin.math.abs(arCell - cell) < 0.004f
-                                    Text(label, fontSize = 12.sp, fontWeight = FontWeight.Bold,
-                                        color = if (on) Color(0xFF0B0E1A) else Color.White,
-                                        modifier = Modifier.background(if (on) Color(0xFF22D3EE) else Color(0xE6141A2E), RoundedCornerShape(10.dp))
-                                            .clickable { arCell = cell }.padding(horizontal = 12.dp, vertical = 6.dp))
+                                    ArChip(label, !arInside && kotlin.math.abs(arCell - cell) < 0.004f) { arCell = cell }
                                 }
+                                ArChip("Inside", arInside) { arCell = INSIDE_CELL; arInside = true; arInsideKey++ }
                             }
-                            Text("Drag the piece · tap to spin · flick down to drop · two fingers: size, turn, move",
-                                color = Color.White.copy(0.85f), fontSize = 11.sp,
-                                modifier = Modifier.background(Color(0xB3141A2E), RoundedCornerShape(8.dp)).padding(horizontal = 10.dp, vertical = 4.dp))
+                        }
+                        // Gesture help: shown for a few seconds after placing, then out of the way
+                        var hint by remember { mutableStateOf(false) }
+                        LaunchedEffect(arStatus == ArStatus.PLACED, arInside) {
+                            hint = arStatus == ArStatus.PLACED
+                            if (hint) { kotlinx.coroutines.delay(7000); hint = false }
+                        }
+                        if (hint) {
+                            Text(if (arInside) "You're inside! Look up for the falling piece — the pink arrow points to it. Drag to move · tap to spin · flick down to drop"
+                                 else "Drag the piece · tap to spin · flick down to drop · two fingers: size, turn, move",
+                                color = Color.White.copy(0.9f), fontSize = 11.sp,
+                                modifier = Modifier.padding(horizontal = 12.dp)
+                                    .background(Color(0xB3141A2E), RoundedCornerShape(8.dp)).padding(horizontal = 10.dp, vertical = 4.dp))
                         }
                         arHeat?.let { h -> HeatChip(h, heatLimit) { onArHeatLimit(nextHeatLimit(heatLimit)) } }
                     }
@@ -403,21 +429,11 @@ fun Game3DScreen(
                         }
                     }
                 }
+                if (chipsInside) Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(bottom = 6.dp)) { chipsRow() }
             }
+    }
 
-            // View & mode chips
-            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 2.dp),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                if (arSupport == ArSupport.SUPPORTED) ModeChip("AR", arOn, Bw.Cyan) { toggleAr() }
-                if (hasMotionSensor && !arOn) ModeChip("Motion view", motionView, Bw.Violet) { setMotionView(!motionView) }
-                if (!arOn) ModeChip("Camera", showCamSettings, Bw.Amber) { showCamSettings = !showCamSettings }
-                ModeChip("Freeze gravity", !state.autoGravity, Color(0xFF38BDF8)) { onToggleGravity() }
-                if (!arOn) ModeChip("Flat view", starWars, Bw.Lime) { starWars = !starWars }
-            }
-
-            // Controls (Brickwell design)
-            Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+    val dpad: @Composable () -> Unit = {
                 // Left: direction pad (follows the camera / where you stand in AR)
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     val padShape = RoundedCornerShape(16.dp)
@@ -444,6 +460,8 @@ fun Game3DScreen(
                         Spacer(Modifier.size(52.dp))
                     }
                 }
+    }
+    val actions: @Composable () -> Unit = {
                 // Right: hold, spin, tilt, drops
                 Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Bottom) {
@@ -466,8 +484,71 @@ fun Game3DScreen(
                         }
                     }
                 }
+    }
+
+    BwDarkSystemBars()
+    BoxWithConstraints(Modifier.fillMaxSize().background(Bw.Ground).safeDrawingPadding()) {
+        val landscape = maxWidth > maxHeight
+        // One layout for both orientations: every piece keeps its place in the tree, so turning the
+        // phone only moves things around — the 3D / AR view (and its camera session) stays alive.
+        Layout(
+            content = {
+                holdBox(); scoreBox(Modifier); nextBox(); pauseButton()
+                boardArea(Modifier, landscape)
+                if (landscape) Box(Modifier) else chipsRow()
+                dpad(); actions()
+            },
+            modifier = Modifier.fillMaxSize()
+        ) { m, c ->
+            val w = c.maxWidth; val h = c.maxHeight
+            val loose = c.copy(minWidth = 0, minHeight = 0)
+            val gap = 8.dp.roundToPx()
+            val hold = m[0].measure(loose); val next = m[2].measure(loose); val pause = m[3].measure(loose)
+            val dpadP = m[6].measure(loose); val act = m[7].measure(loose)
+            if (landscape) {
+                val pad = 8.dp.roundToPx()
+                val leftW = maxOf(172.dp.roundToPx(), dpadP.width)
+                val score = m[1].measure(Constraints.fixedWidth((leftW - hold.width - 6.dp.roundToPx()).coerceAtLeast(0)))
+                val rightW = maxOf(act.width, next.width + 6.dp.roundToPx() + pause.width)
+                val boardW = (w - 2 * pad - leftW - rightW - 2 * gap).coerceAtLeast(0)
+                val board = m[4].measure(Constraints.fixed(boardW, (h - 2 * pad).coerceAtLeast(0)))
+                val chips = m[5].measure(Constraints.fixed(0, 0))
+                layout(w, h) {
+                    val topH = maxOf(hold.height, score.height)
+                    hold.place(pad, pad + (topH - hold.height) / 2)
+                    score.place(pad + hold.width + 6.dp.roundToPx(), pad + (topH - score.height) / 2)
+                    dpadP.place(pad + (leftW - dpadP.width) / 2, h - pad - dpadP.height)
+                    board.place(pad + leftW + gap, pad)
+                    chips.place(0, 0)
+                    val rightX = w - pad
+                    val rTop = maxOf(next.height, pause.height)
+                    pause.place(rightX - pause.width, pad + (rTop - pause.height) / 2)
+                    next.place(rightX - pause.width - 6.dp.roundToPx() - next.width, pad + (rTop - next.height) / 2)
+                    act.place(rightX - act.width, h - pad - act.height)
+                }
+            } else {
+                val pad = 12.dp.roundToPx(); val topPad = 6.dp.roundToPx()
+                val scoreW = (w - 2 * pad - hold.width - next.width - pause.width - 3 * gap).coerceAtLeast(0)
+                val score = m[1].measure(Constraints.fixedWidth(scoreW))
+                val topH = maxOf(hold.height, score.height, next.height, pause.height)
+                val chips = m[5].measure(c.copy(minWidth = 0, minHeight = 0, maxWidth = w))
+                val ctrlH = maxOf(dpadP.height, act.height) + 2 * gap
+                val boardY = topH + 2 * topPad
+                val boardH = (h - boardY - chips.height - ctrlH - 2.dp.roundToPx()).coerceAtLeast(0)
+                val board = m[4].measure(Constraints.fixed(w, boardH))
+                layout(w, h) {
+                    var x = pad
+                    hold.place(x, topPad + (topH - hold.height) / 2); x += hold.width + gap
+                    score.place(x, topPad + (topH - score.height) / 2); x += score.width + gap
+                    next.place(x, topPad + (topH - next.height) / 2); x += next.width + gap
+                    pause.place(x, topPad + (topH - pause.height) / 2)
+                    board.place(0, boardY)
+                    chips.place(0, boardY + boardH)
+                    val ctrlY = boardY + boardH + chips.height
+                    dpadP.place(pad, ctrlY + (ctrlH - dpadP.height) / 2)
+                    act.place(w - pad - act.width, ctrlY + (ctrlH - act.height) / 2)
+                }
             }
-            Spacer(Modifier.height(2.dp))
         }
     }
 }
@@ -595,6 +676,7 @@ private fun ArStatusBar(status: ArStatus, modifier: Modifier, onReplace: () -> U
         ArStatus.SEARCHING -> "Move your phone slowly over a table"
         ArStatus.READY_TO_PLACE -> "Tap the table to place the well"
         ArStatus.PLACED -> null
+        ArStatus.FINDING_FLOOR -> "Point the phone at the floor around your feet"
         ArStatus.TRACKING_LOST -> "Lost track — point back at the table"
         ArStatus.FAILED -> "AR stopped. Turn AR off and on again"
     }
@@ -603,9 +685,7 @@ private fun ArStatusBar(status: ArStatus, modifier: Modifier, onReplace: () -> U
             Text(text, color = Color.White, fontSize = 13.sp,
                 modifier = Modifier.background(Color(0xE6141A2E), RoundedCornerShape(12.dp)).padding(horizontal = 14.dp, vertical = 8.dp))
         } else {
-            Text("Move", color = Color(0xFF0B0E1A), fontSize = 12.sp, fontWeight = FontWeight.Bold,
-                modifier = Modifier.background(Color(0xFF22D3EE), RoundedCornerShape(10.dp)).clickable { onReplace() }
-                    .padding(horizontal = 12.dp, vertical = 6.dp))
+            ArChip("Move", false, onReplace)
         }
     }
 }
@@ -616,6 +696,18 @@ private fun ArStatusBar(status: ArStatus, modifier: Modifier, onReplace: () -> U
 private const val AR_HARD_LIMIT_C = 46
 
 /** Player-selectable AR heat limits, cycled by tapping the temperature chip. */
+/** Cube size for stand-inside mode: a 1.2 m square well, 2.8 m tall, centred on the player. */
+private const val INSIDE_CELL = 0.2f
+
+@Composable
+private fun ArChip(label: String, on: Boolean, onClick: () -> Unit) {
+    Text(label, fontSize = 12.sp, fontWeight = FontWeight.Bold,
+        color = if (on) Bw.Ground else Color.White,
+        modifier = Modifier.clip(RoundedCornerShape(10.dp)).background(if (on) Bw.Cyan else Color(0xE6141A2E))
+            .clickable(role = androidx.compose.ui.semantics.Role.Button, onClick = onClick)
+            .heightIn(min = 32.dp).padding(horizontal = 11.dp, vertical = 7.dp))
+}
+
 private fun nextHeatLimit(current: Int): Int = if (current >= AR_HARD_LIMIT_C - 1) 39 else current + 1
 
 @Composable
@@ -627,10 +719,15 @@ private fun HeatChip(h: ArHeatInfo, limit: Int, onCycleLimit: () -> Unit) {
         t >= limit - 3 || h.thermal >= ArHeat.WARM -> Bw.Amber
         else -> Bw.Lime
     }
+    // Compact (just the temperature); shows the limit for a few seconds at start and after a change
+    var expanded by remember { mutableStateOf(true) }
+    LaunchedEffect(limit) { expanded = true; kotlinx.coroutines.delay(4000); expanded = false }
     val text = buildString {
         append(if (t != null) "%.1f°C".format(t) else "Temp n/a")
-        append("  ·  AR stops at ${limit}°C")
-        if (h.charging) append("  ·  charging")
+        if (expanded) {
+            append("  ·  AR stops at ${limit}°C")
+            if (h.charging) append("  ·  charging")
+        } else if (h.charging) append(" ⚡")
     }
     Text(text, color = Bw.Ground, fontSize = 12.sp, fontWeight = FontWeight.Bold,
         modifier = Modifier.background(color, RoundedCornerShape(10.dp))
