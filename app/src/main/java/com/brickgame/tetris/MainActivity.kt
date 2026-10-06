@@ -450,10 +450,13 @@ private fun PlayScreen(
     val game3DState by vm.game3DState.collectAsState()
     if (is3D && game3DState.status != GameStatus.MENU) {
         val arHeatLimit by vm.arHeatLimit.collectAsState()
+        val motionView by vm.motionView.collectAsState()
         Box(Modifier.fillMaxSize()) {
         Game3DScreen(
             arHeatLimit = arHeatLimit,
             onArHeatLimit = vm::setArHeatLimit,
+            motionViewSaved = motionView,
+            onMotionView = vm::setMotionView,
             state = game3DState,
             onMoveX = vm::move3DX,
             onMoveZ = vm::move3DZ,

@@ -86,7 +86,9 @@ fun Game3DScreen(
     currentPiece: () -> Piece3DState? = { state.currentPiece },
     /** Battery °C at which AR switches itself off (player setting, capped below the hard limit) */
     arHeatLimit: Int = 43,
-    onArHeatLimit: (Int) -> Unit = {}
+    onArHeatLimit: (Int) -> Unit = {},
+    motionViewSaved: Boolean = false,
+    onMotionView: (Boolean) -> Unit = {}
 ) {
     val theme = LocalGameTheme.current
 
@@ -197,7 +199,10 @@ fun Game3DScreen(
         motionBase[0] = azimuth; motionBase[1] = elevation
         motionLast[0] = 0f; motionLast[1] = 0f
         motionRecenter++
+        onMotionView(on)
     }
+    // Motion view is remembered between games: switch it back on, centred on the starting view
+    LaunchedEffect(Unit) { if (motionViewSaved && hasMotionSensor) setMotionView(true) }
 
     MotionViewSensor(enabled = motionView && !starWars && !arOn, recenterKey = motionRecenter) { yawDeg, pitchDeg ->
         // Turning the phone left walks the camera round to the board's left side; tilting the
