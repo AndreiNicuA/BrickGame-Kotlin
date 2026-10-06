@@ -132,6 +132,7 @@ class ArBoardRenderer(
     override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
         GLES20.glClearColor(0f, 0f, 0f, 1f)
         board.initGl()
+        board.contactShadow = true
         background = ArBackground().also { session.setCameraTextureName(it.textureId) }
         report(ArStatus.SEARCHING)
     }

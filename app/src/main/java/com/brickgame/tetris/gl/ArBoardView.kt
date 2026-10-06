@@ -119,6 +119,7 @@ fun ArBoardView(
     /** Board coordinates (x, z) under the finger while dragging the piece. */
     onPieceDrag: (Float, Float) -> Unit,
     onTap: () -> Unit,
+    onHardDrop: () -> Unit,
     onHeat: (ArHeatInfo) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -126,6 +127,7 @@ fun ArBoardView(
     val latestAngle by rememberUpdatedState(onViewAngle)
     val latestDrag by rememberUpdatedState(onPieceDrag)
     val latestTap by rememberUpdatedState(onTap)
+    val latestHardDrop by rememberUpdatedState(onHardDrop)
     val latestCell by rememberUpdatedState(onCellMeters)
     val latestHeat by rememberUpdatedState(onHeat)
     val latestState by rememberUpdatedState(state)
@@ -201,6 +203,7 @@ fun ArBoardView(
                     },
                     onDrag = { x, z -> latestDrag(x, z) },
                     onTap = { latestTap() },
+                    onHardDrop = { latestHardDrop() },
                     onCell = { latestCell(it) }))
                 rendererRef.value = renderer
                 viewRef.value = view
@@ -217,6 +220,7 @@ private class ArTouch(
     private val pieceHeight: () -> Float?,
     private val onDrag: (Float, Float) -> Unit,
     private val onTap: () -> Unit,
+    private val onHardDrop: () -> Unit,
     private val onCell: (Float) -> Unit
 ) : android.view.View.OnTouchListener {
 
@@ -257,7 +261,10 @@ private class ArTouch(
                     if (moving) renderer.queueMove(midX(e), midY(e))
                 } else if (!multi && renderer.isPlaced) {
                     if (!dragging && hypot(e.x - downX, e.y - downY) > slop) dragging = true
-                    if (dragging) {
+                    // A fast downward swipe may become a flick-to-drop: don't slide the piece yet
+                    val dx = e.x - downX; val dy = e.y - downY
+                    val maybeFlick = dy > 0 && dy > 2 * kotlin.math.abs(dx) && e.eventTime - downTime < 140
+                    if (dragging && !maybeFlick) {
                         val h = pieceHeight() ?: return true
                         renderer.screenToBoard(e.x, e.y, h)?.let { onDrag(it[0], it[1]) }
                     }
@@ -269,6 +276,12 @@ private class ArTouch(
             MotionEvent.ACTION_UP -> {
                 renderer.gestureMoving = false
                 val isTap = !multi && !dragging && e.eventTime - downTime < 350
+                // Flick down: a short, fast, mostly vertical swipe drops the piece
+                val dx = e.x - downX; val dy = e.y - downY
+                val density = v.resources.displayMetrics.density
+                val isFlick = !multi && renderer.isPlaced && dy > 70f * density &&
+                    dy > 2 * kotlin.math.abs(dx) && e.eventTime - downTime < 300
+                if (isFlick) onHardDrop()
                 if (isTap) {
                     if (renderer.isPlaced) onTap() else renderer.queueTap(e.x, e.y)
                     v.performClick()

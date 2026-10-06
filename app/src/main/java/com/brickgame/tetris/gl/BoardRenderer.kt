@@ -54,6 +54,7 @@ class BoardRenderer(private val context: Context) : GLSurfaceView.Renderer {
 
     /** Creates shaders, geometry and textures. Must run on the GL thread (also used by the AR renderer). */
     fun initGl() {
+        shadowProgram = 0  // new GL context: rebuild lazily
         GLES20.glClearColor(0.04f, 0.04f, 0.04f, 1f)
         GLES20.glEnable(GLES20.GL_DEPTH_TEST)
         GLES20.glDepthFunc(GLES20.GL_LEQUAL)
@@ -115,6 +116,7 @@ class BoardRenderer(private val context: Context) : GLSurfaceView.Renderer {
         // Grid (needs blending for alpha lines)
         GLES20.glEnable(GLES20.GL_BLEND)
         GLES20.glBlendFunc(GLES20.GL_SRC_ALPHA, GLES20.GL_ONE_MINUS_SRC_ALPHA)
+        if (contactShadow) drawContactShadow()
         grid.draw(gridShader, vpBase)
         GLES20.glDisable(GLES20.GL_BLEND)
 
@@ -174,9 +176,106 @@ class BoardRenderer(private val context: Context) : GLSurfaceView.Renderer {
             GLES20.glBlendFunc(GLES20.GL_SRC_ALPHA, GLES20.GL_ONE_MINUS_SRC_ALPHA)
             GLES20.glDepthMask(false)
             drawGhost(state, piece)
+            drawDropGuides(state, piece)
             GLES20.glDepthMask(true)
             GLES20.glDisable(GLES20.GL_BLEND)
         }
+    }
+
+    // ===== Drop guides: a line from each falling column down to where it will land =====
+    // Makes the piece easy to follow even from inside a room-size AR well.
+    private val guideBuffer: java.nio.FloatBuffer = java.nio.ByteBuffer.allocateDirect(64 * 6 * 4)
+        .order(java.nio.ByteOrder.nativeOrder()).asFloatBuffer()
+
+    private fun drawDropGuides(state: Game3DState, piece: Piece3DState) {
+        // Lowest block of each (x, z) column
+        val lowest = HashMap<Int, Int>()
+        for (b in piece.blocks) {
+            val key = b.x * 100 + b.z
+            val cur = lowest[key]
+            if (cur == null || b.y < cur) lowest[key] = b.y
+        }
+        guideBuffer.clear()
+        var verts = 0
+        for ((key, by) in lowest) {
+            if (verts >= 64 * 2) break
+            val bx = key / 100; val bz = key % 100
+            val x = piece.x + bx + 0.5f; val z = piece.z + bz + 0.5f
+            val top = (piece.y + by).toFloat()
+            val bottom = (state.ghostY + by + 1).toFloat()
+            if (top <= bottom) continue
+            guideBuffer.put(x).put(top).put(z).put(x).put(bottom).put(z)
+            verts += 2
+        }
+        if (verts == 0) return
+        guideBuffer.position(0)
+        val rgb = pieceColorRGB(piece.type.colorIndex)
+        gridShader.use()
+        gridShader.setUniformMatrix4fv("uMVPMatrix", vpBase)
+        gridShader.setUniform4f("uColor", rgb[0], rgb[1], rgb[2], 0.55f)
+        val pos = gridShader.getAttribLocation("aPosition")
+        GLES20.glEnableVertexAttribArray(pos)
+        GLES20.glVertexAttribPointer(pos, 3, GLES20.GL_FLOAT, false, 0, guideBuffer)
+        GLES20.glLineWidth(3f)
+        GLES20.glDrawArrays(GLES20.GL_LINES, 0, verts)
+        GLES20.glLineWidth(1f)
+        GLES20.glDisableVertexAttribArray(pos)
+    }
+
+    // ===== Contact shadow (AR): a soft dark pad under the well so it sits on the real surface =====
+    @Volatile var contactShadow = false
+    private var shadowProgram = 0
+    private val shadowQuad: java.nio.FloatBuffer = run {
+        val m = 0.8f
+        val w = Tetris3DGame.BOARD_W.toFloat(); val d = Tetris3DGame.BOARD_D.toFloat()
+        // x, y, z, u, v  (u, v in -1..1 for the falloff)
+        val data = floatArrayOf(
+            -m, 0.01f, -m, -1f, -1f,   w + m, 0.01f, -m, 1f, -1f,
+            -m, 0.01f, d + m, -1f, 1f,  w + m, 0.01f, d + m, 1f, 1f
+        )
+        java.nio.ByteBuffer.allocateDirect(data.size * 4).order(java.nio.ByteOrder.nativeOrder()).asFloatBuffer().apply { put(data); position(0) }
+    }
+
+    private fun drawContactShadow() {
+        if (shadowProgram == 0) shadowProgram = buildProgram(
+            "uniform mat4 uMVPMatrix; attribute vec3 aPosition; attribute vec2 aUv; varying vec2 vUv;" +
+                "void main() { gl_Position = uMVPMatrix * vec4(aPosition, 1.0); vUv = aUv; }",
+            "precision mediump float; varying vec2 vUv;" +
+                "void main() { float d = max(abs(vUv.x), abs(vUv.y)); float a = 0.45 * (1.0 - smoothstep(0.55, 1.0, d));" +
+                " gl_FragColor = vec4(0.0, 0.0, 0.0, a); }"
+        )
+        if (shadowProgram == 0) return
+        GLES20.glUseProgram(shadowProgram)
+        GLES20.glUniformMatrix4fv(GLES20.glGetUniformLocation(shadowProgram, "uMVPMatrix"), 1, false, vpBase, 0)
+        val pos = GLES20.glGetAttribLocation(shadowProgram, "aPosition")
+        val uv = GLES20.glGetAttribLocation(shadowProgram, "aUv")
+        GLES20.glEnableVertexAttribArray(pos); GLES20.glEnableVertexAttribArray(uv)
+        shadowQuad.position(0)
+        GLES20.glVertexAttribPointer(pos, 3, GLES20.GL_FLOAT, false, 20, shadowQuad)
+        shadowQuad.position(3)
+        GLES20.glVertexAttribPointer(uv, 2, GLES20.GL_FLOAT, false, 20, shadowQuad)
+        GLES20.glDepthMask(false)
+        GLES20.glDisable(GLES20.GL_CULL_FACE)
+        GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
+        GLES20.glEnable(GLES20.GL_CULL_FACE)
+        GLES20.glDepthMask(true)
+        GLES20.glDisableVertexAttribArray(pos); GLES20.glDisableVertexAttribArray(uv)
+    }
+
+    private fun buildProgram(vs: String, fs: String): Int {
+        fun compile(type: Int, src: String): Int {
+            val sh = GLES20.glCreateShader(type)
+            GLES20.glShaderSource(sh, src); GLES20.glCompileShader(sh)
+            val ok = IntArray(1); GLES20.glGetShaderiv(sh, GLES20.GL_COMPILE_STATUS, ok, 0)
+            if (ok[0] == 0) { GLES20.glDeleteShader(sh); return 0 }
+            return sh
+        }
+        val v = compile(GLES20.GL_VERTEX_SHADER, vs); val f = compile(GLES20.GL_FRAGMENT_SHADER, fs)
+        if (v == 0 || f == 0) return 0
+        val p = GLES20.glCreateProgram()
+        GLES20.glAttachShader(p, v); GLES20.glAttachShader(p, f); GLES20.glLinkProgram(p)
+        val ok = IntArray(1); GLES20.glGetProgramiv(p, GLES20.GL_LINK_STATUS, ok, 0)
+        return if (ok[0] == 0) 0 else p
     }
 
     private fun drawCube(x: Float, y: Float, z: Float, rgb: FloatArray, alpha: Float, clearing: Float) {

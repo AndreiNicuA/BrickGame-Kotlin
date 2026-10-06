@@ -270,6 +270,7 @@ fun Game3DScreen(
                         onViewAngle = { az, el -> azimuth = az; elevation = el },
                         onPieceDrag = { bx, bz -> dragPieceTo(bx, bz) },
                         onTap = onRotateXZ,
+                        onHardDrop = onHardDrop,
                         onHeat = { onHeatInfo(it) },
                         modifier = Modifier.fillMaxSize()
                     )
@@ -313,7 +314,7 @@ fun Game3DScreen(
                                             .clickable { arCell = cell }.padding(horizontal = 12.dp, vertical = 6.dp))
                                 }
                             }
-                            Text("Drag the piece · tap to spin · pinch, twist or two-finger drag the well",
+                            Text("Drag the piece · tap to spin · flick down to drop · two fingers: size, turn, move",
                                 color = Color.White.copy(0.85f), fontSize = 11.sp,
                                 modifier = Modifier.background(Color(0xB3141A2E), RoundedCornerShape(8.dp)).padding(horizontal = 10.dp, vertical = 4.dp))
                         }
