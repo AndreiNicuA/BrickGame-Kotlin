@@ -272,7 +272,8 @@ class MainActivity : ComponentActivity() {
             val config = LocalConfiguration.current
             val isLandscape = config.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
             val activeLayout = if (isLandscape) landscapeLayout else portraitLayout
-            val is3D = activeLayout == LayoutPreset.PORTRAIT_3D
+            // The chosen game decides 3D, not the orientation: rotating the phone mid-game keeps you in it
+            val is3D = portraitLayout == LayoutPreset.PORTRAIT_3D
 
             BrickGameTheme(gameTheme = theme, appThemeMode = appThemeMode) {
                 // Control system bar appearance based on theme mode
@@ -445,7 +446,10 @@ private fun PlayScreen(
 ) {
     val game3DState by vm.game3DState.collectAsState()
     if (is3D && game3DState.status != GameStatus.MENU) {
+        val arHeatLimit by vm.arHeatLimit.collectAsState()
         Game3DScreen(
+            arHeatLimit = arHeatLimit,
+            onArHeatLimit = vm::setArHeatLimit,
             state = game3DState,
             onMoveX = vm::move3DX,
             onMoveZ = vm::move3DZ,

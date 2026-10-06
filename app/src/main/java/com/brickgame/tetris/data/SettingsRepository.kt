@@ -48,6 +48,7 @@ class SettingsRepository(private val context: Context) {
         private val CONTROLLER_LAYOUT = stringPreferencesKey("controller_layout")
         private val LEFT_HANDED = booleanPreferencesKey("left_handed")
         private val SWIPE_CONTROLS = booleanPreferencesKey("swipe_controls")
+        private val AR_HEAT_LIMIT = intPreferencesKey("ar_heat_limit_c")
         private val GAME_MODE = stringPreferencesKey("game_mode")
         private val INFINITY_TIMER = intPreferencesKey("infinity_timer_minutes")
         private val INFINITY_TIMER_ENABLED = booleanPreferencesKey("infinity_timer_enabled")
@@ -158,6 +159,9 @@ class SettingsRepository(private val context: Context) {
     suspend fun setLeftHanded(v: Boolean) = set(LEFT_HANDED, v)
     val swipeControls get() = pref(SWIPE_CONTROLS, false)
     suspend fun setSwipeControls(v: Boolean) = set(SWIPE_CONTROLS, v)
+    /** Battery temperature (°C) at which AR switches itself off; the player can change it. */
+    val arHeatLimit get() = pref(AR_HEAT_LIMIT, 43)
+    suspend fun setArHeatLimit(v: Int) = set(AR_HEAT_LIMIT, v)
 
     // Game mode persistence
     val gameMode get() = pref(GAME_MODE, "MARATHON")

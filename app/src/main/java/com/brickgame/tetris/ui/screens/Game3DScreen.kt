@@ -25,6 +25,19 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.brickgame.tetris.gl.ArBoardView
 import com.brickgame.tetris.gl.ArHeat
+import com.brickgame.tetris.gl.ArHeatInfo
+import com.brickgame.tetris.ui.brand.Bw
+import com.brickgame.tetris.ui.brand.BwDarkSystemBars
+import com.brickgame.tetris.ui.brand.BwGameOverOverlay
+import com.brickgame.tetris.ui.brand.BwPadButton
+import com.brickgame.tetris.ui.brand.BwPauseOverlay
+import com.brickgame.tetris.ui.brand.BwRollingScore
+import com.brickgame.tetris.ui.brand.BwType
+import com.brickgame.tetris.ui.brand.Glyph
+import com.brickgame.tetris.ui.brand.GlyphIcon
+import androidx.compose.foundation.border
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import com.brickgame.tetris.gl.ArStatus
 import com.brickgame.tetris.gl.ArSupport
 import com.brickgame.tetris.gl.createArSession
@@ -70,7 +83,10 @@ fun Game3DScreen(
     onQuit: () -> Unit = {},
     material: PieceMaterial = PieceMaterial.CLASSIC,
     /** Live piece (not the last composed one) for AR drag stepping */
-    currentPiece: () -> Piece3DState? = { state.currentPiece }
+    currentPiece: () -> Piece3DState? = { state.currentPiece },
+    /** Battery °C at which AR switches itself off (player setting, capped below the hard limit) */
+    arHeatLimit: Int = 43,
+    onArHeatLimit: (Int) -> Unit = {}
 ) {
     val theme = LocalGameTheme.current
 
@@ -102,7 +118,23 @@ fun Game3DScreen(
     var arMessage by remember { mutableStateOf<String?>(null) }
     var arInstallPending by remember { mutableStateOf(false) }
     var arCell by remember { mutableFloatStateOf(0.03f) }
-    var arHeat by remember { mutableStateOf(ArHeat.NORMAL) }
+    var arHeat by remember { mutableStateOf<ArHeatInfo?>(null) }
+    val heatLimit by rememberUpdatedState(arHeatLimit.coerceAtMost(AR_HARD_LIMIT_C - 1))
+
+    /** Leave AR when the phone is too warm: the player's limit, or the safety net that always applies. */
+    fun onHeatInfo(h: ArHeatInfo) {
+        arHeat = h
+        val t = h.batteryC
+        val hardStop = h.thermal == ArHeat.CRITICAL || (t != null && t >= AR_HARD_LIMIT_C)
+        val userStop = t != null && t >= heatLimit
+        val unknownTempButHot = t == null && h.thermal == ArHeat.HOT
+        if (hardStop || userStop || unknownTempButHot) {
+            arSession = null
+            if (state.status == GameStatus.PLAYING) onPause()
+            arMessage = (if (t != null) "AR paused at %.1f°C to protect your phone".format(t) else "AR paused — your phone is too hot") +
+                (if (h.charging) " (charging adds heat)." else ".") + " Your game is paused in 3D view."
+        }
+    }
 
     /** AR drag: step the piece one cell per axis toward the board cell under the finger. */
     fun dragPieceTo(bx: Float, bz: Float) {
@@ -192,36 +224,32 @@ fun Game3DScreen(
         else onMoveZ(if (worldZ > 0) 1 else -1)
     }
 
-    Box(Modifier.fillMaxSize().background(theme.backgroundColor).systemBarsPadding()) {
+    BwDarkSystemBars()
+    Box(Modifier.fillMaxSize().background(Bw.Ground).safeDrawingPadding()) {
         Column(Modifier.fillMaxSize()) {
-            // Info bar
-            Row(
-                Modifier.fillMaxWidth().background(Color.Black.copy(0.4f))
-                    .padding(horizontal = 10.dp, vertical = 5.dp),
-                Arrangement.SpaceBetween, Alignment.CenterVertically
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("SCORE", fontSize = 7.sp, color = theme.textSecondary, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
-                    Text(state.score.toString().padStart(7, '0'), fontSize = 13.sp, fontWeight = FontWeight.Bold,
-                        fontFamily = FontFamily.Monospace, color = theme.accentColor, letterSpacing = 1.sp)
+            // Info bar (Brickwell design)
+            Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Hud3DBox(Modifier.width(58.dp)) {
+                    Text("HOLD", style = BwType.Overline.copy(fontSize = 10.sp, letterSpacing = 1.sp))
+                    Mini3DPiecePreview(state.holdPiece, Modifier.size(28.dp), Bw.Cyan, if (state.holdUsed) 0.3f else 1f)
                 }
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("LV", fontSize = 7.sp, color = theme.textSecondary, fontFamily = FontFamily.Monospace)
-                    Text("${state.level}", fontSize = 16.sp, fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace, color = theme.accentColor)
+                Hud3DBox(Modifier.weight(1f)) {
+                    BwRollingScore(state.score)
+                    Text("LV ${state.level}  ·  ${state.layers} LAYERS", style = BwType.Small.copy(fontSize = 11.sp))
                 }
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("LAYERS", fontSize = 7.sp, color = theme.textSecondary, fontFamily = FontFamily.Monospace)
-                    Text("${state.layers}", fontSize = 16.sp, fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace, color = theme.accentColor)
-                }
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text("NXT", fontSize = 7.sp, color = theme.textSecondary, fontFamily = FontFamily.Monospace)
-                    state.nextPieces.forEachIndexed { i, type ->
-                        Mini3DPiecePreview(type, Modifier.size(22.dp), theme.pixelOn, if (i == 0) 1f else 0.4f)
+                Hud3DBox(Modifier.width(74.dp)) {
+                    Text("NEXT", style = BwType.Overline.copy(fontSize = 10.sp, letterSpacing = 1.sp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                        state.nextPieces.take(2).forEachIndexed { i, type ->
+                            Mini3DPiecePreview(type, Modifier.size(if (i == 0) 28.dp else 20.dp), Bw.Cyan, if (i == 0) 1f else 0.4f)
+                        }
                     }
                 }
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("H", fontSize = 7.sp, color = theme.textSecondary, fontFamily = FontFamily.Monospace)
-                    Mini3DPiecePreview(state.holdPiece, Modifier.size(24.dp), theme.pixelOn, if (state.holdUsed) 0.3f else 1f)
+                Box(Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(Bw.Surface)
+                    .border(1.dp, Bw.Line, RoundedCornerShape(14.dp))
+                    .clickable(onClickLabel = "Pause") { onPause() }, contentAlignment = Alignment.Center) {
+                    GlyphIcon(Glyph.PAUSE, Bw.Text, 18.dp)
                 }
             }
 
@@ -242,14 +270,7 @@ fun Game3DScreen(
                         onViewAngle = { az, el -> azimuth = az; elevation = el },
                         onPieceDrag = { bx, bz -> dragPieceTo(bx, bz) },
                         onTap = onRotateXZ,
-                        onHeat = { heat ->
-                            arHeat = heat
-                            if (heat == ArHeat.HOT) {
-                                // Protect the phone: leave AR and keep playing in the normal 3D view
-                                arSession = null
-                                arMessage = "Your phone got hot, so AR was paused. The game continues in 3D view."
-                            }
-                        },
+                        onHeat = { onHeatInfo(it) },
                         modifier = Modifier.fillMaxSize()
                     )
                 } else if (starWars) {
@@ -296,11 +317,7 @@ fun Game3DScreen(
                                 color = Color.White.copy(0.85f), fontSize = 11.sp,
                                 modifier = Modifier.background(Color(0xB3141A2E), RoundedCornerShape(8.dp)).padding(horizontal = 10.dp, vertical = 4.dp))
                         }
-                        if (arHeat == ArHeat.WARM) {
-                            Text("Phone is getting warm — take a short break soon", color = Color(0xFF0B0E1A), fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.background(Color(0xFFFBBF24), RoundedCornerShape(10.dp)).padding(horizontal = 12.dp, vertical = 6.dp))
-                        }
+                        arHeat?.let { h -> HeatChip(h, heatLimit) { onArHeatLimit(nextHeatLimit(heatLimit)) } }
                     }
                 }
                 arMessage?.let { msg ->
@@ -334,31 +351,12 @@ fun Game3DScreen(
                             ActionButton("SETTINGS", onOpenSettings, width = 140.dp, height = 38.dp)
                         }
                     }
-                    GameStatus.PAUSED -> {
-                        Column(Modifier.background(Color.Black.copy(0.85f), RoundedCornerShape(16.dp)).padding(24.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("PAUSED", fontSize = 22.sp, fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace, color = theme.textPrimary)
-                            Spacer(Modifier.height(16.dp))
-                            ActionButton("RESUME", { onPause() }, width = 160.dp, height = 42.dp)
-                            Spacer(Modifier.height(8.dp))
-                            ActionButton("SETTINGS", onOpenSettings, width = 160.dp, height = 34.dp, backgroundColor = theme.buttonSecondary)
-                            Spacer(Modifier.height(8.dp))
-                            ActionButton("LEAVE", onQuit, width = 160.dp, height = 34.dp, backgroundColor = Color(0xFFB91C1C))
-                        }
-                    }
-                    GameStatus.GAME_OVER -> {
-                        Column(Modifier.background(Color.Black.copy(0.85f), RoundedCornerShape(16.dp)).padding(24.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("GAME OVER", fontSize = 22.sp, fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace, color = Color(0xFFFF4444))
-                            Spacer(Modifier.height(6.dp))
-                            Text("Score: ${state.score}", fontSize = 16.sp, fontFamily = FontFamily.Monospace, color = theme.textPrimary)
-                            Text("Level ${state.level} · ${state.layers} layers", fontSize = 12.sp, fontFamily = FontFamily.Monospace, color = theme.textSecondary)
-                            Spacer(Modifier.height(16.dp))
-                            ActionButton("PLAY AGAIN", onStart, width = 140.dp, height = 42.dp)
-                            Spacer(Modifier.height(8.dp))
-                            ActionButton("SETTINGS", onOpenSettings, width = 140.dp, height = 34.dp)
-                        }
-                    }
+                    GameStatus.PAUSED -> BwPauseOverlay(onResume = { onPause() }, onSettings = onOpenSettings, onQuit = onQuit)
+                    GameStatus.GAME_OVER -> BwGameOverOverlay(
+                        score = state.score, level = state.level, lines = state.layers, highScore = Int.MAX_VALUE,
+                        maxCombo = 0, backToBack = 0, elapsedMs = 0L,
+                        onAgain = onStart, onLeave = onQuit, linesLabel = "LAYERS"
+                    )
                     else -> {}
                 }
 
@@ -401,63 +399,65 @@ fun Game3DScreen(
                 }
             }
 
-            // Controls
-            Row(
-                Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 4.dp),
-                Arrangement.SpaceBetween, Alignment.CenterVertically
-            ) {
-                // Left: DPad with compass indicator
+            // View & mode chips
+            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 2.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                if (arSupport == ArSupport.SUPPORTED) ModeChip("AR", arOn, Bw.Cyan) { toggleAr() }
+                if (hasMotionSensor && !arOn) ModeChip("Motion view", motionView, Bw.Violet) { setMotionView(!motionView) }
+                if (!arOn) ModeChip("Camera", showCamSettings, Bw.Amber) { showCamSettings = !showCamSettings }
+                ModeChip("Freeze gravity", !state.autoGravity, Color(0xFF38BDF8)) { onToggleGravity() }
+                if (!arOn) ModeChip("Flat view", starWars, Bw.Lime) { starWars = !starWars }
+            }
+
+            // Controls (Brickwell design)
+            Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                // Left: direction pad (follows the camera / where you stand in AR)
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    DPad(
-                        buttonSize = 52.dp, rotateInCenter = false,
-                        onUpPress = { moveCameraRelative(0, 1) },
-                        onDownPress = { moveCameraRelative(0, -1) },
-                        onDownRelease = {},
-                        onLeftPress = { moveCameraRelative(-1, 0) },
-                        onLeftRelease = {},
-                        onRightPress = { moveCameraRelative(1, 0) },
-                        onRightRelease = {}
-                    )
-                    // Compass — shows which direction the DPad maps to
-                    Spacer(Modifier.height(2.dp))
-                    Canvas(Modifier.size(24.dp)) {
-                        val rad = Math.toRadians(-azimuth.toDouble()).toFloat()
-                        val cx = size.width / 2f; val cy = size.height / 2f; val r = size.width * 0.4f
-                        // North arrow
-                        drawLine(Color.White.copy(0.3f), Offset(cx, cy), Offset(cx + sin(rad) * r, cy - cos(rad) * r), 2f)
-                        drawCircle(Color(0xFF22C55E).copy(0.6f), 3f, Offset(cx + sin(rad) * r, cy - cos(rad) * r))
+                    val padShape = RoundedCornerShape(16.dp)
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Spacer(Modifier.size(52.dp))
+                        BwPadButton("Move away", Modifier.size(52.dp), padShape, Bw.Raised, Bw.LineStrong, { moveCameraRelative(0, 1) }) { GlyphIcon(Glyph.UP, Bw.Cyan, 22.dp) }
+                        Spacer(Modifier.size(52.dp))
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                        BwPadButton("Move left", Modifier.size(52.dp), padShape, Bw.Raised, Bw.LineStrong, { moveCameraRelative(-1, 0) }) { GlyphIcon(Glyph.LEFT, Bw.Cyan, 22.dp) }
+                        // Compass: which way "away" points
+                        Canvas(Modifier.size(52.dp)) {
+                            val rad = Math.toRadians(-azimuth.toDouble()).toFloat()
+                            val cx = size.width / 2f; val cy = size.height / 2f; val r = size.width * 0.3f
+                            drawCircle(Bw.Line, r, Offset(cx, cy), style = androidx.compose.ui.graphics.drawscope.Stroke(2f))
+                            drawLine(Bw.TextMuted, Offset(cx, cy), Offset(cx + sin(rad) * r, cy - cos(rad) * r), 3f)
+                            drawCircle(Bw.Cyan, 4f, Offset(cx + sin(rad) * r, cy - cos(rad) * r))
+                        }
+                        BwPadButton("Move right", Modifier.size(52.dp), padShape, Bw.Raised, Bw.LineStrong, { moveCameraRelative(1, 0) }) { GlyphIcon(Glyph.RIGHT, Bw.Cyan, 22.dp) }
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Spacer(Modifier.size(52.dp))
+                        BwPadButton("Move closer", Modifier.size(52.dp), padShape, Bw.Raised, Bw.LineStrong, { moveCameraRelative(0, -1) }) { GlyphIcon(Glyph.DOWN, Bw.Cyan, 22.dp) }
+                        Spacer(Modifier.size(52.dp))
                     }
                 }
-                // Centre: HOLD + PAUSE + toggles
-                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                    ActionButton("HOLD", onHold, fireOnPress = true, width = 58.dp, height = 26.dp)
-                    ActionButton(
-                        if (state.status == GameStatus.MENU) "START" else "PAUSE",
-                        { if (state.status == GameStatus.MENU) onStart() else onPause() },
-                        width = 58.dp, height = 26.dp
-                    )
-                    Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-                        MiniToggle("SW", starWars, theme.accentColor) { starWars = !starWars }
-                        MiniToggle("❄", !state.autoGravity, Color(0xFF38BDF8)) { onToggleGravity() }
-                        MiniToggle("⚙", showCamSettings, Color(0xFFF59E0B)) { showCamSettings = !showCamSettings }
-                        if (hasMotionSensor && !arOn) {
-                            MiniToggle("📱", motionView, Color(0xFFA78BFA)) { setMotionView(!motionView) }
+                // Right: hold, spin, tilt, drops
+                Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Bottom) {
+                        BwPadButton("Hold piece", Modifier.size(52.dp), RoundedCornerShape(16.dp), Bw.Raised, Bw.LineStrong, onHold) {
+                            Text("HOLD", style = BwType.Overline.copy(color = Bw.Text, fontSize = 10.sp, letterSpacing = 1.sp))
                         }
-                        if (arSupport == ArSupport.SUPPORTED) {
-                            MiniToggle("AR", arOn, Color(0xFF22D3EE)) { toggleAr() }
-                        }
-                    }
-                    ActionButton("···", onOpenSettings, width = 36.dp, height = 18.dp)
-                }
-                // Right: Rotate + Drop buttons
-                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                        ActionButton("↻ SPIN", onRotateXZ, width = 56.dp, height = 36.dp)
-                        ActionButton("↻ TILT", onRotateXY, width = 56.dp, height = 36.dp)
+                        RoundAction("Spin", Glyph.ROTATE, Bw.Cyan, onRotateXZ)
+                        RoundAction("Tilt", Glyph.TILT, Bw.Violet, onRotateXY)
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        TapButton(ButtonIcon.UP, 48.dp) { onHardDrop() }
-                        HoldButton(ButtonIcon.DOWN, 48.dp, onPress = { onSoftDrop() }, onRelease = {})
+                        BwPadButton("Soft drop", Modifier.size(64.dp, 48.dp), RoundedCornerShape(16.dp), Bw.Raised, Bw.LineStrong, { onSoftDrop() }) {
+                            GlyphIcon(Glyph.DOWN, Bw.Cyan, 22.dp)
+                        }
+                        BwPadButton("Hard drop", Modifier.size(120.dp, 48.dp), RoundedCornerShape(16.dp), Bw.Pink, null, onHardDrop) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                GlyphIcon(Glyph.DROP, Bw.Ground, 18.dp)
+                                Spacer(Modifier.width(6.dp))
+                                Text("DROP", style = BwType.Button.copy(fontSize = 15.sp, letterSpacing = 2.sp, color = Bw.Ground))
+                            }
+                        }
                     }
                 }
             }
@@ -601,5 +601,58 @@ private fun ArStatusBar(status: ArStatus, modifier: Modifier, onReplace: () -> U
                 modifier = Modifier.background(Color(0xFF22D3EE), RoundedCornerShape(10.dp)).clickable { onReplace() }
                     .padding(horizontal = 12.dp, vertical = 6.dp))
         }
+    }
+}
+
+// ===== Brickwell pieces for the 3D screen =====
+
+/** Above this battery temperature AR always switches off, whatever the player's limit. */
+private const val AR_HARD_LIMIT_C = 46
+
+/** Player-selectable AR heat limits, cycled by tapping the temperature chip. */
+private fun nextHeatLimit(current: Int): Int = if (current >= AR_HARD_LIMIT_C - 1) 39 else current + 1
+
+@Composable
+private fun HeatChip(h: ArHeatInfo, limit: Int, onCycleLimit: () -> Unit) {
+    val t = h.batteryC
+    val color = when {
+        t == null -> if (h.thermal >= ArHeat.WARM) Bw.Amber else Bw.Lime
+        t >= limit - 1 -> Bw.Pink
+        t >= limit - 3 || h.thermal >= ArHeat.WARM -> Bw.Amber
+        else -> Bw.Lime
+    }
+    val text = buildString {
+        append(if (t != null) "%.1f°C".format(t) else "Temp n/a")
+        append("  ·  AR stops at ${limit}°C")
+        if (h.charging) append("  ·  charging")
+    }
+    Text(text, color = Bw.Ground, fontSize = 12.sp, fontWeight = FontWeight.Bold,
+        modifier = Modifier.background(color, RoundedCornerShape(10.dp))
+            .clickable(onClickLabel = "Change AR temperature limit") { onCycleLimit() }
+            .padding(horizontal = 12.dp, vertical = 6.dp))
+}
+
+@Composable
+private fun Hud3DBox(modifier: Modifier, content: @Composable ColumnScope.() -> Unit) {
+    Column(modifier.heightIn(min = 60.dp).clip(RoundedCornerShape(14.dp)).background(Bw.Surface)
+        .border(1.dp, Bw.Line, RoundedCornerShape(14.dp)).padding(6.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(3.dp, Alignment.CenterVertically), content = content)
+}
+
+@Composable
+private fun ModeChip(label: String, on: Boolean, color: Color, onClick: () -> Unit) {
+    Text(label, color = if (on) Bw.Ground else Bw.TextSoft, fontSize = 12.sp, fontWeight = FontWeight.Bold,
+        modifier = Modifier.clip(RoundedCornerShape(10.dp))
+            .background(if (on) color else Bw.Surface)
+            .border(1.dp, if (on) color else Bw.Line, RoundedCornerShape(10.dp))
+            .clickable { onClick() }.padding(horizontal = 12.dp, vertical = 8.dp))
+}
+
+@Composable
+private fun RoundAction(label: String, glyph: Glyph, color: Color, onClick: () -> Unit) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        BwPadButton(label, Modifier.size(60.dp), CircleShape, color, null, onClick) { GlyphIcon(glyph, Bw.Ground, 26.dp) }
+        Text(label.uppercase(), style = BwType.Overline.copy(fontSize = 9.sp, letterSpacing = 1.sp))
     }
 }

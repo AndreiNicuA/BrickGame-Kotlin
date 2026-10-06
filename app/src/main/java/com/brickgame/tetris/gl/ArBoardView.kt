@@ -28,8 +28,14 @@ import kotlin.math.hypot
 /** Whether this phone can run the AR mode. */
 enum class ArSupport { CHECKING, SUPPORTED, UNSUPPORTED }
 
-/** How warm the phone is, from Android's thermal status (API 29+; NORMAL elsewhere). */
-enum class ArHeat { NORMAL, WARM, HOT }
+/** Android's own thermal verdict (API 29+; NORMAL on older phones). */
+enum class ArHeat { NORMAL, WARM, HOT, CRITICAL }
+
+/**
+ * Phone temperature while AR runs: battery temperature in °C (null if the phone doesn't report
+ * it), whether it is charging (charging adds heat), and Android's thermal status.
+ */
+data class ArHeatInfo(val batteryC: Float?, val charging: Boolean, val thermal: ArHeat)
 
 /**
  * Asks ARCore whether the device is capable. The first answer can be "still checking" (it may
@@ -113,7 +119,7 @@ fun ArBoardView(
     /** Board coordinates (x, z) under the finger while dragging the piece. */
     onPieceDrag: (Float, Float) -> Unit,
     onTap: () -> Unit,
-    onHeat: (ArHeat) -> Unit,
+    onHeat: (ArHeatInfo) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val latestStatus by rememberUpdatedState(onStatus)
@@ -131,19 +137,25 @@ fun ArBoardView(
     LaunchedEffect(replaceKey) { if (replaceKey > 0) rendererRef.value?.requestReplace() }
     LaunchedEffect(cellMeters) { rendererRef.value?.cellMeters = cellMeters }
 
-    // Phone temperature: warn when warm, the caller switches AR off when hot
-    DisposableEffect(Unit) {
+    // Phone temperature, every few seconds: battery °C + Android's thermal status.
+    // The caller decides when to warn and when to leave AR.
+    LaunchedEffect(Unit) {
         val pm = context.getSystemService(Context.POWER_SERVICE) as? PowerManager
-        if (pm == null || Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) onDispose {} else {
-            val listener = PowerManager.OnThermalStatusChangedListener { status ->
-                latestHeat(when {
-                    status >= PowerManager.THERMAL_STATUS_SEVERE -> ArHeat.HOT
-                    status >= PowerManager.THERMAL_STATUS_MODERATE -> ArHeat.WARM
+        while (true) {
+            val battery = context.registerReceiver(null, android.content.IntentFilter(android.content.Intent.ACTION_BATTERY_CHANGED))
+            val tenths = battery?.getIntExtra(android.os.BatteryManager.EXTRA_TEMPERATURE, Int.MIN_VALUE) ?: Int.MIN_VALUE
+            val plugged = (battery?.getIntExtra(android.os.BatteryManager.EXTRA_PLUGGED, 0) ?: 0) != 0
+            val thermal = if (pm != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val st = pm.currentThermalStatus
+                when {
+                    st >= PowerManager.THERMAL_STATUS_CRITICAL -> ArHeat.CRITICAL
+                    st >= PowerManager.THERMAL_STATUS_SEVERE -> ArHeat.HOT
+                    st >= PowerManager.THERMAL_STATUS_MODERATE -> ArHeat.WARM
                     else -> ArHeat.NORMAL
-                })
-            }
-            pm.addThermalStatusListener(listener)   // also reports the current status right away
-            onDispose { pm.removeThermalStatusListener(listener) }
+                }
+            } else ArHeat.NORMAL
+            latestHeat(ArHeatInfo(if (tenths == Int.MIN_VALUE) null else tenths / 10f, plugged, thermal))
+            kotlinx.coroutines.delay(3000)
         }
     }
 
@@ -174,10 +186,10 @@ fun ArBoardView(
             GLSurfaceView(ctx).also { view ->
                 val renderer = ArBoardRenderer(ctx, session,
                     onStatus = { s -> view.post { latestStatus(s) } },
-                    onViewAngle = { az, el -> view.post { latestAngle(az, el) } })
+                    onViewAngle = { az, el -> view.post { latestAngle(az, el) } },
+                    rotationProvider = { view.display?.rotation ?: 0 })
                 renderer.updateState(state, material, true, themeColor)
                 renderer.cellMeters = cellMeters
-                renderer.displayRotation = (ctx as? Activity)?.windowManager?.defaultDisplay?.rotation ?: 0
                 view.preserveEGLContextOnPause = true
                 view.setEGLContextClientVersion(2)
                 view.setEGLConfigChooser(8, 8, 8, 8, 16, 0)
@@ -195,9 +207,7 @@ fun ArBoardView(
             }
         },
         modifier = modifier,
-        update = { view ->
-            rendererRef.value?.displayRotation = (view.context as? Activity)?.windowManager?.defaultDisplay?.rotation ?: 0
-        }
+        update = { }
     )
 }
 

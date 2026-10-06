@@ -41,7 +41,9 @@ class ArBoardRenderer(
     private val session: Session,
     private val onStatus: (ArStatus) -> Unit,
     /** Viewing direction relative to the well, in the orbit camera's terms (for D-pad mapping). */
-    private val onViewAngle: (azimuthDeg: Float, elevationDeg: Float) -> Unit
+    private val onViewAngle: (azimuthDeg: Float, elevationDeg: Float) -> Unit,
+    /** Current display rotation (Surface.ROTATION_*); read whenever the surface changes size. */
+    private val rotationProvider: () -> Int = { 0 }
 ) : GLSurfaceView.Renderer {
 
     companion object {
@@ -56,7 +58,6 @@ class ArBoardRenderer(
     private val taps = ConcurrentLinkedQueue<FloatArray>()
     @Volatile private var moveTarget: FloatArray? = null
     @Volatile private var replaceRequested = false
-    @Volatile var displayRotation = 0
     @Volatile var cellMeters = 0.03f
         set(v) { field = v.coerceIn(MIN_CELL, MAX_CELL) }
     @Volatile var yawDegrees = 0f
@@ -158,7 +159,8 @@ class ArBoardRenderer(
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT or GLES20.GL_DEPTH_BUFFER_BIT)
         val bg = background ?: return
         if (viewportChanged) {
-            session.setDisplayGeometry(displayRotation, width, height)
+            // Rotating the phone changes both size and rotation; ARCore needs both to line up the camera
+            session.setDisplayGeometry(rotationProvider(), width, height)
             viewportChanged = false
         }
         val frame = try { session.update() } catch (e: Exception) {
@@ -177,10 +179,11 @@ class ArBoardRenderer(
             setPlaneFinding(true)
         }
 
-        // Taps: place the well on a horizontal surface
+        // Taps: place the well under the finger, or at the previewed spot
         while (true) {
             val tap = taps.poll() ?: break
-            hitPlane(frame, tap[0], tap[1])?.let { placeAt(it) }
+            val hit = hitPlane(frame, tap[0], tap[1])
+            if (hit != null) placeAt(hit) else previewPose?.let { (plane, pose) -> setAnchor(plane.createAnchor(pose)) }
         }
         // Two-finger drag: slide the well (needs surfaces, so detection is on while moving)
         if (gestureMoving) setPlaneFinding(true)
@@ -191,10 +194,22 @@ class ArBoardRenderer(
 
         val a = anchor
         if (a == null) {
-            val hasPlane = session.getAllTrackables(Plane::class.java).any {
-                it.trackingState == TrackingState.TRACKING && it.type == Plane.Type.HORIZONTAL_UPWARD_FACING && it.subsumedBy == null
+            // Preview: show the well where the screen centre meets a surface; a tap places it there
+            val preview = hitPlane(frame, width / 2f, height / 2f)
+            if (preview != null) {
+                report(ArStatus.READY_TO_PLACE)
+                previewPose = (preview.trackable as Plane) to preview.hitPose
+                camera.getViewMatrix(view, 0)
+                camera.getProjectionMatrix(proj, 0, 0.03f, 50f)
+                Matrix.multiplyMM(viewProj, 0, proj, 0, view, 0)
+                preview.hitPose.toMatrix(anchorMatrix, 0)
+                buildBase()
+                val camPose = camera.pose
+                board.drawScene(viewProj, base, camPose.tx(), camPose.ty(), camPose.tz())
+            } else {
+                previewPose = null
+                report(ArStatus.SEARCHING)
             }
-            report(if (hasPlane) ArStatus.READY_TO_PLACE else ArStatus.SEARCHING)
             return
         }
         if (a.trackingState != TrackingState.TRACKING) { report(ArStatus.TRACKING_LOST); return }
@@ -207,11 +222,7 @@ class ArBoardRenderer(
         camera.getProjectionMatrix(proj, 0, 0.03f, 50f)
         Matrix.multiplyMM(viewProj, 0, proj, 0, view, 0)
         a.pose.toMatrix(anchorMatrix, 0)
-        System.arraycopy(anchorMatrix, 0, base, 0, 16)
-        Matrix.rotateM(base, 0, yawDegrees, 0f, 1f, 0f)
-        val s = cellMeters
-        Matrix.scaleM(base, 0, s, s, s)
-        Matrix.translateM(base, 0, -Tetris3DGame.BOARD_W / 2f, 0f, -Tetris3DGame.BOARD_D / 2f)
+        buildBase()
 
         val camPose = camera.pose
         board.drawScene(viewProj, base, camPose.tx(), camPose.ty(), camPose.tz())
@@ -243,16 +254,31 @@ class ArBoardRenderer(
         }
     }
 
+    /** Surface + pose under the screen centre while placing (a fresh anchor can be made from it later). */
+    private var previewPose: Pair<Plane, com.google.ar.core.Pose>? = null
+
+    /** base = anchorMatrix × turn × scale × centre the footprint on the anchor point. */
+    private fun buildBase() {
+        System.arraycopy(anchorMatrix, 0, base, 0, 16)
+        Matrix.rotateM(base, 0, yawDegrees, 0f, 1f, 0f)
+        val s = cellMeters
+        Matrix.scaleM(base, 0, s, s, s)
+        Matrix.translateM(base, 0, -Tetris3DGame.BOARD_W / 2f, 0f, -Tetris3DGame.BOARD_D / 2f)
+    }
+
     private fun hitPlane(frame: com.google.ar.core.Frame, x: Float, y: Float) =
         frame.hitTest(x, y).firstOrNull { h ->
             val t = h.trackable
             t is Plane && t.type == Plane.Type.HORIZONTAL_UPWARD_FACING && t.isPoseInPolygon(h.hitPose)
         }
 
-    private fun placeAt(hit: com.google.ar.core.HitResult) {
+    private fun placeAt(hit: com.google.ar.core.HitResult) = setAnchor(hit.createAnchor())
+
+    private fun setAnchor(newAnchor: Anchor) {
         anchor?.detach()
-        anchor = hit.createAnchor()
+        anchor = newAnchor
         isPlaced = true
+        previewPose = null
     }
 
     private fun report(status: ArStatus) {

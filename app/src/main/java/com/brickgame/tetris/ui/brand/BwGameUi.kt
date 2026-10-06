@@ -41,11 +41,11 @@ import com.brickgame.tetris.ui.components.PIECE_COLORS
 
 // ======================= In-game design system (Neon) =======================
 
-private enum class Glyph { LEFT, RIGHT, DOWN, ROTATE, DROP, PAUSE }
+enum class Glyph { LEFT, RIGHT, UP, DOWN, ROTATE, TILT, DROP, PAUSE }
 
 /** Stroke glyphs for the game controls, drawn on a 24×24 grid. */
 @Composable
-private fun GlyphIcon(g: Glyph, color: Color, size: Dp) {
+fun GlyphIcon(g: Glyph, color: Color, size: Dp) {
     Canvas(Modifier.size(size)) {
         val k = this.size.width / 24f
         val st = Stroke(2.8f * k, cap = StrokeCap.Round, join = StrokeJoin.Round)
@@ -57,6 +57,11 @@ private fun GlyphIcon(g: Glyph, color: Color, size: Dp) {
             Glyph.LEFT -> drawPath(path(15f, 5f, 8f, 12f, 15f, 19f), color, style = st)
             Glyph.RIGHT -> drawPath(path(9f, 5f, 16f, 12f, 9f, 19f), color, style = st)
             Glyph.DOWN -> drawPath(path(5f, 9f, 12f, 16f, 19f, 9f), color, style = st)
+            Glyph.UP -> drawPath(path(5f, 15f, 12f, 8f, 19f, 15f), color, style = st)
+            Glyph.TILT -> {
+                drawArc(color, 120f, 300f, false, Offset(4f * k, 4f * k), Size(16f * k, 16f * k), style = st)
+                drawPath(path(4f, 3.5f, 4f, 9f, 9.5f, 9f), color, style = st)
+            }
             Glyph.DROP -> {
                 drawPath(path(12f, 4f, 12f, 16f), color, style = st)
                 drawPath(path(6f, 11f, 12f, 17f, 18f, 11f), color, style = st)
@@ -270,7 +275,8 @@ fun BwPauseOverlay(onResume: () -> Unit, onSettings: () -> Unit, onQuit: () -> U
 fun BwGameOverOverlay(
     score: Int, level: Int, lines: Int, highScore: Int,
     maxCombo: Int, backToBack: Int, elapsedMs: Long,
-    onAgain: () -> Unit, onLeave: () -> Unit
+    onAgain: () -> Unit, onLeave: () -> Unit,
+    linesLabel: String = "LINES"
 ) {
     val t = overlayEnter()
     val isNewBest = score > 0 && score >= highScore
@@ -288,8 +294,8 @@ fun BwGameOverOverlay(
             Spacer(Modifier.height(6.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Stat("LEVEL", "$level", Bw.Cyan, Modifier.weight(1f))
-                Stat("LINES", "$lines", Bw.Lime, Modifier.weight(1f))
-                Stat("TIME", time, Bw.Violet, Modifier.weight(1f))
+                Stat(linesLabel, "$lines", Bw.Lime, Modifier.weight(1f))
+                if (elapsedMs > 0) Stat("TIME", time, Bw.Violet, Modifier.weight(1f))
             }
             if (maxCombo > 1 || backToBack > 0) {
                 Text(buildString {
