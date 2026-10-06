@@ -29,6 +29,11 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import com.brickgame.tetris.input.SwipeAction
+import com.brickgame.tetris.ui.brand.Bw
+import com.brickgame.tetris.ui.brand.BwGameOverOverlay
+import com.brickgame.tetris.ui.brand.BwPauseOverlay
+import com.brickgame.tetris.ui.brand.NeonControls
+import com.brickgame.tetris.ui.brand.NeonHud
 import com.brickgame.tetris.input.detectSwipeControls
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.TextUnit
@@ -581,12 +586,15 @@ fun GameScreen(
                     ActionButton("PAUSE", onPause, modifier = Modifier.align(Alignment.BottomEnd),
                         width = 70.dp, height = 30.dp, backgroundColor = theme.buttonSecondary.copy(0.7f))
                 }
-                if (gameState.status == GameStatus.PAUSED) PauseOverlay(onResume, onOpenSettings, onQuit)
-                if (gameState.status == GameStatus.GAME_OVER) GameOverOverlay(gameState.score, gameState.level, gameState.lines, gameState.highScore, gameState.comboCount, gameState.backToBackCount, gameState.elapsedTimeMs, onStartGame, onOpenSettings, onQuit)
+                if (gameState.status == GameStatus.PAUSED) BwPauseOverlay(onResume, onOpenSettings, onQuit)
+                if (gameState.status == GameStatus.GAME_OVER) BwGameOverOverlay(gameState.score, gameState.level, gameState.lines, gameState.highScore, gameState.comboCount, gameState.backToBackCount, gameState.elapsedTimeMs, onStartGame, onQuit)
             }
         } else {
             // Normal game content
-            Box(Modifier.fillMaxSize().background(theme.backgroundColor).systemBarsPadding()) {
+            // Classic keeps its theme colours; everything else uses the Brickwell ground
+            val classicLook = !swipeControls && (layoutPreset == LayoutPreset.PORTRAIT_CLASSIC ||
+                (layoutPreset.isLandscape && portraitLayout == LayoutPreset.PORTRAIT_CLASSIC))
+            Box(Modifier.fillMaxSize().background(if (classicLook) theme.backgroundColor else Bw.Ground).safeDrawingPadding()) {
                 if (swipeControls) {
                     SwipeLayout(gameState, effectiveGhost, animationStyle, animationDuration, onRotate, onHardDrop, effectiveHold, onLeftPress, onLeftRelease, onRightPress, onRightRelease, onDownPress, onDownRelease, onPause, boardDimAlpha, effectiveNextCount)
                 } else if (customLayout != null) {
@@ -601,10 +609,10 @@ fun GameScreen(
                     LayoutPreset.LANDSCAPE_LEFTY -> LandscapeLayout(gameState, dpadStyle, effectiveGhost, animationStyle, animationDuration, onRotate, onHardDrop, effectiveHold, onLeftPress, onLeftRelease, onRightPress, onRightRelease, onDownPress, onDownRelease, onPause, onOpenSettings, onStartGame, portraitLayout, boardDimAlpha, effectiveNextCount)
                     LayoutPreset.PORTRAIT_3D -> {}
                 }
-                if (gameState.status == GameStatus.PAUSED) PauseOverlay(onResume, onOpenSettings, onQuit)
+                if (gameState.status == GameStatus.PAUSED) BwPauseOverlay(onResume, onOpenSettings, onQuit)
                 // Classic layout handles its own game-over with LCD curtain animation
                 if (gameState.status == GameStatus.GAME_OVER && (layoutPreset != LayoutPreset.PORTRAIT_CLASSIC || swipeControls))
-                    GameOverOverlay(gameState.score, gameState.level, gameState.lines, gameState.highScore, gameState.comboCount, gameState.backToBackCount, gameState.elapsedTimeMs, onStartGame, onOpenSettings, onQuit)
+                    BwGameOverOverlay(gameState.score, gameState.level, gameState.lines, gameState.highScore, gameState.comboCount, gameState.backToBackCount, gameState.elapsedTimeMs, onStartGame, onQuit)
             }
         }
         // Modern notifications — hidden in Classic layout (portrait and landscape) to maintain authentic LCD feel
@@ -904,57 +912,8 @@ fun GameScreen(
         FallingPiecesBackground(theme, isDark, bgSpeed, opacity = if (isDark) 0.4f else 0.25f, modifier = Modifier.matchParentSize())
 
         Column(Modifier.fillMaxSize()) {
-            // === COMPACT INFO BAR ===
-            Row(Modifier.fillMaxWidth()
-                .shadow(6.dp)
-                .background((if (isDark) Color.Black else Color.White).copy(0.6f))
-                .padding(horizontal = 6.dp, vertical = 3.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("HOLD", fontSize = 6.sp, color = (if (isDark) Color.White else Color.Black).copy(0.45f),
-                        fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, letterSpacing = 0.5.sp)
-                    HoldPiecePreview(gs.holdPiece?.shape, gs.holdUsed, Modifier.size(28.dp))
-                }
-                Spacer(Modifier.width(4.dp))
-                Row(Modifier.weight(1f), horizontalArrangement = Arrangement.SpaceEvenly,
-                    verticalAlignment = Alignment.CenterVertically) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("LVL", fontSize = 6.sp, color = (if (isDark) Color.White else Color.Black).copy(0.4f),
-                            fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, letterSpacing = 0.5.sp)
-                        Text("${gs.level}", fontSize = 14.sp, fontWeight = FontWeight.ExtraBold,
-                            fontFamily = FontFamily.Monospace, color = theme.accentColor)
-                    }
-                    // Level 9+: Score glows on change
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("SCORE", fontSize = 6.sp, color = (if (isDark) Color.White else Color.Black).copy(0.4f),
-                            fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, letterSpacing = 0.5.sp)
-                        RollingScore(gs.score, fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace,
-                            color = (if (isDark) Color.White else Color.Black).copy(0.9f),
-                            letterSpacing = 1.sp,
-                            glow = { if (gs.level >= 9) fx.scoreGlowAlpha else 0f })
-                    }
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("LINES", fontSize = 6.sp, color = (if (isDark) Color.White else Color.Black).copy(0.4f),
-                            fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, letterSpacing = 0.5.sp)
-                        Text("${gs.lines}", fontSize = 13.sp, fontWeight = FontWeight.Bold,
-                            fontFamily = FontFamily.Monospace, color = (if (isDark) Color.White else Color.Black).copy(0.7f))
-                    }
-                }
-                Spacer(Modifier.width(4.dp))
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("NEXT", fontSize = 6.sp, color = (if (isDark) Color.White else Color.Black).copy(0.45f),
-                        fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, letterSpacing = 0.5.sp)
-                    Row(horizontalArrangement = Arrangement.spacedBy(2.dp),
-                        verticalAlignment = Alignment.CenterVertically) {
-                        gs.nextPieces.take(nextCount.coerceAtMost(3)).forEachIndexed { i, p ->
-                            NextPiecePreview(p.shape, Modifier.size(if (i == 0) 28.dp else 20.dp),
-                                alpha = if (i == 0) 1f else 0.5f)
-                        }
-                    }
-                }
-            }
+            // === Info bar (Brickwell design) ===
+            NeonHud(gs, nextCount, onPause)
 
             // === Board area with screen shake + breathing ===
             Box(Modifier.weight(1f).fillMaxWidth()
@@ -984,8 +943,8 @@ fun GameScreen(
                 GameEffectsLayer(fx, gs, Modifier.matchParentSize())
             }
 
-            // === Controls ===
-            FullControls(dp, onHD, onHold, onLP, onLR, onRP, onRR, onDP, onDR, onRotate, onPause, onSet, onStart, gs.status)
+            // === Controls (Brickwell design) ===
+            NeonControls(LocalLeftHanded.current, onLP, onLR, onRP, onRR, onDP, onDR, onRotate, onHD, onHold)
         }
     }
 }
@@ -1020,39 +979,8 @@ fun GameScreen(
         FallingPiecesBackground(theme, isDark, bgSpeed, opacity = if (isDark) 0.3f else 0.18f, modifier = Modifier.matchParentSize())
 
         Column(Modifier.fillMaxSize()) {
-            // Slim HUD — kept outside the swipe area so its button never fights the gestures
-            Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("HOLD", fontSize = 9.sp, color = ink.copy(0.55f), fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
-                    HoldPiecePreview(gs.holdPiece?.shape, gs.holdUsed, Modifier.size(30.dp))
-                }
-                Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                    RollingScore(gs.score, fontSize = 20.sp, fontWeight = FontWeight.ExtraBold,
-                        fontFamily = FontFamily.Monospace, color = ink.copy(0.92f), letterSpacing = 1.sp)
-                    Text("LV ${gs.level} · ${gs.lines} LINES", fontSize = 11.sp, color = ink.copy(0.6f),
-                        fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
-                }
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("NEXT", fontSize = 9.sp, color = ink.copy(0.55f), fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
-                    Row(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
-                        gs.nextPieces.take(nextCount.coerceAtMost(3)).forEachIndexed { i, p ->
-                            NextPiecePreview(p.shape, Modifier.size(if (i == 0) 30.dp else 20.dp), if (i == 0) 1f else 0.5f)
-                        }
-                    }
-                }
-                Spacer(Modifier.width(8.dp))
-                Box(Modifier.size(44.dp).clip(RoundedCornerShape(14.dp))
-                    .background(ink.copy(0.08f))
-                    .clickable(onClickLabel = "Pause") { onPause() },
-                    contentAlignment = Alignment.Center) {
-                    Canvas(Modifier.size(16.dp)) {
-                        val w = size.width * 0.28f
-                        drawRoundRect(ink.copy(0.85f), Offset(size.width * 0.12f, 0f), Size(w, size.height), CornerRadius(2f))
-                        drawRoundRect(ink.copy(0.85f), Offset(size.width * 0.6f, 0f), Size(w, size.height), CornerRadius(2f))
-                    }
-                }
-            }
+            // HUD — kept outside the swipe area so its pause button never fights the gestures
+            NeonHud(gs, nextCount, onPause)
 
             BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
                 val density = LocalDensity.current
