@@ -24,6 +24,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.brickgame.tetris.gl.ArBoardView
+import com.brickgame.tetris.gl.ArHeat
 import com.brickgame.tetris.gl.ArStatus
 import com.brickgame.tetris.gl.ArSupport
 import com.brickgame.tetris.gl.createArSession
@@ -67,7 +68,9 @@ fun Game3DScreen(
     onSoftDrop: () -> Unit = {},
     onToggleGravity: () -> Unit = {},
     onQuit: () -> Unit = {},
-    material: PieceMaterial = PieceMaterial.CLASSIC
+    material: PieceMaterial = PieceMaterial.CLASSIC,
+    /** Live piece (not the last composed one) for AR drag stepping */
+    currentPiece: () -> Piece3DState? = { state.currentPiece }
 ) {
     val theme = LocalGameTheme.current
 
@@ -98,6 +101,19 @@ fun Game3DScreen(
     var arReplace by remember { mutableIntStateOf(0) }
     var arMessage by remember { mutableStateOf<String?>(null) }
     var arInstallPending by remember { mutableStateOf(false) }
+    var arCell by remember { mutableFloatStateOf(0.03f) }
+    var arHeat by remember { mutableStateOf(ArHeat.NORMAL) }
+
+    /** AR drag: step the piece one cell per axis toward the board cell under the finger. */
+    fun dragPieceTo(bx: Float, bz: Float) {
+        val p = currentPiece() ?: return
+        val cx = p.x + p.blocks.map { it.x }.average().toFloat() + 0.5f
+        val cz = p.z + p.blocks.map { it.z }.average().toFloat() + 0.5f
+        val dx = kotlin.math.round(bx - cx).toInt()
+        val dz = kotlin.math.round(bz - cz).toInt()
+        if (dx != 0) onMoveX(if (dx > 0) 1 else -1)
+        if (dz != 0) onMoveZ(if (dz > 0) 1 else -1)
+    }
     val arOn = arSession != null
 
     fun startAr(userRequestedInstall: Boolean) {
@@ -219,9 +235,21 @@ fun Game3DScreen(
                         material = material,
                         themeColor = theme.pixelOn.toArgb().toLong() and 0xFFFFFFFFL,
                         replaceKey = arReplace,
+                        cellMeters = arCell,
+                        onCellMeters = { arCell = it },
                         onStatus = { arStatus = it },
                         // Walking around the well turns the D-pad with you
                         onViewAngle = { az, el -> azimuth = az; elevation = el },
+                        onPieceDrag = { bx, bz -> dragPieceTo(bx, bz) },
+                        onTap = onRotateXZ,
+                        onHeat = { heat ->
+                            arHeat = heat
+                            if (heat == ArHeat.HOT) {
+                                // Protect the phone: leave AR and keep playing in the normal 3D view
+                                arSession = null
+                                arMessage = "Your phone got hot, so AR was paused. The game continues in 3D view."
+                            }
+                        },
                         modifier = Modifier.fillMaxSize()
                     )
                 } else if (starWars) {
@@ -250,7 +278,30 @@ fun Game3DScreen(
                 }
 
                 if (arOn) {
-                    ArStatusBar(arStatus, Modifier.align(Alignment.TopCenter).padding(top = 10.dp)) { arReplace++ }
+                    Column(Modifier.align(Alignment.TopCenter).padding(top = 10.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        ArStatusBar(arStatus, Modifier) { arReplace++ }
+                        if (arStatus == ArStatus.PLACED) {
+                            // Size presets: table-top, big, or a well you can stand inside
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                listOf("Table" to 0.03f, "Big" to 0.08f, "Room" to 0.2f).forEach { (label, cell) ->
+                                    val on = kotlin.math.abs(arCell - cell) < 0.004f
+                                    Text(label, fontSize = 12.sp, fontWeight = FontWeight.Bold,
+                                        color = if (on) Color(0xFF0B0E1A) else Color.White,
+                                        modifier = Modifier.background(if (on) Color(0xFF22D3EE) else Color(0xE6141A2E), RoundedCornerShape(10.dp))
+                                            .clickable { arCell = cell }.padding(horizontal = 12.dp, vertical = 6.dp))
+                                }
+                            }
+                            Text("Drag the piece · tap to spin · pinch, twist or two-finger drag the well",
+                                color = Color.White.copy(0.85f), fontSize = 11.sp,
+                                modifier = Modifier.background(Color(0xB3141A2E), RoundedCornerShape(8.dp)).padding(horizontal = 10.dp, vertical = 4.dp))
+                        }
+                        if (arHeat == ArHeat.WARM) {
+                            Text("Phone is getting warm — take a short break soon", color = Color(0xFF0B0E1A), fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.background(Color(0xFFFBBF24), RoundedCornerShape(10.dp)).padding(horizontal = 12.dp, vertical = 6.dp))
+                        }
+                    }
                 }
                 arMessage?.let { msg ->
                     Text(msg, color = Color.White, fontSize = 13.sp,

@@ -459,6 +459,7 @@ private fun PlayScreen(
             onSoftDrop = vm::softDrop3D,
             onToggleGravity = vm::toggle3DGravity,
             onQuit = vm::quit3DGame,
+            currentPiece = { vm.game3DState.value.currentPiece },
             material = PieceMaterial.entries.find { it.name == pieceMaterial } ?: PieceMaterial.CLASSIC
         )
         return
