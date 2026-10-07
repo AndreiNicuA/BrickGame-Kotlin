@@ -25,7 +25,11 @@ import kotlin.math.sqrt
  * [set] once finished, and [distance] = metres from the phone to the nearest edge
  * (negative = outside), null when no area is set or tracking is lost.
  */
-data class BoundaryInfo(val drawing: Boolean = false, val corners: Int = 0, val set: Boolean = false, val distance: Float? = null)
+data class BoundaryInfo(
+    val drawing: Boolean = false, val corners: Int = 0, val set: Boolean = false, val distance: Float? = null,
+    /** A preset area is waiting for the floor under the player to be found. */
+    val findingFloor: Boolean = false
+)
 
 /** What the AR view is doing, for the on-screen hints. */
 enum class ArStatus { STARTING, SEARCHING, READY_TO_PLACE, PLACED, FINDING_FLOOR, TRACKING_LOST, FAILED }
@@ -51,11 +55,6 @@ class ArBoardRenderer(
     private val onViewAngle: (azimuthDeg: Float, elevationDeg: Float) -> Unit,
     /** Current display rotation (Surface.ROTATION_*); read whenever the surface changes size. */
     private val rotationProvider: () -> Int = { 0 },
-    /**
-     * Where the falling piece is on screen: null while it is visible, otherwise the direction
-     * (x right, y down, unit length) from the screen centre towards it — for an edge arrow.
-     */
-    private val onPieceOffScreen: (FloatArray?) -> Unit = {},
     private val onBoundary: (BoundaryInfo) -> Unit = {},
     /** A placement was refused because the well would stick out of the play area. */
     private val onPlacementBlocked: () -> Unit = {}
@@ -102,8 +101,14 @@ class ArBoardRenderer(
     @Volatile private var insideRequested = false
     /** Falling piece centre in board units (x, y, z), from the latest state. */
     @Volatile private var pieceCenter: FloatArray? = null
-    private var lastOffScreen: FloatArray? = null
-    private var reportedOnScreen = true
+    /** The falling piece is out of view (checked a few times a second) → show the 3D arrow. */
+    private var pieceOffScreen = false
+    /** 3D pointer arrow on/off (setting). */
+    @Volatile var arrowEnabled = true
+    /** Draw detected surfaces as a mesh while placing the well / setting up the area (setting). */
+    @Volatile var floorMeshEnabled = true
+    /** Preset play area (width, depth in metres) waiting to be centred on the player. */
+    private var presetPending: FloatArray? = null
     /** True once the well stands somewhere (read by the touch handler). */
     @Volatile var isPlaced = false
         private set
@@ -159,15 +164,27 @@ class ArBoardRenderer(
         if (bxs.size >= 3) { playArea = PlayArea(bxs.toList(), bzs.toList()); boundaryDrawing = false }
         pushBoundaryInfo(null)
     }
+    /**
+     * A ready-made rectangular play area, [widthM] × [depthM], centred on where the player stands
+     * and facing where they look. Waits until the floor under them is found.
+     */
+    fun setPresetArea(widthM: Float, depthM: Float) = commands.offer {
+        boundaryAnchor?.detach(); boundaryAnchor = null
+        bxs.clear(); bzs.clear(); playArea = null; boundaryDrawing = false
+        presetPending = floatArrayOf(widthM, depthM)
+        setPlaneFinding(true)
+        pushBoundaryInfo(null)
+    }
+
     /** Forget the play area. */
     fun clearBoundary() = commands.offer {
         boundaryAnchor?.detach(); boundaryAnchor = null
-        bxs.clear(); bzs.clear(); playArea = null; boundaryDrawing = false
+        bxs.clear(); bzs.clear(); playArea = null; boundaryDrawing = false; presetPending = null
         pushBoundaryInfo(null)
     }
 
     private fun pushBoundaryInfo(distance: Float?) {
-        val info = BoundaryInfo(boundaryDrawing, bxs.size, playArea != null, distance)
+        val info = BoundaryInfo(boundaryDrawing, bxs.size, playArea != null, distance, presetPending != null)
         if (info != lastBoundaryInfo) { lastBoundaryInfo = info; onBoundary(info) }
     }
 
@@ -269,6 +286,8 @@ class ArBoardRenderer(
                 hitPlane(frame, tap[0], tap[1])?.let { addBoundaryCorner(it.hitPose) }
             }
         }
+        presetPending?.let { wd -> tryPlacePresetArea(frame, wd[0], wd[1]) }
+        if (floorMeshEnabled && (anchor == null || boundaryDrawing || presetPending != null)) drawFloorMesh()
         drawBoundary(frame)
 
         if (replaceRequested) {
@@ -327,7 +346,7 @@ class ArBoardRenderer(
         if (a.trackingState != TrackingState.TRACKING) { report(ArStatus.TRACKING_LOST); return }
         report(ArStatus.PLACED)
         // Placed and not being moved: stop looking for surfaces to save power and heat
-        if (!gestureMoving && !boundaryDrawing) setPlaneFinding(false)
+        if (!gestureMoving && !boundaryDrawing && presetPending == null) setPlaneFinding(false)
 
         // board → world: anchor × turn × scale × centre the footprint on the anchor
         a.pose.toMatrix(anchorMatrix, 0)
@@ -335,6 +354,7 @@ class ArBoardRenderer(
 
         val camPose = camera.pose
         board.drawScene(viewProj, base, camPose.tx(), camPose.ty(), camPose.tz())
+        if (arrowEnabled && pieceOffScreen) drawPointerArrow(camera)
 
         // Keep a snapshot for touch ray casts
         Matrix.multiplyMM(boardMvp, 0, viewProj, 0, base, 0)
@@ -463,35 +483,109 @@ class ArBoardRenderer(
         }
     }
 
-    /** Project the falling piece; tell the UI which way to point when it is off screen. */
+    /** Is the falling piece outside the view? (Decides whether the 3D arrow shows.) */
     private fun reportPieceOnScreen() {
         val pc = pieceCenter
-        var dir: FloatArray? = null
-        if (pc != null) {
-            val clip = FloatArray(4)
-            Matrix.multiplyMV(clip, 0, boardMvp, 0, floatArrayOf(pc[0], pc[1], pc[2], 1f), 0)
-            val w = clip[3]
-            val nx = clip[0] / abs(w).coerceAtLeast(1e-4f)
-            val ny = clip[1] / abs(w).coerceAtLeast(1e-4f)
-            val visible = w > 0f && abs(nx) <= 0.95f && abs(ny) <= 0.95f
-            if (!visible) {
-                // Behind the camera the projection is mirrored, so flip it
-                var dx = if (w > 0f) nx else -nx
-                var dy = if (w > 0f) -ny else ny            // screen y grows downward
-                if (abs(dx) < 1e-3f && abs(dy) < 1e-3f) dy = 1f
-                val len = sqrt(dx * dx + dy * dy)
-                dx /= len; dy /= len
-                dir = floatArrayOf(dx, dy)
-            }
+        if (pc == null) { pieceOffScreen = false; return }
+        val clip = FloatArray(4)
+        Matrix.multiplyMV(clip, 0, boardMvp, 0, floatArrayOf(pc[0], pc[1], pc[2], 1f), 0)
+        val w = clip[3]
+        val nx = clip[0] / abs(w).coerceAtLeast(1e-4f)
+        val ny = clip[1] / abs(w).coerceAtLeast(1e-4f)
+        pieceOffScreen = !(w > 0f && abs(nx) <= 0.9f && abs(ny) <= 0.9f)
+    }
+
+    // ===== 3D pointer arrow =====
+    /** Voxel arrow pointing along +Z: a 3-cube shaft, a plus-shaped head and a tip. */
+    private val arrowVoxels = listOf(
+        intArrayOf(0, 0, 0), intArrayOf(0, 0, 1), intArrayOf(0, 0, 2),
+        intArrayOf(0, 0, 3), intArrayOf(1, 0, 3), intArrayOf(-1, 0, 3), intArrayOf(0, 1, 3), intArrayOf(0, -1, 3),
+        intArrayOf(0, 0, 4)
+    )
+    private val arrowModels = List(arrowVoxels.size) { FloatArray(16) }
+
+    /**
+     * A brick arrow floating a little in front of and below the phone, turning to point at the
+     * falling piece wherever it is (behind you included). Pulses so it catches the eye.
+     */
+    private fun drawPointerArrow(camera: com.google.ar.core.Camera) {
+        val pc = pieceCenter ?: return
+        val target = FloatArray(4)
+        Matrix.multiplyMV(target, 0, base, 0, floatArrayOf(pc[0], pc[1], pc[2], 1f), 0)
+        val pose = camera.displayOrientedPose
+        val z = pose.zAxis; val y = pose.yAxis
+        // 32 cm ahead (camera looks along -Z), 7 cm below the centre of the view
+        val px = pose.tx() - z[0] * 0.32f - y[0] * 0.07f
+        val py = pose.ty() - z[1] * 0.32f - y[1] * 0.07f
+        val pz = pose.tz() - z[2] * 0.32f - y[2] * 0.07f
+        var dx = target[0] - px; var dy = target[1] - py; var dz = target[2] - pz
+        val len = sqrt(dx * dx + dy * dy + dz * dz)
+        if (len < 1e-4f) return
+        dx /= len; dy /= len; dz /= len
+        // Orthonormal frame with +Z along the direction (x = up × dir, unless pointing straight up/down)
+        var ax = dz; var ay = 0f; var az = -dx            // (0,1,0) × dir
+        var al = sqrt(ax * ax + az * az)
+        if (al < 1e-3f) { ax = 1f; ay = 0f; az = 0f; al = 1f }
+        ax /= al; az /= al
+        val bx = dy * az - dz * ay; val by = dz * ax - dx * az; val bz = dx * ay - dy * ax   // dir × x
+        val rot = floatArrayOf(
+            ax, ay, az, 0f,
+            bx, by, bz, 0f,
+            dx, dy, dz, 0f,
+            px, py, pz, 1f
+        )
+        val cell = 0.014f
+        for ((i, v) in arrowVoxels.withIndex()) {
+            val m = arrowModels[i]
+            System.arraycopy(rot, 0, m, 0, 16)
+            Matrix.scaleM(m, 0, cell, cell, cell)
+            // Centre the arrow on its middle (cube spans 0..1)
+            Matrix.translateM(m, 0, v[0] - 0.5f, v[1] - 0.5f, v[2] - 2.5f)
         }
-        if (dir == null) {
-            if (!reportedOnScreen) { reportedOnScreen = true; lastOffScreen = null; onPieceOffScreen(null) }
-        } else {
-            val last = lastOffScreen
-            if (reportedOnScreen || last == null || abs(last[0] - dir[0]) + abs(last[1] - dir[1]) > 0.05f) {
-                reportedOnScreen = false; lastOffScreen = dir; onPieceOffScreen(dir)
-            }
+        val pulse = 0.75f + 0.25f * kotlin.math.sin(System.currentTimeMillis() / 160.0).toFloat()
+        board.drawFreeCubes(viewProj, arrowModels, floatArrayOf(PINK[0] * pulse, PINK[1] * pulse, PINK[2] * pulse),
+            pose.tx(), pose.ty(), pose.tz())
+    }
+
+    // ===== Floor mesh and preset play areas =====
+    private val planeMatrix = FloatArray(16)
+    private val planeMvp = FloatArray(16)
+
+    /** Detected horizontal surfaces as a mesh ("the camera has scanned this"). */
+    private fun drawFloorMesh() {
+        for (plane in session.getAllTrackables(Plane::class.java)) {
+            if (plane.trackingState != TrackingState.TRACKING || plane.subsumedBy != null) continue
+            if (plane.type != Plane.Type.HORIZONTAL_UPWARD_FACING) continue
+            val buf = plane.polygon ?: continue
+            buf.rewind()
+            val poly = FloatArray(buf.remaining()).also { buf.get(it) }
+            plane.centerPose.toMatrix(planeMatrix, 0)
+            Matrix.multiplyMM(planeMvp, 0, viewProj, 0, planeMatrix, 0)
+            boundary.drawMesh(planeMvp, poly, CYAN)
         }
+    }
+
+    /** Centre a [w] × [d] m rectangle on the player once the floor under them is known. */
+    private fun tryPlacePresetArea(frame: com.google.ar.core.Frame, w: Float, d: Float) {
+        val floorY = findFloorBelow(frame) ?: run { pushBoundaryInfo(null); return }
+        val pose = frame.camera.displayOrientedPose
+        val z = pose.zAxis
+        // Face the way the player looks: local -Z = horizontal forward
+        val fx = -z[0]; val fz = -z[2]
+        val theta = if (fx * fx + fz * fz < 1e-6f) 0f else kotlin.math.atan2(-fx, -fz)
+        val half = theta / 2f
+        val anchorPose = com.google.ar.core.Pose(
+            floatArrayOf(pose.tx(), floorY, pose.tz()),
+            floatArrayOf(0f, kotlin.math.sin(half), 0f, kotlin.math.cos(half))
+        )
+        boundaryAnchor?.detach()
+        boundaryAnchor = session.createAnchor(anchorPose)
+        bxs.clear(); bzs.clear()
+        val hw = w / 2f; val hd = d / 2f
+        bxs.addAll(listOf(-hw, hw, hw, -hw)); bzs.addAll(listOf(-hd, -hd, hd, hd))
+        playArea = PlayArea(bxs.toList(), bzs.toList())
+        presetPending = null
+        pushBoundaryInfo(null)
     }
 
     /**
@@ -541,8 +635,6 @@ class ArBoardRenderer(
     }
 
     private fun report(status: ArStatus) {
-        // No placed well → nothing to point at
-        if (status != ArStatus.PLACED && !reportedOnScreen) { reportedOnScreen = true; lastOffScreen = null; onPieceOffScreen(null) }
         if (status != lastStatus) { lastStatus = status; onStatus(status) }
     }
 

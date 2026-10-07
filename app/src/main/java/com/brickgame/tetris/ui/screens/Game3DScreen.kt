@@ -92,7 +92,8 @@ fun Game3DScreen(
     arHeatLimit: Int = 43,
     onArHeatLimit: (Int) -> Unit = {},
     motionViewSaved: Boolean = false,
-    onMotionView: (Boolean) -> Unit = {}
+    onMotionView: (Boolean) -> Unit = {},
+    arSettings: com.brickgame.tetris.data.ArSettings = com.brickgame.tetris.data.ArSettings()
 ) {
     val theme = LocalGameTheme.current
 
@@ -159,6 +160,16 @@ fun Game3DScreen(
         if (dz != 0) onMoveZ(if (dz > 0) 1 else -1)
     }
     val arOn = arSession != null
+    // A fresh AR session starts at the player's chosen size, with their play area around them
+    val latestArSettings by rememberUpdatedState(arSettings)
+    LaunchedEffect(arSession) {
+        if (arSession == null) return@LaunchedEffect
+        val st = latestArSettings
+        arCell = st.defaultCell()
+        arInside = false
+        st.areaSize()?.let { (w, d) -> arController.setPresetArea(w, d) }
+        if (st.defaultSize == "INSIDE") { arInside = true; arInsideKey++ }
+    }
     LaunchedEffect(arOn) { if (!arOn) { boundary = BoundaryInfo(); outOfArea = false } }
     // Near the edge: buzz once. Past it: pause the game until the player steps back in.
     val view = androidx.compose.ui.platform.LocalView.current
@@ -289,7 +300,9 @@ fun Game3DScreen(
                 horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 if (arSupport == ArSupport.SUPPORTED) ModeChip("AR", arOn, Bw.Cyan) { toggleAr() }
                 if (arOn) ModeChip(if (boundary.set) "Play area ✓" else "Play area", boundary.drawing || boundary.set, Bw.Lime) {
-                    arController.startBoundary()
+                    // Preset sizes re-centre on where you stand now; otherwise draw it corner by corner
+                    val area = arSettings.areaSize()
+                    if (area != null) arController.setPresetArea(area.first, area.second) else arController.startBoundary()
                 }
                 if (hasMotionSensor && !arOn) ModeChip("Motion view", motionView, Bw.Violet) { setMotionView(!motionView) }
                 if (!arOn) ModeChip("Camera", showCamSettings, Bw.Amber) { showCamSettings = !showCamSettings }
@@ -321,6 +334,8 @@ fun Game3DScreen(
                         onHeat = { onHeatInfo(it) },
                         modifier = Modifier.fillMaxSize(),
                         controller = arController,
+                        arrow = arSettings.arrow,
+                        floorMesh = arSettings.floorMesh,
                         onBoundary = { boundary = it },
                         onPlacementBlocked = {
                             arInside = false
@@ -385,7 +400,7 @@ fun Game3DScreen(
                     }
                 }
                 if (arOn) PlayAreaLayer(
-                    boundary = boundary, outOfArea = outOfArea,
+                    boundary = boundary, outOfArea = outOfArea, areaLabel = arSettings.areaSize()?.let { (w, d) -> "%.1f × %.1f m".format(w, d) },
                     onUndo = arController::undoBoundaryCorner,
                     onDone = arController::finishBoundary,
                     onCancel = arController::clearBoundary
@@ -740,7 +755,7 @@ private const val AR_HARD_LIMIT_C = 46
  */
 @Composable
 private fun BoxScope.PlayAreaLayer(
-    boundary: BoundaryInfo, outOfArea: Boolean,
+    boundary: BoundaryInfo, outOfArea: Boolean, areaLabel: String?,
     onUndo: () -> Unit, onDone: () -> Unit, onCancel: () -> Unit
 ) {
     val d = boundary.distance
@@ -762,6 +777,12 @@ private fun BoxScope.PlayAreaLayer(
             Text("OUT OF YOUR PLAY AREA", style = BwType.Label.copy(color = Bw.Pink))
             Text("Step back inside the lines. The game is paused.", style = BwType.Small)
         }
+    }
+    if (boundary.findingFloor) {
+        Text("Point at the floor around your feet to set your ${areaLabel ?: ""} play area",
+            style = BwType.Small.copy(color = Bw.Text),
+            modifier = Modifier.align(Alignment.BottomCenter).padding(start = 12.dp, end = 12.dp, bottom = 56.dp)
+                .clip(RoundedCornerShape(14.dp)).background(Bw.Ground.copy(alpha = 0.9f)).padding(horizontal = 14.dp, vertical = 10.dp))
     }
     if (boundary.drawing) {
         Column(Modifier.align(Alignment.BottomCenter).padding(start = 12.dp, end = 12.dp, bottom = 56.dp).fillMaxWidth()

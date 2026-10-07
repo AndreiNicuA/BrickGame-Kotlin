@@ -278,6 +278,34 @@ class BoardRenderer(private val context: Context) : GLSurfaceView.Renderer {
         return if (ok[0] == 0) 0 else p
     }
 
+    /**
+     * Free-standing cubes in world space (each [models] entry places one unit cube), lit like
+     * the pieces. Used for the AR pointer arrow.
+     */
+    fun drawFreeCubes(viewProj: FloatArray, models: List<FloatArray>, rgb: FloatArray, camX: Float, camY: Float, camZ: Float) {
+        if (models.isEmpty()) return
+        GLES20.glEnable(GLES20.GL_DEPTH_TEST)
+        GLES20.glDisable(GLES20.GL_BLEND)
+        val mp = textures.getParams(PieceMaterial.CLASSIC)
+        cubeShader.use()
+        textures.bind(PieceMaterial.CLASSIC)
+        cubeShader.setUniform1i("uTexture", 0)
+        cubeShader.setUniform3f("uLightDir", lightDir[0], lightDir[1], lightDir[2])
+        cubeShader.setUniform3f("uCameraPos", camX, camY, camZ)
+        cubeShader.setUniform1f("uTextureStrength", mp.textureStrength)
+        cubeShader.setUniform1f("uSpecularPower", mp.specularPower)
+        cubeShader.setUniform1f("uSpecularStrength", mp.specularStrength)
+        for (m in models) {
+            Matrix.multiplyMM(mvpMatrix, 0, viewProj, 0, m, 0)
+            cubeShader.setUniformMatrix4fv("uMVPMatrix", mvpMatrix)
+            cubeShader.setUniformMatrix4fv("uModelMatrix", m)
+            cubeShader.setUniform3f("uBaseColor", rgb[0], rgb[1], rgb[2])
+            cubeShader.setUniform1f("uAlpha", 1f)
+            cubeShader.setUniform1f("uClearFlash", 0f)
+            cube.draw(cubeShader)
+        }
+    }
+
     private fun drawCube(x: Float, y: Float, z: Float, rgb: FloatArray, alpha: Float, clearing: Float) {
         cellModel(x, y, z)
         Matrix.multiplyMM(mvpMatrix, 0, vpMatrix, 0, modelMatrix, 0)

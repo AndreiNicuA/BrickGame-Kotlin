@@ -461,6 +461,7 @@ private fun PlayScreen(
             arHeatLimit = arHeatLimit,
             onArHeatLimit = vm::setArHeatLimit,
             motionViewSaved = motionView,
+            arSettings = vm.arSettings.collectAsState().value,
             onMotionView = vm::setMotionView,
             state = game3DState,
             onMoveX = vm::move3DX,

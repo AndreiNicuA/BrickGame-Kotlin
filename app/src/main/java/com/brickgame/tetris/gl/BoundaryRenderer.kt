@@ -99,12 +99,59 @@ class BoundaryRenderer {
         GLES20.glEnable(GLES20.GL_DEPTH_TEST)
     }
 
-    private fun drawLines(v: ArrayList<Float>, rgb: FloatArray, alpha: Float, width: Float) {
+    /**
+     * A detected surface as a "scanned" mesh: faint fill, spokes from the centre and two inner
+     * rings, so the floor looks meshed. [polygon] holds (x, z) pairs in the plane's own space.
+     */
+    fun drawMesh(mvp: FloatArray, polygon: FloatArray, rgb: FloatArray) {
+        val n = polygon.size / 2
+        if (program == 0 || n < 3) return
+        GLES20.glUseProgram(program)
+        GLES20.glUniformMatrix4fv(uMvp, 1, false, mvp, 0)
+        GLES20.glDisable(GLES20.GL_DEPTH_TEST)
+        GLES20.glDepthMask(false)
+        GLES20.glDisable(GLES20.GL_CULL_FACE)
+        GLES20.glEnable(GLES20.GL_BLEND)
+        GLES20.glBlendFunc(GLES20.GL_SRC_ALPHA, GLES20.GL_ONE_MINUS_SRC_ALPHA)
+        GLES20.glEnableVertexAttribArray(aPos)
+
+        // Fill: triangle fan around the plane centre
+        val fan = ArrayList<Float>((n + 2) * 3)
+        fan.add(0f); fan.add(0f); fan.add(0f)
+        for (i in 0..n) { val k = i % n; fan.add(polygon[2 * k]); fan.add(0f); fan.add(polygon[2 * k + 1]) }
+        upload(fan)
+        GLES20.glUniform4f(uColor, rgb[0], rgb[1], rgb[2], 0.10f)
+        GLES20.glDrawArrays(GLES20.GL_TRIANGLE_FAN, 0, fan.size / 3)
+
+        // Mesh lines: outline, rings at 1/3 and 2/3, spokes
+        val lines = ArrayList<Float>()
+        for (ring in listOf(1f, 0.66f, 0.33f)) {
+            for (i in 0 until n) {
+                val j = (i + 1) % n
+                lines.add(polygon[2 * i] * ring); lines.add(0f); lines.add(polygon[2 * i + 1] * ring)
+                lines.add(polygon[2 * j] * ring); lines.add(0f); lines.add(polygon[2 * j + 1] * ring)
+            }
+        }
+        for (i in 0 until n) { lines.add(0f); lines.add(0f); lines.add(0f); lines.add(polygon[2 * i]); lines.add(0f); lines.add(polygon[2 * i + 1]) }
+        drawLines(lines, rgb, 0.35f, 2f)
+
+        GLES20.glDisableVertexAttribArray(aPos)
+        GLES20.glDisable(GLES20.GL_BLEND)
+        GLES20.glEnable(GLES20.GL_CULL_FACE)
+        GLES20.glDepthMask(true)
+        GLES20.glEnable(GLES20.GL_DEPTH_TEST)
+    }
+
+    private fun upload(v: ArrayList<Float>) {
         if (buffer.capacity() < v.size) buffer = alloc(v.size * 2)
         buffer.clear()
         for (f in v) buffer.put(f)
         buffer.flip()
         GLES20.glVertexAttribPointer(aPos, 3, GLES20.GL_FLOAT, false, 0, buffer)
+    }
+
+    private fun drawLines(v: ArrayList<Float>, rgb: FloatArray, alpha: Float, width: Float) {
+        upload(v)
         GLES20.glUniform4f(uColor, rgb[0], rgb[1], rgb[2], alpha.coerceIn(0f, 1f))
         GLES20.glLineWidth(width)
         GLES20.glDrawArrays(GLES20.GL_LINES, 0, v.size / 3)
