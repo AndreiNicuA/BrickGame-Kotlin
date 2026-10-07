@@ -143,6 +143,8 @@ fun ArBoardView(
     arrow: Boolean = true,
     /** Show detected surfaces as a mesh while placing. */
     floorMesh: Boolean = true,
+    /** Hands (beta): pinch the piece in front of the camera. */
+    hands: Boolean = false,
     onPlacementBlocked: () -> Unit = {}
 ) {
     val latestStatus by rememberUpdatedState(onStatus)
@@ -163,6 +165,18 @@ fun ArBoardView(
     LaunchedEffect(replaceKey) { if (replaceKey > 0) rendererRef.value?.requestReplace() }
     LaunchedEffect(insideKey) { if (insideKey > 0) rendererRef.value?.requestInside() }
     LaunchedEffect(arrow) { rendererRef.value?.arrowEnabled = arrow }
+    // Hands (beta): the tracker only exists while the setting is on
+    var handOverlay by remember { mutableStateOf<FloatArray?>(null) }
+    DisposableEffect(hands, rendererRef.value) {
+        val renderer = rendererRef.value
+        val tracker = if (hands && renderer != null) HandTracker(context) { renderer.onHandResult(it) } else null
+        renderer?.handTracker = tracker
+        onDispose {
+            renderer?.handTracker = null
+            tracker?.close()
+            handOverlay = null
+        }
+    }
     LaunchedEffect(floorMesh) { rendererRef.value?.floorMeshEnabled = floorMesh }
     LaunchedEffect(cellMeters) { rendererRef.value?.cellMeters = cellMeters }
 
@@ -225,6 +239,10 @@ fun ArBoardView(
                 renderer.updateState(state, material, true, themeColor)
                 renderer.cellMeters = cellMeters
                 renderer.arrowEnabled = arrow
+                renderer.onHandDrag = { x, z -> view.post { latestDrag(x, z) } }
+                renderer.onHandSpin = { view.post { latestTap() } }
+                renderer.onHandDrop = { view.post { latestHardDrop() } }
+                renderer.onHandOverlay = { o -> view.post { handOverlay = o } }
                 renderer.floorMeshEnabled = floorMesh
                 view.preserveEGLContextOnPause = true
                 view.setEGLContextClientVersion(2)
@@ -246,6 +264,25 @@ fun ArBoardView(
         modifier = Modifier.fillMaxSize(),
         update = { }
     )
+    if (hands) HandOverlay(handOverlay)
+    }
+}
+
+/** Fingertip markers for Hands (beta): two dots, joined and ringed while pinching. */
+@Composable
+private fun HandOverlay(o: FloatArray?) {
+    androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
+        if (o == null) return@Canvas
+        val thumb = androidx.compose.ui.geometry.Offset(o[0], o[1])
+        val index = androidx.compose.ui.geometry.Offset(o[2], o[3])
+        val pinching = o[4] > 0.5f
+        val cyan = androidx.compose.ui.graphics.Color(0xFF22D3EE)
+        val pink = androidx.compose.ui.graphics.Color(0xFFF472B6)
+        val c = if (pinching) pink else cyan
+        drawLine(c.copy(alpha = 0.7f), thumb, index, 6f)
+        drawCircle(c, 14f, thumb)
+        drawCircle(c, 14f, index)
+        if (pinching) drawCircle(pink, 46f, (thumb + index) / 2f, style = androidx.compose.ui.graphics.drawscope.Stroke(6f))
     }
 }
 

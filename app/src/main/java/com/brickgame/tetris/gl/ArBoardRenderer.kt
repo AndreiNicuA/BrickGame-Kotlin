@@ -109,6 +109,24 @@ class ArBoardRenderer(
     @Volatile var floorMeshEnabled = true
     /** Preset play area (width, depth in metres) waiting to be centred on the player. */
     private var presetPending: FloatArray? = null
+
+    // ===== Hands (beta) =====
+    /** Set by the view while Hands is on; null = off (no camera frames are copied). */
+    @Volatile var handTracker: HandTracker? = null
+    @Volatile private var latestHand: HandTracker.HandPoints? = null
+    @Volatile private var handResultSeq = 0
+    private var handSeqSeen = 0
+    private var lastHandSubmit = 0L
+    private val handGesture = HandGesture { height.toFloat() }
+    /** Hand actions, called on the GL thread (the view posts them to the UI). */
+    @Volatile var onHandDrag: (Float, Float) -> Unit = { _, _ -> }
+    @Volatile var onHandSpin: () -> Unit = {}
+    @Volatile var onHandDrop: () -> Unit = {}
+    /** Thumb + index tips in view pixels and whether they pinch; null = no hand. */
+    @Volatile var onHandOverlay: (FloatArray?) -> Unit = {}
+
+    /** From the tracker's thread: the newest hand (or null when none is visible). */
+    fun onHandResult(points: HandTracker.HandPoints?) { latestHand = points; handResultSeq++ }
     /** True once the well stands somewhere (read by the touch handler). */
     @Volatile var isPlaced = false
         private set
@@ -355,6 +373,7 @@ class ArBoardRenderer(
         val camPose = camera.pose
         board.drawScene(viewProj, base, camPose.tx(), camPose.ty(), camPose.tz())
         if (arrowEnabled && pieceOffScreen) drawPointerArrow(camera)
+        handTracker?.let { updateHands(frame, it) }
 
         // Keep a snapshot for touch ray casts
         Matrix.multiplyMM(boardMvp, 0, viewProj, 0, base, 0)
@@ -545,6 +564,57 @@ class ArBoardRenderer(
         val pulse = 0.75f + 0.25f * kotlin.math.sin(System.currentTimeMillis() / 160.0).toFloat()
         board.drawFreeCubes(viewProj, arrowModels, floatArrayOf(PINK[0] * pulse, PINK[1] * pulse, PINK[2] * pulse),
             pose.tx(), pose.ty(), pose.tz())
+    }
+
+    // ===== Hands (beta) =====
+    /** Feed the tracker a camera frame now and then, and turn new results into game actions. */
+    private fun updateHands(frame: com.google.ar.core.Frame, tracker: HandTracker) {
+        val now = System.currentTimeMillis()
+        if (now - lastHandSubmit >= 66 && tracker.ready()) {
+            lastHandSubmit = now
+            try {
+                frame.acquireCameraImage().use { img ->
+                    tracker.submit(img, imageRotation(frame), frame.timestamp / 1_000_000)
+                }
+            } catch (_: Exception) { /* camera image not ready this frame */ }
+        }
+        val seq = handResultSeq
+        if (seq == handSeqSeen) {
+            handGesture.update(null, now)
+            return
+        }
+        handSeqSeen = seq
+        val hand = latestHand
+        if (hand == null) {
+            handGesture.update(null, now)
+            onHandOverlay(null)
+            return
+        }
+        val pts = FloatArray(hand.xy.size)
+        frame.transformCoordinates2d(com.google.ar.core.Coordinates2d.IMAGE_NORMALIZED, hand.xy,
+            com.google.ar.core.Coordinates2d.VIEW, pts)
+        for (action in handGesture.update(pts, now)) when (action) {
+            is HandGesture.Action.Drag -> {
+                val h = pieceCenter?.get(1) ?: continue
+                screenToBoard(action.x, action.y, h)?.let { onHandDrag(it[0], it[1]) }
+            }
+            HandGesture.Action.Spin -> onHandSpin()
+            HandGesture.Action.Drop -> onHandDrop()
+        }
+        onHandOverlay(floatArrayOf(
+            pts[2 * HandLandmarks.THUMB_TIP], pts[2 * HandLandmarks.THUMB_TIP + 1],
+            pts[2 * HandLandmarks.INDEX_TIP], pts[2 * HandLandmarks.INDEX_TIP + 1],
+            if (handGesture.pinching) 1f else 0f
+        ))
+    }
+
+    /** Clockwise degrees the CPU camera image must turn to look upright on screen. */
+    private fun imageRotation(frame: com.google.ar.core.Frame): Int {
+        val out = FloatArray(4)
+        frame.transformCoordinates2d(com.google.ar.core.Coordinates2d.IMAGE_NORMALIZED, floatArrayOf(0f, 0f, 1f, 0f),
+            com.google.ar.core.Coordinates2d.VIEW_NORMALIZED, out)
+        val dx = out[2] - out[0]; val dy = out[3] - out[1]
+        return if (abs(dx) >= abs(dy)) (if (dx > 0) 0 else 180) else (if (dy > 0) 90 else 270)
     }
 
     // ===== Floor mesh and preset play areas =====

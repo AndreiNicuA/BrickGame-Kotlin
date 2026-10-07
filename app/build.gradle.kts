@@ -54,6 +54,8 @@ android {
     kotlinOptions { jvmTarget = "17" }
     buildFeatures { compose = true; buildConfig = true }
     packaging { resources { excludes += "/META-INF/{AL2.0,LGPL2.1}" } }
+    // MediaPipe reads the hand model straight from the APK, so it must not be compressed
+    androidResources { noCompress += "task" }
 }
 
 dependencies {
@@ -68,6 +70,8 @@ dependencies {
 
     // Versus: phone-to-phone over Bluetooth / Wi-Fi, no internet (Google Nearby Connections)
     implementation("com.google.android.gms:play-services-nearby:19.3.0")
+    // Hands (beta): on-device hand landmarks (Apache 2.0); model in assets/hand_landmarker.task
+    implementation("com.google.mediapipe:tasks-vision:0.10.14")
 
     // Compose
     implementation(platform("androidx.compose:compose-bom:2024.12.01"))

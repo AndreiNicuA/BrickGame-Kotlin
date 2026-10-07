@@ -336,6 +336,7 @@ fun Game3DScreen(
                         controller = arController,
                         arrow = arSettings.arrow,
                         floorMesh = arSettings.floorMesh,
+                        hands = arSettings.hands,
                         onBoundary = { boundary = it },
                         onPlacementBlocked = {
                             arInside = false
@@ -390,7 +391,8 @@ fun Game3DScreen(
                             if (hint) { kotlinx.coroutines.delay(7000); hint = false }
                         }
                         if (hint) {
-                            Text(if (arInside) "You're inside! Look up for the falling piece — the pink arrow points to it. Drag to move · tap to spin · flick down to drop"
+                            Text(if (arSettings.hands) "Hands on: hold your hand in front of the camera and pinch the piece (thumb + index). Move to steer · twist to spin · flick down to drop"
+                                 else if (arInside) "You're inside! Look up for the falling piece — the pink arrow points to it. Drag to move · tap to spin · flick down to drop"
                                  else "Drag the piece · tap to spin · flick down to drop · two fingers: size, turn, move",
                                 color = Color.White.copy(0.9f), fontSize = 11.sp,
                                 modifier = Modifier.padding(horizontal = 12.dp)
