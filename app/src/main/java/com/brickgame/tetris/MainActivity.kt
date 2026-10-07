@@ -331,6 +331,8 @@ class MainActivity : ComponentActivity() {
                     }
 
                     ui.showSettings -> {
+                        val arSettings by vm.arSettings.collectAsState()
+                        val arHeatLimitSetting by vm.arHeatLimit.collectAsState()
                         SettingsScreen(
                             page = ui.settingsPage, currentTheme = theme,
                             portraitLayout = portraitLayout, landscapeLayout = landscapeLayout, dpadStyle = dpadStyle,
@@ -403,7 +405,9 @@ class MainActivity : ComponentActivity() {
                             leftHanded = leftHanded,
                             onSetLeftHanded = vm::setLeftHanded,
                             swipeControls = swipeControls,
-                            onSetSwipeControls = vm::setSwipeControls
+                            onSetSwipeControls = vm::setSwipeControls,
+                            arSettings = arSettings, onArSettings = vm::updateArSettings,
+                            arHeatLimit = arHeatLimitSetting, onSetArHeatLimit = vm::setArHeatLimit
                         )
                     }
 
@@ -507,6 +511,8 @@ private fun PlayScreen(
         leftHanded = leftHanded,
         portraitLayout = portraitLayout,
         swipeControls = swipeControls,
+        // In Versus the countdown is the intro; a paused guide would hand the friend a free lead
+        showSwipeIntro = !vm.versus.collectAsState().value.active,
         onCloseApp = onCloseApp,
         showOnboarding = showOnboarding,
         onDismissOnboarding = vm::dismissOnboarding,

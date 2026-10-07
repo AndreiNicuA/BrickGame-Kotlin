@@ -32,6 +32,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.brickgame.tetris.data.ArSettings
 import com.brickgame.tetris.data.CustomLayoutData
 import com.brickgame.tetris.data.ScoreEntry
 import com.brickgame.tetris.game.Difficulty
@@ -118,7 +119,11 @@ fun SettingsScreen(
     leftHanded: Boolean = false,
     onSetLeftHanded: (Boolean) -> Unit = {},
     swipeControls: Boolean = false,
-    onSetSwipeControls: (Boolean) -> Unit = {}
+    onSetSwipeControls: (Boolean) -> Unit = {},
+    arSettings: ArSettings = ArSettings(),
+    onArSettings: ((ArSettings) -> ArSettings) -> Unit = {},
+    arHeatLimit: Int = 43,
+    onSetArHeatLimit: (Int) -> Unit = {}
 ) {
     BwDarkSystemBars()
     CompositionLocalProvider(androidx.compose.material3.LocalTextStyle provides TextStyle(fontFamily = Bw.Body, fontWeight = FontWeight.Medium)) {
@@ -137,6 +142,7 @@ fun SettingsScreen(
                 GameViewModel.SettingsPage.CONTROLLER -> ControllerPage(controllerEnabled, controllerDeadzone, controllerLayoutMode, onSetControllerEnabled, onSetControllerDeadzone, onSetControllerLayout) { onNavigate(GameViewModel.SettingsPage.MAIN) }
                 GameViewModel.SettingsPage.ABOUT -> AboutPage { onNavigate(GameViewModel.SettingsPage.MAIN) }
                 GameViewModel.SettingsPage.HOW_TO_PLAY -> HowToPlayPage { onNavigate(GameViewModel.SettingsPage.MAIN) }
+                GameViewModel.SettingsPage.AR_3D -> Ar3DPage(arSettings, onArSettings, pieceMaterial, onSetPieceMaterial, arHeatLimit, onSetArHeatLimit) { onNavigate(GameViewModel.SettingsPage.MAIN) }
             }
         }
     }
@@ -152,10 +158,114 @@ fun SettingsScreen(
         MenuItem("Theme", "Colours and style") { onNav(GameViewModel.SettingsPage.THEME) }
         MenuItem("Layout", "Screen arrangement + 3D mode") { onNav(GameViewModel.SettingsPage.LAYOUT) }
         MenuItem("Gameplay", "Difficulty, mode") { onNav(GameViewModel.SettingsPage.GAMEPLAY) }
+        MenuItem("3D & AR", "Pieces, size, play area, hands") { onNav(GameViewModel.SettingsPage.AR_3D) }
         MenuItem("Experience", "Animation, sound") { onNav(GameViewModel.SettingsPage.EXPERIENCE) }
         MenuItem("Controller", "Gamepad settings") { onNav(GameViewModel.SettingsPage.CONTROLLER) }
         MenuItem("How to Play", "Rules, scoring, tips") { onNav(GameViewModel.SettingsPage.HOW_TO_PLAY) }
         MenuItem("About", "Version, credits") { onNav(GameViewModel.SettingsPage.ABOUT) }
+    }
+}
+
+// ===== 3D & AR =====
+@Composable private fun Ar3DPage(
+    s: ArSettings, onChange: ((ArSettings) -> ArSettings) -> Unit,
+    pieceMaterial: String, onMaterial: (String) -> Unit,
+    heatLimit: Int, onHeatLimit: (Int) -> Unit,
+    onBack: () -> Unit
+) {
+    LazyColumn(Modifier.fillMaxSize().padding(20.dp)) {
+        item { Header("3D & AR", onBack) }
+
+        item { Lbl("Pieces") }
+        item { Card {
+            Text("Piece style", color = tx(), fontWeight = FontWeight.Bold, fontSize = 14.sp)
+            Spacer(Modifier.height(8.dp))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                listOf("CLASSIC" to "Classic", "STONE" to "Stone", "GRANITE" to "Granite", "GLASS" to "Marble", "CRYSTAL" to "Diamond").forEach { (id, label) ->
+                    val sel = pieceMaterial == id
+                    Box(Modifier.weight(1f).clip(RoundedCornerShape(8.dp))
+                        .background(if (sel) acc().copy(0.2f) else card())
+                        .then(if (sel) Modifier.border(1.dp, acc(), RoundedCornerShape(8.dp)) else Modifier)
+                        .clickable { onMaterial(id) }.padding(vertical = 10.dp),
+                        contentAlignment = Alignment.Center) {
+                        Text(label, color = if (sel) acc() else dim(), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        } }
+
+        item { Lbl("AR well size at start") }
+        item { Card {
+            Text("You can still pinch to resize or use the chips while playing.", color = dim(), fontSize = 11.sp)
+            Spacer(Modifier.height(8.dp))
+            listOf("TABLE" to "Table (3 cm cubes)", "BIG" to "Big (8 cm cubes)", "ROOM" to "Room (20 cm cubes)", "INSIDE" to "Inside — stand in the middle").forEach { (id, label) ->
+                Sel(label, s.defaultSize == id) { onChange { it.copy(defaultSize = id) } }
+            }
+        } }
+
+        item { Lbl("Play area") }
+        item { Card {
+            Text("The free floor space you play in. You get a wall and a warning near its edge, and the game pauses if you step out.",
+                color = dim(), fontSize = 11.sp)
+            Spacer(Modifier.height(8.dp))
+            listOf("OFF" to "Off", "SMALL" to "Small — 1.5 × 1.5 m", "MEDIUM" to "Medium — 2 × 2 m", "LARGE" to "Large — 3 × 3 m",
+                "CUSTOM" to "Custom size", "CORNERS" to "Draw it — tap the corners of your space").forEach { (id, label) ->
+                Sel(label, s.playArea == id) { onChange { it.copy(playArea = id) } }
+            }
+            if (s.playArea == "CUSTOM") {
+                Spacer(Modifier.height(8.dp))
+                MeterSlider("Width", s.customWidthM) { v -> onChange { it.copy(customWidthM = v) } }
+                MeterSlider("Depth", s.customDepthM) { v -> onChange { it.copy(customDepthM = v) } }
+            }
+            Spacer(Modifier.height(6.dp))
+            Text("Preset areas are centred on where you stand when you tap Play area, facing the way you look.",
+                color = dim(), fontSize = 11.sp)
+        } }
+        item { Card {
+            Toggle("Show the scanned floor", s.floorMesh) { v -> onChange { it.copy(floorMesh = v) } }
+            Text("A mesh on the surfaces the camera has found, while placing the well", color = dim(), fontSize = 11.sp)
+        } }
+
+        item { Lbl("Finding pieces") }
+        item { Card {
+            Toggle("3D pointer arrow", s.arrow) { v -> onChange { it.copy(arrow = v) } }
+            Text("Floats in front of you and points to the falling piece when it's out of view", color = dim(), fontSize = 11.sp)
+        } }
+
+        item { Lbl("Experimental") }
+        item { Card {
+            Toggle("Hands (beta)", s.hands) { v -> onChange { it.copy(hands = v) } }
+            Text("Pinch the falling piece with your thumb and index finger in front of the camera and move it. " +
+                "Twist your hand to spin it, flick down to drop. Uses more battery and heat.", color = dim(), fontSize = 11.sp)
+        } }
+
+        item { Lbl("Heat") }
+        item { Card {
+            Text("AR switches off at ${heatLimit}°C battery temperature (always at 46°C or when Android says the phone is too hot).",
+                color = dim(), fontSize = 11.sp)
+            Spacer(Modifier.height(8.dp))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                (39..45).forEach { c ->
+                    val sel = heatLimit == c
+                    Box(Modifier.weight(1f).clip(RoundedCornerShape(8.dp))
+                        .background(if (sel) acc().copy(0.2f) else card())
+                        .then(if (sel) Modifier.border(1.dp, acc(), RoundedCornerShape(8.dp)) else Modifier)
+                        .clickable { onHeatLimit(c) }.padding(vertical = 10.dp), contentAlignment = Alignment.Center) {
+                        Text("$c°", color = if (sel) acc() else dim(), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        } }
+        item { Spacer(Modifier.height(24.dp)) }
+    }
+}
+
+@Composable private fun MeterSlider(label: String, value: Float, onChange: (Float) -> Unit) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Text(label, color = tx(), fontSize = 13.sp, modifier = Modifier.width(56.dp))
+        Slider(value = value, onValueChange = { onChange((it * 4).toInt() / 4f) }, valueRange = 1f..5f,
+            modifier = Modifier.weight(1f), colors = SliderDefaults.colors(thumbColor = acc(), activeTrackColor = acc()))
+        Text("%.2f m".format(value), color = dim(), fontSize = 12.sp, modifier = Modifier.width(56.dp))
     }
 }
 

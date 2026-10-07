@@ -33,7 +33,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     val gameState: StateFlow<GameState> = game.state
 
     data class UiState(val showSettings: Boolean = false, val settingsPage: SettingsPage = SettingsPage.MAIN)
-    enum class SettingsPage { MAIN, GENERAL, PROFILE, THEME, THEME_EDITOR, LAYOUT, LAYOUT_EDITOR, GAMEPLAY, EXPERIENCE, CONTROLLER, ABOUT, HOW_TO_PLAY }
+    enum class SettingsPage { MAIN, GENERAL, PROFILE, THEME, THEME_EDITOR, LAYOUT, LAYOUT_EDITOR, GAMEPLAY, EXPERIENCE, CONTROLLER, ABOUT, HOW_TO_PLAY, AR_3D }
     private val _uiState = MutableStateFlow(UiState())
     val uiState: StateFlow<UiState> = _uiState.asStateFlow()
 
@@ -109,6 +109,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     val leftHanded: StateFlow<Boolean> = _leftHanded.asStateFlow()
     private val _arHeatLimit = MutableStateFlow(43)
     val arHeatLimit: StateFlow<Int> = _arHeatLimit.asStateFlow()
+    private val _arSettings = MutableStateFlow(ArSettings())
+    val arSettings: StateFlow<ArSettings> = _arSettings.asStateFlow()
     private val _motionView = MutableStateFlow(false)
     val motionView: StateFlow<Boolean> = _motionView.asStateFlow()
     private val _swipeControls = MutableStateFlow(false)
@@ -287,6 +289,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch { settingsRepo.swipeControls.collect { _swipeControls.value = it } }
         viewModelScope.launch { settingsRepo.arHeatLimit.collect { _arHeatLimit.value = it } }
         viewModelScope.launch { settingsRepo.motionView.collect { _motionView.value = it } }
+        viewModelScope.launch { settingsRepo.arSettings.collect { _arSettings.value = it } }
         viewModelScope.launch { settingsRepo.gameMode.collect { name -> _gameMode.value = GameMode.entries.find { it.name == name } ?: GameMode.MARATHON; game.setGameMode(_gameMode.value) } }
         viewModelScope.launch { settingsRepo.infinityTimer.collect { _infinityTimer.value = it } }
         viewModelScope.launch { settingsRepo.infinityTimerEnabled.collect { _infinityTimerEnabled.value = it } }
@@ -411,6 +414,11 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     fun setInfoBarShape(v: String) { _infoBarShape.value = v; viewModelScope.launch { profileRepo.updateProfile { it.copy(infoBarShape = v) } } }
     fun setControllerLayout(v: String) { _controllerLayout.value = v; viewModelScope.launch { settingsRepo.setControllerLayout(v) } }
     fun setLeftHanded(v: Boolean) { _leftHanded.value = v; viewModelScope.launch { settingsRepo.setLeftHanded(v) } }
+    fun updateArSettings(change: (ArSettings) -> ArSettings) {
+        val v = change(_arSettings.value)
+        _arSettings.value = v
+        viewModelScope.launch { settingsRepo.setArSettings(v) }
+    }
     fun setMotionView(v: Boolean) { if (_motionView.value != v) { _motionView.value = v; viewModelScope.launch { settingsRepo.setMotionView(v) } } }
     fun setArHeatLimit(v: Int) { _arHeatLimit.value = v; viewModelScope.launch { settingsRepo.setArHeatLimit(v) } }
     fun setSwipeControls(v: Boolean) { _swipeControls.value = v; viewModelScope.launch { settingsRepo.setSwipeControls(v); playersRepo.updateActive { it.copy(swipeControls = v) } } }

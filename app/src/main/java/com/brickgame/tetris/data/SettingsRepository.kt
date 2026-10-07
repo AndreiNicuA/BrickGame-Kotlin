@@ -50,6 +50,7 @@ class SettingsRepository(private val context: Context) {
         private val SWIPE_CONTROLS = booleanPreferencesKey("swipe_controls")
         private val AR_HEAT_LIMIT = intPreferencesKey("ar_heat_limit_c")
         private val MOTION_VIEW = booleanPreferencesKey("motion_view_3d")
+        private val AR_SETTINGS = stringPreferencesKey("ar_settings_json")
         private val GAME_MODE = stringPreferencesKey("game_mode")
         private val INFINITY_TIMER = intPreferencesKey("infinity_timer_minutes")
         private val INFINITY_TIMER_ENABLED = booleanPreferencesKey("infinity_timer_enabled")
@@ -165,6 +166,8 @@ class SettingsRepository(private val context: Context) {
     suspend fun setArHeatLimit(v: Int) = set(AR_HEAT_LIMIT, v)
     val motionView get() = pref(MOTION_VIEW, false)
     suspend fun setMotionView(v: Boolean) = set(MOTION_VIEW, v)
+    val arSettings get() = pref(AR_SETTINGS, "").map { ArSettings.decode(it) }
+    suspend fun setArSettings(v: ArSettings) = set(AR_SETTINGS, v.encode())
 
     // Game mode persistence
     val gameMode get() = pref(GAME_MODE, "MARATHON")
