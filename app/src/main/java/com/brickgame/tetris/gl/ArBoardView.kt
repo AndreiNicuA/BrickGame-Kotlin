@@ -99,7 +99,9 @@ fun createArSession(activity: Activity, userRequestedInstall: Boolean): Session?
         focusMode = Config.FocusMode.FIXED
         lightEstimationMode = Config.LightEstimationMode.DISABLED
         depthMode = Config.DepthMode.DISABLED
-        instantPlacementMode = Config.InstantPlacementMode.DISABLED
+        // A tap can place the well before a surface is detected (plain or dark tables); ARCore
+        // corrects the spot once it understands the surface
+        instantPlacementMode = Config.InstantPlacementMode.LOCAL_Y_UP
     }
     session.configure(config)
     return session

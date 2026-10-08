@@ -333,9 +333,15 @@ class ArBoardRenderer(
         while (true) {
             val tap = taps.poll() ?: break
             val hit = hitPlane(frame, tap[0], tap[1])
-            val pose = hit?.hitPose ?: previewPose?.second ?: continue
+            val preview = previewPose
+            if (hit == null && preview == null) {
+                // No surface found yet: place at a guessed distance (instant placement)
+                placeInstant(frame, tap[0], tap[1])
+                continue
+            }
+            val pose = hit?.hitPose ?: preview!!.second
             if (!fitsPlayArea(pose)) { onPlacementBlocked(); continue }
-            if (hit != null) placeAt(hit) else previewPose?.let { (plane, p) -> setAnchor(plane.createAnchor(p)) }
+            if (hit != null) placeAt(hit) else setAnchor(preview!!.first.createAnchor(preview.second))
         }
         // Two-finger drag: slide the well (needs surfaces, so detection is on while moving)
         if (gestureMoving) setPlaneFinding(true)
@@ -695,6 +701,17 @@ class ArBoardRenderer(
         }
 
     private fun placeAt(hit: com.google.ar.core.HitResult) = setAnchor(hit.createAnchor())
+
+    /**
+     * Place where the user tapped without a detected surface: ARCore guesses the point at a
+     * distance that suits the well's size and refines it as it learns the scene.
+     */
+    private fun placeInstant(frame: com.google.ar.core.Frame, x: Float, y: Float) {
+        val distance = when { cellMeters < 0.05f -> 0.5f; cellMeters < 0.12f -> 1.0f; else -> 1.8f }
+        val hit = try { frame.hitTestInstantPlacement(x, y, distance).firstOrNull() } catch (_: Exception) { null } ?: return
+        if (!fitsPlayArea(hit.hitPose)) { onPlacementBlocked(); return }
+        setAnchor(hit.createAnchor())
+    }
 
     private fun setAnchor(newAnchor: Anchor) {
         anchor?.detach()

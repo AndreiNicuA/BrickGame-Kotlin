@@ -453,7 +453,16 @@ private fun PlayScreen(
     onCloseApp: () -> Unit
 ) {
     val game3DState by vm.game3DState.collectAsState()
+    val versusRound by vm.versus.collectAsState()
     if (is3D && game3DState.status != GameStatus.MENU) {
+        // Back: pause first; from the pause / game-over screen, back to the menu (never closes the app)
+        BackHandler {
+            when {
+                versusRound.result != null -> vm.versusBackToLobby()
+                game3DState.status == GameStatus.PLAYING -> vm.pause3D()
+                else -> vm.quit3DGame()
+            }
+        }
         val arHeatLimit by vm.arHeatLimit.collectAsState()
         val motionView by vm.motionView.collectAsState()
         Box(Modifier.fillMaxSize()) {
@@ -462,6 +471,7 @@ private fun PlayScreen(
             onArHeatLimit = vm::setArHeatLimit,
             motionViewSaved = motionView,
             arSettings = vm.arSettings.collectAsState().value,
+            onArSettings = vm::updateArSettings,
             onMotionView = vm::setMotionView,
             state = game3DState,
             onMoveX = vm::move3DX,
@@ -484,6 +494,13 @@ private fun PlayScreen(
         return
     }
     val gs by vm.gameState.collectAsState()
+    if (gs.status != GameStatus.MENU) BackHandler {
+        when {
+            versusRound.result != null -> vm.versusBackToLobby()
+            gs.status == GameStatus.PLAYING -> vm.pauseGame()
+            else -> vm.quitGame()
+        }
+    }
     if (gs.status == GameStatus.MENU) {
         BrandScreens(vm, is3D, portraitLayout, swipeControls, history, showOnboarding)
         return

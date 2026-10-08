@@ -93,7 +93,8 @@ fun Game3DScreen(
     onArHeatLimit: (Int) -> Unit = {},
     motionViewSaved: Boolean = false,
     onMotionView: (Boolean) -> Unit = {},
-    arSettings: com.brickgame.tetris.data.ArSettings = com.brickgame.tetris.data.ArSettings()
+    arSettings: com.brickgame.tetris.data.ArSettings = com.brickgame.tetris.data.ArSettings(),
+    onArSettings: ((com.brickgame.tetris.data.ArSettings) -> com.brickgame.tetris.data.ArSettings) -> Unit = {}
 ) {
     val theme = LocalGameTheme.current
 
@@ -128,6 +129,17 @@ fun Game3DScreen(
     val arController = remember { ArBoardController() }
     var boundary by remember { mutableStateOf(BoundaryInfo()) }
     var outOfArea by remember { mutableStateOf(false) }
+    var showAreaMenu by remember { mutableStateOf(false) }
+    /** Pick a play area in the game: remembered as the setting and applied right here. */
+    fun applyPlayArea(id: String) {
+        onArSettings { it.copy(playArea = id) }
+        when (id) {
+            "OFF" -> arController.clearBoundary()
+            "CORNERS" -> arController.startBoundary()
+            else -> arSettings.copy(playArea = id).areaSize()?.let { (w, d) -> arController.setPresetArea(w, d) }
+        }
+        showAreaMenu = false
+    }
     var arMessage by remember { mutableStateOf<String?>(null) }
     var arInstallPending by remember { mutableStateOf(false) }
     var arCell by remember { mutableFloatStateOf(0.03f) }
@@ -135,17 +147,26 @@ fun Game3DScreen(
     val heatLimit by rememberUpdatedState(arHeatLimit.coerceAtMost(AR_HARD_LIMIT_C - 1))
 
     /** Leave AR when the phone is too warm: the player's limit, or the safety net that always applies. */
+    /** The game was put on hold by AR itself (placing, tracking lost, outside the area) — no pause screen. */
+    var arAutoPaused by remember { mutableStateOf(false) }
+
     fun onHeatInfo(h: ArHeatInfo) {
         arHeat = h
         val t = h.batteryC
-        val hardStop = h.thermal == ArHeat.CRITICAL || (t != null && t >= AR_HARD_LIMIT_C)
+        // Android's own "severe" warning comes before Samsung closes the camera by itself, so leave
+        // AR at that point even when the battery still reads below the player's limit
+        val systemHot = h.thermal >= ArHeat.HOT
+        val hardStop = systemHot || (t != null && t >= AR_HARD_LIMIT_C)
         val userStop = t != null && t >= heatLimit
-        val unknownTempButHot = t == null && h.thermal == ArHeat.HOT
-        if (hardStop || userStop || unknownTempButHot) {
+        if (hardStop || userStop) {
+            arAutoPaused = false
             arSession = null
             if (state.status == GameStatus.PLAYING) onPause()
-            arMessage = (if (t != null) "AR paused at %.1f°C to protect your phone".format(t) else "AR paused — your phone is too hot") +
-                (if (h.charging) " (charging adds heat)." else ".") + " Your game is paused in 3D view."
+            arMessage = when {
+                userStop -> "AR paused at %.1f°C (your limit is $heatLimit°C)".format(t)
+                systemHot -> "AR paused — Android reports the phone is getting hot inside" + (if (t != null) " (battery %.1f°C)".format(t) else "")
+                else -> "AR paused at %.1f°C to protect your phone".format(t)
+            } + (if (h.charging) ". Charging adds heat." else ".") + " Your game waits in 3D view; tap AR again when it has cooled."
         }
     }
 
@@ -179,10 +200,18 @@ fun Game3DScreen(
     }
     LaunchedEffect(boundary.distance) {
         val d = boundary.distance ?: return@LaunchedEffect
-        if (d < 0f && !outOfArea) {
-            outOfArea = true
-            if (state.status == GameStatus.PLAYING) onPause()
-        } else if (d >= 0.1f) outOfArea = false
+        if (d < 0f && !outOfArea) outOfArea = true
+        else if (d >= 0.1f) outOfArea = false
+    }
+    // AR holds the game while it can't be played (no well yet, tracking lost, setting up the area,
+    // stepped outside it) and lets it run again by itself once everything is ready
+    val arReady = arOn && arStatus == ArStatus.PLACED && !boundary.drawing && !boundary.findingFloor && !outOfArea
+    LaunchedEffect(arOn, arReady, state.status) {
+        when {
+            !arOn -> { if (arAutoPaused && state.status == GameStatus.PAUSED) onPause(); arAutoPaused = false }
+            !arReady && state.status == GameStatus.PLAYING -> { arAutoPaused = true; onPause() }
+            arReady && arAutoPaused && state.status == GameStatus.PAUSED -> { arAutoPaused = false; onPause() }
+        }
     }
 
     fun startAr(userRequestedInstall: Boolean) {
@@ -193,7 +222,6 @@ fun Game3DScreen(
             arStatus = ArStatus.STARTING
             arMessage = null
             arSession = session
-            if (state.status == GameStatus.PLAYING) onPause()   // place the well first, then resume
         } catch (e: com.google.ar.core.exceptions.UnavailableUserDeclinedInstallationException) {
             arMessage = "AR needs Google Play Services for AR"
         } catch (e: com.google.ar.core.exceptions.UnavailableDeviceNotCompatibleException) {
@@ -290,7 +318,8 @@ fun Game3DScreen(
     val pauseButton: @Composable () -> Unit = {
                 Box(Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(Bw.Surface)
                     .border(1.dp, Bw.Line, RoundedCornerShape(14.dp))
-                    .clickable(onClickLabel = "Pause") { onPause() }, contentAlignment = Alignment.Center) {
+                    // While AR holds the game, the pause button just shows the pause screen
+                    .clickable(onClickLabel = "Pause") { if (arAutoPaused) arAutoPaused = false else onPause() }, contentAlignment = Alignment.Center) {
                     GlyphIcon(Glyph.PAUSE, Bw.Text, 18.dp)
                 }
     }
@@ -299,10 +328,8 @@ fun Game3DScreen(
             Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 2.dp),
                 horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 if (arSupport == ArSupport.SUPPORTED) ModeChip("AR", arOn, Bw.Cyan) { toggleAr() }
-                if (arOn) ModeChip(if (boundary.set) "Play area ✓" else "Play area", boundary.drawing || boundary.set, Bw.Lime) {
-                    // Preset sizes re-centre on where you stand now; otherwise draw it corner by corner
-                    val area = arSettings.areaSize()
-                    if (area != null) arController.setPresetArea(area.first, area.second) else arController.startBoundary()
+                if (arOn) ModeChip(if (boundary.set) "Play area ✓" else "Play area", boundary.drawing || boundary.set || showAreaMenu, Bw.Lime) {
+                    showAreaMenu = !showAreaMenu
                 }
                 if (hasMotionSensor && !arOn) ModeChip("Motion view", motionView, Bw.Violet) { setMotionView(!motionView) }
                 if (!arOn) ModeChip("Camera", showCamSettings, Bw.Amber) { showCamSettings = !showCamSettings }
@@ -401,6 +428,27 @@ fun Game3DScreen(
                         arHeat?.let { h -> HeatChip(h, heatLimit) { onArHeatLimit(nextHeatLimit(heatLimit)) } }
                     }
                 }
+                if (arOn && showAreaMenu) {
+                    Column(Modifier.align(Alignment.BottomStart).padding(start = 12.dp, end = 12.dp, bottom = 56.dp)
+                        .clip(RoundedCornerShape(18.dp)).background(Bw.Ground.copy(alpha = 0.92f))
+                        .border(1.dp, Bw.Line, RoundedCornerShape(18.dp)).padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("PLAY AREA", style = BwType.Overline.copy(color = Bw.Lime))
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            listOf("OFF" to "Off", "SMALL" to "1.5 m", "MEDIUM" to "2 m", "LARGE" to "3 m").forEach { (id, label) ->
+                                ArChip(label, arSettings.playArea == id) { applyPlayArea(id) }
+                            }
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            ArChip("%.1f × %.1f m".format(arSettings.customWidthM, arSettings.customDepthM), arSettings.playArea == "CUSTOM") { applyPlayArea("CUSTOM") }
+                            ArChip("Draw it", arSettings.playArea == "CORNERS") { applyPlayArea("CORNERS") }
+                        }
+                        if (arSettings.areaSize() != null) {
+                            ArChip("Re-centre here", false) { applyPlayArea(arSettings.playArea) }
+                        }
+                        Text("Custom size: Settings → 3D & AR", style = BwType.Small.copy(fontSize = 11.sp))
+                    }
+                }
                 if (arOn) PlayAreaLayer(
                     boundary = boundary, outOfArea = outOfArea, areaLabel = arSettings.areaSize()?.let { (w, d) -> "%.1f × %.1f m".format(w, d) },
                     onUndo = arController::undoBoundaryCorner,
@@ -438,7 +486,7 @@ fun Game3DScreen(
                             ActionButton("SETTINGS", onOpenSettings, width = 140.dp, height = 38.dp)
                         }
                     }
-                    GameStatus.PAUSED -> BwPauseOverlay(onResume = { onPause() }, onSettings = onOpenSettings, onQuit = onQuit)
+                    GameStatus.PAUSED -> if (!arAutoPaused) BwPauseOverlay(onResume = { onPause() }, onSettings = onOpenSettings, onQuit = onQuit)
                     GameStatus.GAME_OVER -> BwGameOverOverlay(
                         score = state.score, level = state.level, lines = state.layers, highScore = Int.MAX_VALUE,
                         maxCombo = 0, backToBack = 0, elapsedMs = 0L,
@@ -728,11 +776,11 @@ private fun MotionViewSensor(enabled: Boolean, recenterKey: Int, onAngles: (yawD
 private fun ArStatusBar(status: ArStatus, modifier: Modifier, onReplace: () -> Unit) {
     val text = when (status) {
         ArStatus.STARTING -> "Starting camera…"
-        ArStatus.SEARCHING -> "Move your phone slowly over a table"
-        ArStatus.READY_TO_PLACE -> "Tap the table to place the well"
+        ArStatus.SEARCHING -> "Move the phone slowly over a table or the floor, or tap to place the well anyway"
+        ArStatus.READY_TO_PLACE -> "Tap to place the well here — the game starts when it's placed"
         ArStatus.PLACED -> null
         ArStatus.FINDING_FLOOR -> "Point the phone at the floor around your feet"
-        ArStatus.TRACKING_LOST -> "Lost track — point back at the table"
+        ArStatus.TRACKING_LOST -> "Lost track — point back at the well (game on hold)"
         ArStatus.FAILED -> "AR stopped. Turn AR off and on again"
     }
     Row(modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -838,6 +886,8 @@ private fun HeatChip(h: ArHeatInfo, limit: Int, onCycleLimit: () -> Unit) {
             append("  ·  AR stops at ${limit}°C")
             if (h.charging) append("  ·  charging")
         } else if (h.charging) append(" ⚡")
+        // Battery °C lags behind the chip's real heat; Android's own state shows what's coming
+        when (h.thermal) { ArHeat.WARM -> append(" · warm"); ArHeat.HOT, ArHeat.CRITICAL -> append(" · hot"); else -> {} }
     }
     Text(text, color = Bw.Ground, fontSize = 12.sp, fontWeight = FontWeight.Bold,
         modifier = Modifier.background(color, RoundedCornerShape(10.dp))

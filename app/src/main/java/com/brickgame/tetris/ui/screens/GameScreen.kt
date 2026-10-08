@@ -625,7 +625,7 @@ fun GameScreen(
                     LayoutPreset.PORTRAIT_3D -> {}
                 }
                 if (gameState.status == GameStatus.PAUSED) {
-                    if (showIntro) SwipeIntroOverlay { swipeIntroDone = true; onResume() }
+                    if (showIntro) SwipeIntroOverlay(onStart = { swipeIntroDone = true; onResume() }, onMenu = onQuit)
                     else BwPauseOverlay(onResume, onOpenSettings, onQuit)
                 }
                 // Classic layout handles its own game-over with LCD curtain animation
@@ -1014,22 +1014,42 @@ fun GameScreen(
     }
 }
 
-/** Swipe mode: the gestures, shown before each game while it waits; tap anywhere to play. */
-@Composable private fun SwipeIntroOverlay(onStart: () -> Unit) {
-    Box(Modifier.fillMaxSize().background(Bw.Ground.copy(alpha = 0.9f))
+/** Swipe mode: the gestures, shown before each game while it waits. PLAY (or a tap anywhere) starts it. */
+@Composable private fun SwipeIntroOverlay(onStart: () -> Unit, onMenu: () -> Unit) {
+    val type = com.brickgame.tetris.ui.brand.BwType
+    Box(Modifier.fillMaxSize().background(Bw.Ground.copy(alpha = 0.95f))
         .clickable(onClickLabel = "Start playing", onClick = onStart), contentAlignment = Alignment.Center) {
-        Column(Modifier.widthIn(max = 360.dp).padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            Text("SWIPE CONTROLS", style = com.brickgame.tetris.ui.brand.BwType.Overline.copy(color = Bw.Cyan))
-            listOf("↔" to "Drag sideways to move", "•" to "Tap to rotate", "↓" to "Flick down to drop",
-                "⇣" to "Drag down slowly for a soft drop", "↑" to "Swipe up to hold").forEach { (glyph, label) ->
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Text(glyph, fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Bw.Cyan, modifier = Modifier.width(40.dp))
-                    Text(label, style = com.brickgame.tetris.ui.brand.BwType.Body.copy(color = Bw.Text))
+        Column(Modifier.widthIn(max = 420.dp).verticalScroll(rememberScrollState()).padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text("SWIPE CONTROLS", style = type.Overline.copy(color = Bw.Cyan))
+            Text("No buttons — the board is your controller", style = type.Title.copy(fontSize = 22.sp))
+            Spacer(Modifier.height(4.dp))
+            listOf(
+                Triple(listOf(com.brickgame.tetris.ui.brand.Glyph.LEFT, com.brickgame.tetris.ui.brand.Glyph.RIGHT), "MOVE", "Drag left or right — one cell per step"),
+                Triple(listOf(com.brickgame.tetris.ui.brand.Glyph.ROTATE), "ROTATE", "Tap anywhere on the board"),
+                Triple(listOf(com.brickgame.tetris.ui.brand.Glyph.DROP), "HARD DROP", "Flick down fast"),
+                Triple(listOf(com.brickgame.tetris.ui.brand.Glyph.DOWN), "SOFT DROP", "Drag down slowly"),
+                Triple(listOf(com.brickgame.tetris.ui.brand.Glyph.UP), "HOLD", "Swipe up to keep the piece for later")
+            ).forEach { (glyphs, title, hint) ->
+                Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Bw.Surface)
+                    .border(1.dp, Bw.Line, RoundedCornerShape(16.dp)).padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(56.dp).clip(RoundedCornerShape(14.dp)).background(Bw.Cyan.copy(alpha = 0.14f)),
+                        contentAlignment = Alignment.Center) {
+                        Row {
+                            glyphs.forEach { com.brickgame.tetris.ui.brand.GlyphIcon(it, Bw.Cyan, if (glyphs.size > 1) 24.dp else 30.dp) }
+                        }
+                    }
+                    Spacer(Modifier.width(14.dp))
+                    Column {
+                        Text(title, style = type.Label.copy(color = Bw.Text, fontSize = 15.sp))
+                        Text(hint, style = type.Small)
+                    }
                 }
             }
             Spacer(Modifier.height(8.dp))
-            Text("TAP TO PLAY", style = com.brickgame.tetris.ui.brand.BwType.Button.copy(color = Bw.Pink, letterSpacing = 3.sp))
+            com.brickgame.tetris.ui.brand.BwPrimaryButton("PLAY", onStart, Modifier.fillMaxWidth(), height = 58.dp)
+            com.brickgame.tetris.ui.brand.BwSecondaryButton("Menu", onMenu, Modifier.fillMaxWidth())
         }
     }
 }
