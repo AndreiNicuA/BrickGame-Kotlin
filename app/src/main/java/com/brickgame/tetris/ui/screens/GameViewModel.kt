@@ -195,6 +195,16 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         setPortraitLayout(layoutFor(style))
     }
 
+    /** Change the active player's hand profile (Hand setup / display style). */
+    fun updateHandProfile(change: (HandProfile) -> HandProfile) {
+        viewModelScope.launch { playersRepo.updateActive { it.copy(hand = change(it.hand)) } }
+    }
+
+    /** The AR guide has been seen by the active player. */
+    fun markArGuideSeen() {
+        viewModelScope.launch { playersRepo.updateActive { it.copy(arGuideSeen = true) } }
+    }
+
     /** Switch to another player and apply their name, controls, style and speed. */
     fun switchPlayer(id: String) {
         viewModelScope.launch {

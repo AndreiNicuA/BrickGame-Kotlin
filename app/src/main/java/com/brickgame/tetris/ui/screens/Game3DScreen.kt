@@ -40,6 +40,7 @@ import com.brickgame.tetris.ui.brand.GlyphIcon
 import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import com.brickgame.tetris.gl.ArStatus
 import com.brickgame.tetris.gl.ArSupport
 import com.brickgame.tetris.gl.createArSession
@@ -94,7 +95,11 @@ fun Game3DScreen(
     motionViewSaved: Boolean = false,
     onMotionView: (Boolean) -> Unit = {},
     arSettings: com.brickgame.tetris.data.ArSettings = com.brickgame.tetris.data.ArSettings(),
-    onArSettings: ((com.brickgame.tetris.data.ArSettings) -> com.brickgame.tetris.data.ArSettings) -> Unit = {}
+    onArSettings: ((com.brickgame.tetris.data.ArSettings) -> com.brickgame.tetris.data.ArSettings) -> Unit = {},
+    handProfile: com.brickgame.tetris.data.HandProfile = com.brickgame.tetris.data.HandProfile(),
+    onHandProfile: ((com.brickgame.tetris.data.HandProfile) -> com.brickgame.tetris.data.HandProfile) -> Unit = {},
+    arGuideSeen: Boolean = true,
+    onArGuideSeen: () -> Unit = {}
 ) {
     val theme = LocalGameTheme.current
 
@@ -130,6 +135,15 @@ fun Game3DScreen(
     var boundary by remember { mutableStateOf(BoundaryInfo()) }
     var outOfArea by remember { mutableStateOf(false) }
     var showAreaMenu by remember { mutableStateOf(false) }
+    // AR guide (first time per player, or the Guide chip) and Hand setup
+    var showArGuide by remember { mutableStateOf(false) }
+    var setupStep by remember { mutableStateOf<HandSetupStep?>(null) }
+    var setupProgress by remember { mutableFloatStateOf(0f) }
+    var setupMessage by remember { mutableStateOf<String?>(null) }
+    var setupOpen by remember { mutableFloatStateOf(Float.NaN) }
+    var setupPinch by remember { mutableFloatStateOf(Float.NaN) }
+    var setupDisplay by remember { mutableStateOf(handProfile.display) }
+    var lastHandFrame by remember { mutableStateOf<com.brickgame.tetris.gl.HandFrame?>(null) }
     /** Pick a play area in the game: remembered as the setting and applied right here. */
     fun applyPlayArea(id: String) {
         onArSettings { it.copy(playArea = id) }
@@ -205,7 +219,34 @@ fun Game3DScreen(
     }
     // AR holds the game while it can't be played (no well yet, tracking lost, setting up the area,
     // stepped outside it) and lets it run again by itself once everything is ready
-    val arReady = arOn && arStatus == ArStatus.PLACED && !boundary.drawing && !boundary.findingFloor && !outOfArea
+    val arReady = arOn && arStatus == ArStatus.PLACED && !boundary.drawing && !boundary.findingFloor && !outOfArea &&
+        !showArGuide && setupStep == null
+    // The guide opens by itself the first time this player starts AR
+    LaunchedEffect(arOn) { if (arOn && !arGuideSeen) showArGuide = true }
+    // Hand setup: measure the open hand, then the pinch (2 s each), then pick how the hand is drawn
+    LaunchedEffect(setupStep) {
+        val step = setupStep
+        if (step != HandSetupStep.OPEN && step != HandSetupStep.PINCH) return@LaunchedEffect
+        setupProgress = 0f
+        val samples = ArrayList<Float>()
+        var start = 0L
+        snapshotFlow { lastHandFrame }.collect { f ->
+            val r = f?.ratio ?: Float.NaN
+            if (f == null || r.isNaN()) { samples.clear(); start = 0L; setupProgress = 0f; return@collect }
+            val now = System.currentTimeMillis()
+            if (start == 0L) start = now
+            samples += r
+            setupProgress = ((now - start) / 2000f).coerceIn(0f, 1f)
+            if (now - start >= 2000 && samples.size >= 8) {
+                val median = samples.sorted()[samples.size / 2]
+                if (step == HandSetupStep.OPEN) { setupOpen = median; setupMessage = null; setupStep = HandSetupStep.PINCH }
+                else if (setupOpen - median < 0.15f) {
+                    setupMessage = "That looked too similar to your open hand. Spread your fingers wide, then pinch firmly."
+                    setupStep = HandSetupStep.OPEN
+                } else { setupPinch = median; setupStep = HandSetupStep.STYLE }
+            }
+        }
+    }
     LaunchedEffect(arOn, arReady, state.status) {
         when {
             !arOn -> { if (arAutoPaused && state.status == GameStatus.PAUSED) onPause(); arAutoPaused = false }
@@ -328,6 +369,7 @@ fun Game3DScreen(
             Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 2.dp),
                 horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 if (arSupport == ArSupport.SUPPORTED) ModeChip("AR", arOn, Bw.Cyan) { toggleAr() }
+                if (arOn) ModeChip("Guide", showArGuide, Bw.Violet) { showArGuide = !showArGuide }
                 if (arOn) ModeChip(if (boundary.set) "Play area ✓" else "Play area", boundary.drawing || boundary.set || showAreaMenu, Bw.Lime) {
                     showAreaMenu = !showAreaMenu
                 }
@@ -363,7 +405,14 @@ fun Game3DScreen(
                         controller = arController,
                         arrow = arSettings.arrow,
                         floorMesh = arSettings.floorMesh,
-                        hands = arSettings.hands,
+                        handTracking = arSettings.hands || setupStep != null ||
+                            (arSettings.handPlace && arStatus != ArStatus.PLACED),
+                        handGestures = arSettings.hands && setupStep == null,
+                        handPlace = arSettings.handPlace,
+                        pinchOn = handProfile.pinchOn,
+                        pinchOff = handProfile.pinchOff,
+                        handDisplay = if (setupStep == HandSetupStep.STYLE) setupDisplay else handProfile.display,
+                        onHandFrame = { lastHandFrame = it },
                         onBoundary = { boundary = it },
                         onPlacementBlocked = {
                             arInside = false
@@ -427,6 +476,24 @@ fun Game3DScreen(
                         }
                         arHeat?.let { h -> HeatChip(h, heatLimit) { onArHeatLimit(nextHeatLimit(heatLimit)) } }
                     }
+                }
+                if (arOn && showArGuide) ArGuideOverlay(
+                    handsOn = arSettings.hands,
+                    onHandSetup = { showArGuide = false; onArGuideSeen(); setupMessage = null; setupStep = HandSetupStep.OPEN },
+                    onClose = { showArGuide = false; onArGuideSeen() }
+                )
+                setupStep?.let { step ->
+                    HandSetupOverlay(step, setupProgress, setupMessage, setupDisplay,
+                        onDisplay = { setupDisplay = it },
+                        onSave = {
+                            val open = setupOpen; val pinch = setupPinch
+                            onHandProfile { it.copy(
+                                pinchOn = pinch + (open - pinch) * 0.35f,
+                                pinchOff = pinch + (open - pinch) * 0.55f,
+                                display = setupDisplay, calibrated = true) }
+                            setupStep = null
+                        },
+                        onCancel = { setupStep = null })
                 }
                 if (arOn && showAreaMenu) {
                     Column(Modifier.align(Alignment.BottomStart).padding(start = 12.dp, end = 12.dp, bottom = 56.dp)
@@ -849,6 +916,94 @@ private fun BoxScope.PlayAreaLayer(
                 if (boundary.corners > 0) ArChip("Undo", false, onUndo)
                 Spacer(Modifier.weight(1f))
                 if (boundary.corners >= 3) ArChip("Done", true, onDone)
+            }
+        }
+    }
+}
+
+/** Hand setup steps: open hand, pinch, then how the hand is drawn. */
+private enum class HandSetupStep { OPEN, PINCH, STYLE }
+
+@Composable
+private fun BoxScope.HandSetupOverlay(
+    step: HandSetupStep, progress: Float, message: String?, display: String,
+    onDisplay: (String) -> Unit, onSave: () -> Unit, onCancel: () -> Unit
+) {
+    Column(Modifier.align(Alignment.BottomCenter).padding(start = 12.dp, end = 12.dp, bottom = 56.dp).fillMaxWidth()
+        .clip(RoundedCornerShape(18.dp)).background(Bw.Ground.copy(alpha = 0.92f)).border(1.dp, Bw.Line, RoundedCornerShape(18.dp))
+        .padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("HAND SETUP · " + when (step) { HandSetupStep.OPEN -> "1/3"; HandSetupStep.PINCH -> "2/3"; HandSetupStep.STYLE -> "3/3" },
+            style = BwType.Overline.copy(color = Bw.Violet))
+        Text(when (step) {
+            HandSetupStep.OPEN -> "Hold your hand open in front of the camera, fingers spread, about where you'd grab a piece."
+            HandSetupStep.PINCH -> "Now pinch: thumb and index finger together, and hold it."
+            HandSetupStep.STYLE -> "Done! How should your hand be drawn?"
+        }, style = BwType.Body.copy(color = Bw.Text))
+        message?.let { Text(it, style = BwType.Small.copy(color = Bw.Amber)) }
+        if (step != HandSetupStep.STYLE) {
+            Box(Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)).background(Bw.Surface)) {
+                Box(Modifier.fillMaxWidth(progress).fillMaxHeight().background(Bw.Violet))
+            }
+            Text(if (progress <= 0f) "Looking for your hand…" else "Hold still…", style = BwType.Small)
+        } else {
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                listOf("DOTS" to "Fingertips", "STICKS" to "Skeleton", "MESH" to "Mesh").forEach { (id, label) ->
+                    ArChip(label, display == id) { onDisplay(id) }
+                }
+            }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            ArChip("Cancel", false, onCancel)
+            Spacer(Modifier.weight(1f))
+            if (step == HandSetupStep.STYLE) ArChip("Save", true, onSave)
+        }
+    }
+}
+
+/** How to play in AR, plus the room and light that work best. Opens by itself the first time. */
+@Composable
+private fun BoxScope.ArGuideOverlay(handsOn: Boolean, onHandSetup: () -> Unit, onClose: () -> Unit) {
+    Column(Modifier.matchParentSize().background(Bw.Ground.copy(alpha = 0.95f))
+        .verticalScroll(rememberScrollState()).padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text("AR · HOW TO PLAY", style = BwType.Overline.copy(color = Bw.Cyan))
+        Text("Your room is the board", style = BwType.Title.copy(fontSize = 22.sp))
+        GuideSection("1  Get the room ready", Bw.Lime, listOf(
+            "Good, even light. Avoid dim rooms and bright windows behind the table.",
+            "Surfaces with some pattern work best: wood, a patterned cloth, a rug. Plain white or glossy tops are hard for the camera.",
+            "Move the phone slowly from side to side until the cyan mesh covers the surface.",
+            "For Room and Inside, keep about 2 × 2 m of free floor."))
+        GuideSection("2  Place the well", Bw.Cyan, listOf(
+            "Tap the mesh, or hold your hand flat on the surface for 3 seconds.",
+            "No mesh yet? Tap anyway: the well appears and settles once the camera understands the surface.",
+            "Sizes: Table, Big, Room, or Inside to stand in the middle.",
+            "Two fingers: pinch to resize, twist to turn, drag to move it."))
+        GuideSection("3  Play", Bw.Pink, listOf(
+            "Drag the piece with one finger, tap to spin, flick down to drop. The buttons work too.",
+            "The pink brick arrow points to the piece when it's out of view.",
+            "The game waits by itself while the well isn't placed or the camera loses track."))
+        GuideSection("4  Hands (beta)", Bw.Violet, listOf(
+            "Turn on in Settings → 3D & AR. Pinch the piece with thumb and index finger, move it, twist to spin, flick down to drop.",
+            "Run Hand setup once so it learns your hand. Keep your whole hand in the picture.") +
+            (if (handsOn) emptyList() else listOf("Hands is off right now.")))
+        GuideSection("5  Stay safe and cool", Bw.Amber, listOf(
+            "The play area warns you near its edge and pauses the game if you step out.",
+            "AR switches itself off before the phone gets too hot. Charging adds heat."))
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            com.brickgame.tetris.ui.brand.BwSecondaryButton("Hand setup", onHandSetup, Modifier.weight(1f))
+            com.brickgame.tetris.ui.brand.BwPrimaryButton("GOT IT", onClose, Modifier.weight(1f), height = 52.dp)
+        }
+    }
+}
+
+@Composable
+private fun GuideSection(title: String, color: Color, lines: List<String>) {
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Bw.Surface)
+        .border(1.dp, Bw.Line, RoundedCornerShape(16.dp)).padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(title, style = BwType.Label.copy(color = color, fontSize = 15.sp))
+        lines.forEach { line ->
+            Row {
+                Text("•", style = BwType.Small.copy(color = color), modifier = Modifier.width(14.dp))
+                Text(line, style = BwType.Small.copy(color = Bw.Text))
             }
         }
     }

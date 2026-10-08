@@ -30,7 +30,24 @@ data class LocalPlayer(
     val swipeControls: Boolean = false,
     val style: PlayStyle = PlayStyle.NEON,
     val difficulty: String = "NORMAL",
-    val createdAt: Long = System.currentTimeMillis()
+    val createdAt: Long = System.currentTimeMillis(),
+    /** AR hand tracking tuned to this player's hand (Hand setup). */
+    val hand: HandProfile = HandProfile(),
+    /** Seen the AR guide at least once (it opens by itself the first time). */
+    val arGuideSeen: Boolean = false
+)
+
+/**
+ * How this player's hand reads in AR. Pinch thresholds are the thumb-to-index gap relative to
+ * the hand's size; Hand setup measures them from the player's own open hand and pinch.
+ */
+@Serializable
+data class HandProfile(
+    val pinchOn: Float = 0.30f,
+    val pinchOff: Float = 0.45f,
+    /** How the tracked hand is drawn: DOTS (fingertips), STICKS (skeleton) or MESH (filled hand). */
+    val display: String = "STICKS",
+    val calibrated: Boolean = false
 )
 
 @Serializable

@@ -20,7 +20,9 @@ data class ArSettings(
     /** 3D arrow in front of the phone pointing to the falling piece when it's out of view. */
     val arrow: Boolean = true,
     /** Experimental: pinch the falling piece with your hand in front of the camera. */
-    val hands: Boolean = false
+    val hands: Boolean = false,
+    /** Hold a hand flat on a surface for 3 s to place the well there. */
+    val handPlace: Boolean = true
 ) {
     /** Width × depth in metres for the preset areas; null for OFF / CORNERS. */
     fun areaSize(): Pair<Float, Float>? = when (playArea) {

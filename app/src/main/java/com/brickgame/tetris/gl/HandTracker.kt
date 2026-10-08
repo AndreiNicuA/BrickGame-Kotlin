@@ -6,6 +6,7 @@ import android.media.Image
 import android.util.Log
 import com.google.mediapipe.framework.image.BitmapImageBuilder
 import com.google.mediapipe.tasks.core.BaseOptions
+import com.google.mediapipe.tasks.core.Delegate
 import com.google.mediapipe.tasks.vision.core.RunningMode
 import com.google.mediapipe.tasks.vision.handlandmarker.HandLandmarker
 import java.util.concurrent.Executors
@@ -14,7 +15,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 /**
  * Finds one hand in the AR camera image (Google MediaPipe hand landmarks, on the phone, no
  * network). The renderer hands over a camera frame whenever the tracker is free; the frame is
- * copied, turned upright at half resolution and detected on a background thread, so the
+ * copied, turned upright and detected on a background thread, so the
  * camera / drawing never waits. One frame at a time keeps the extra heat down.
  *
  * Results are the 21 hand landmarks in normalised coordinates of the original (unrotated)
@@ -32,7 +33,10 @@ class HandTracker(context: Context, private val onHand: (HandPoints?) -> Unit) {
     private val executor = Executors.newSingleThreadExecutor()
     private val busy = AtomicBoolean(false)
     @Volatile private var closed = false
-    private var landmarker: HandLandmarker? = null
+    @Volatile private var landmarker: HandLandmarker? = null
+    private val appContext: Context = context.applicationContext
+    @Volatile private var usingGpu = false
+    private var gpuErrors = 0
 
     // Reused buffers (only one frame is ever in flight)
     private var yBuf = ByteArray(0); private var uBuf = ByteArray(0); private var vBuf = ByteArray(0)
@@ -42,16 +46,34 @@ class HandTracker(context: Context, private val onHand: (HandPoints?) -> Unit) {
     private var lastTimestamp = 0L
 
     init {
-        val appContext = context.applicationContext
         executor.execute {
+            // GPU first (faster = steadier tracking, less CPU heat); CPU if this phone can't
+            landmarker = create(appContext, Delegate.GPU)?.also { usingGpu = true } ?: create(appContext, Delegate.CPU)
+            if (landmarker == null) Log.e(TAG, "Hand tracking unavailable")
+        }
+    }
+
+    /** The GPU path failing at run time (some phones): switch to the CPU once. */
+    private fun onDetectError() {
+        busy.set(false)
+        if (!usingGpu || ++gpuErrors < 3) return
+        usingGpu = false
+        executor.execute {
+            try { landmarker?.close() } catch (_: Exception) {}
+            landmarker = create(appContext, Delegate.CPU)
+        }
+    }
+
+    private fun create(appContext: Context, delegate: Delegate): HandLandmarker? =
             try {
                 val options = HandLandmarker.HandLandmarkerOptions.builder()
-                    .setBaseOptions(BaseOptions.builder().setModelAssetPath("hand_landmarker.task").build())
+                    .setBaseOptions(BaseOptions.builder().setModelAssetPath("hand_landmarker.task").setDelegate(delegate).build())
                     .setRunningMode(RunningMode.LIVE_STREAM)
                     .setNumHands(1)
-                    .setMinHandDetectionConfidence(0.5f)
-                    .setMinHandPresenceConfidence(0.5f)
-                    .setMinTrackingConfidence(0.5f)
+                    // Lower presence / tracking thresholds keep a moving hand instead of re-detecting it
+                    .setMinHandDetectionConfidence(0.45f)
+                    .setMinHandPresenceConfidence(0.3f)
+                    .setMinTrackingConfidence(0.3f)
                     .setResultListener { result, _ ->
                         val hands = result.landmarks()
                         if (hands.isEmpty()) onHand(null)
@@ -66,14 +88,13 @@ class HandTracker(context: Context, private val onHand: (HandPoints?) -> Unit) {
                         }
                         busy.set(false)
                     }
-                    .setErrorListener { e -> Log.w(TAG, "hand landmarker error", e); busy.set(false) }
+                    .setErrorListener { e -> Log.w(TAG, "hand landmarker error", e); onDetectError() }
                     .build()
-                landmarker = HandLandmarker.createFromOptions(appContext, options)
-            } catch (e: Exception) {
-                Log.e(TAG, "Hand tracking unavailable", e)
+                HandLandmarker.createFromOptions(appContext, options)
+            } catch (e: Throwable) {
+                Log.w(TAG, "Hand landmarker ($delegate) unavailable", e)
+                null
             }
-        }
-    }
 
     /** True when a new frame can be handed over. */
     fun ready(): Boolean = !closed && landmarker != null && !busy.get()
@@ -98,7 +119,7 @@ class HandTracker(context: Context, private val onHand: (HandPoints?) -> Unit) {
                 inflightRotation = rotation
                 landmarker?.detectAsync(BitmapImageBuilder(bmp).build(), timestampMs) ?: busy.set(false)
             } catch (e: Exception) {
-                Log.w(TAG, "detect failed", e); busy.set(false)
+                Log.w(TAG, "detect failed", e); onDetectError()
             }
         }
     }
@@ -116,9 +137,9 @@ class HandTracker(context: Context, private val onHand: (HandPoints?) -> Unit) {
         return out
     }
 
-    /** YUV → ARGB at half resolution, turned [rotation]° clockwise so the hand is upright. */
+    /** YUV → ARGB at full camera resolution, turned [rotation]° clockwise so the hand is upright. */
     private fun toUprightBitmap(w: Int, h: Int, yRow: Int, uvRow: Int, uvPixel: Int, rotation: Int): Bitmap {
-        val w0 = w / 2; val h0 = h / 2
+        val w0 = w; val h0 = h
         val sideways = rotation == 90 || rotation == 270
         val bw = if (sideways) h0 else w0
         val bh = if (sideways) w0 else h0
@@ -135,7 +156,7 @@ class HandTracker(context: Context, private val onHand: (HandPoints?) -> Unit) {
                     270 -> { sx = w0 - 1 - bv; sy = bu }
                     else -> { sx = bu; sy = bv }
                 }
-                val col = sx * 2; val row = sy * 2
+                val col = sx; val row = sy
                 val yv = (yBuf[row * yRow + col].toInt() and 0xFF).toFloat()
                 val uvIdx = (row / 2) * uvRow + (col / 2) * uvPixel
                 val u = ((if (uvIdx < uBuf.size) uBuf[uvIdx].toInt() else 128) and 0xFF) - 128

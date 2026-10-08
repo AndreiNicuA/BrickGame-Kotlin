@@ -25,6 +25,12 @@ import kotlin.math.sqrt
  * [set] once finished, and [distance] = metres from the phone to the nearest edge
  * (negative = outside), null when no area is set or tracking is lost.
  */
+/**
+ * What the hand tracker sees, for the UI: all 21 landmarks in view pixels (x, y pairs),
+ * whether they pinch, the raw pinch ratio (Hand setup) and the hold-to-place progress (0..1).
+ */
+class HandFrame(val pts: FloatArray, val pinching: Boolean, val ratio: Float, val holdProgress: Float)
+
 data class BoundaryInfo(
     val drawing: Boolean = false, val corners: Int = 0, val set: Boolean = false, val distance: Float? = null,
     /** A preset area is waiting for the floor under the player to be found. */
@@ -118,12 +124,21 @@ class ArBoardRenderer(
     private var handSeqSeen = 0
     private var lastHandSubmit = 0L
     private val handGesture = HandGesture { height.toFloat() }
+    /** Pinch / twist / drop move the piece (the Hands setting); off = tracking only (setup, placing). */
+    @Volatile var handGesturesEnabled = false
+    /** Hold your hand still on a surface for 3 s to place the well there. */
+    @Volatile var handPlaceEnabled = true
+    /** Per-player pinch thresholds (Hand setup). */
+    fun setPinchThresholds(on: Float, off: Float) { handGesture.pinchOn = on; handGesture.pinchOff = off }
+    private val handFilters = Array(42) { OneEuro() }
+    private val holdStill = HoldStill(3000L)
+
     /** Hand actions, called on the GL thread (the view posts them to the UI). */
     @Volatile var onHandDrag: (Float, Float) -> Unit = { _, _ -> }
     @Volatile var onHandSpin: () -> Unit = {}
     @Volatile var onHandDrop: () -> Unit = {}
-    /** Thumb + index tips in view pixels and whether they pinch; null = no hand. */
-    @Volatile var onHandOverlay: (FloatArray?) -> Unit = {}
+    /** The tracked hand for drawing / Hand setup; null = no hand. */
+    @Volatile var onHandOverlay: (HandFrame?) -> Unit = {}
 
     /** From the tracker's thread: the newest hand (or null when none is visible). */
     fun onHandResult(points: HandTracker.HandPoints?) { latestHand = points; handResultSeq++ }
@@ -307,6 +322,7 @@ class ArBoardRenderer(
         presetPending?.let { wd -> tryPlacePresetArea(frame, wd[0], wd[1]) }
         if (floorMeshEnabled && (anchor == null || boundaryDrawing || presetPending != null)) drawFloorMesh()
         drawBoundary(frame)
+        handTracker?.let { updateHands(frame, it) }
 
         if (replaceRequested) {
             anchor?.detach(); anchor = null; isPlaced = false; insideMode = false; replaceRequested = false
@@ -379,7 +395,6 @@ class ArBoardRenderer(
         val camPose = camera.pose
         board.drawScene(viewProj, base, camPose.tx(), camPose.ty(), camPose.tz())
         if (arrowEnabled && pieceOffScreen) drawPointerArrow(camera)
-        handTracker?.let { updateHands(frame, it) }
 
         // Keep a snapshot for touch ray casts
         Matrix.multiplyMM(boardMvp, 0, viewProj, 0, base, 0)
@@ -586,20 +601,26 @@ class ArBoardRenderer(
         }
         val seq = handResultSeq
         if (seq == handSeqSeen) {
-            handGesture.update(null, now)
+            if (handGesturesEnabled) handGesture.update(null, now)
             return
         }
         handSeqSeen = seq
         val hand = latestHand
         if (hand == null) {
             handGesture.update(null, now)
+            for (f in handFilters) f.reset()
+            holdStill.reset()
             onHandOverlay(null)
             return
         }
-        val pts = FloatArray(hand.xy.size)
+        val raw = FloatArray(hand.xy.size)
         frame.transformCoordinates2d(com.google.ar.core.Coordinates2d.IMAGE_NORMALIZED, hand.xy,
-            com.google.ar.core.Coordinates2d.VIEW, pts)
-        for (action in handGesture.update(pts, now)) when (action) {
+            com.google.ar.core.Coordinates2d.VIEW, raw)
+        // Smooth each coordinate: steady when still, quick when moving
+        val pts = FloatArray(raw.size) { i -> if (i < handFilters.size) handFilters[i].filter(raw[i], now) else raw[i] }
+
+        val actions = handGesture.update(pts, now)
+        if (handGesturesEnabled && anchor != null) for (action in actions) when (action) {
             is HandGesture.Action.Drag -> {
                 val h = pieceCenter?.get(1) ?: continue
                 screenToBoard(action.x, action.y, h)?.let { onHandDrag(it[0], it[1]) }
@@ -607,11 +628,37 @@ class ArBoardRenderer(
             HandGesture.Action.Spin -> onHandSpin()
             HandGesture.Action.Drop -> onHandDrop()
         }
-        onHandOverlay(floatArrayOf(
-            pts[2 * HandLandmarks.THUMB_TIP], pts[2 * HandLandmarks.THUMB_TIP + 1],
-            pts[2 * HandLandmarks.INDEX_TIP], pts[2 * HandLandmarks.INDEX_TIP + 1],
-            if (handGesture.pinching) 1f else 0f
-        ))
+
+        // No well yet: a hand held still on a surface for 3 s puts the well right there
+        var hold = 0f
+        if (anchor == null && handPlaceEnabled && !boundaryDrawing && presetPending == null && !handGesture.pinching) {
+            val px = (pts[0] + pts[2 * HandLandmarks.INDEX_MCP] + pts[2 * HandLandmarks.MIDDLE_MCP] + pts[2 * HandLandmarks.PINKY_MCP]) / 4f
+            val py = (pts[1] + pts[2 * HandLandmarks.INDEX_MCP + 1] + pts[2 * HandLandmarks.MIDDLE_MCP + 1] + pts[2 * HandLandmarks.PINKY_MCP + 1]) / 4f
+            if (holdStill.update(px, py, width.toFloat(), now)) placeAtHand(frame, px, py, hand.xy)
+            hold = holdStill.progress
+        } else holdStill.reset()
+
+        onHandOverlay(HandFrame(pts, handGesture.pinching, handGesture.lastRatio, hold))
+    }
+
+    /**
+     * Place the well where the hand rests: on a detected surface if there is one under the palm,
+     * otherwise at the hand's distance, estimated from how big the palm looks (≈7.5 cm across).
+     */
+    private fun placeAtHand(frame: com.google.ar.core.Frame, x: Float, y: Float, imageXy: FloatArray) {
+        hitPlane(frame, x, y)?.let { hit ->
+            if (fitsPlayArea(hit.hitPose)) placeAt(hit) else onPlacementBlocked()
+            return
+        }
+        val intr = frame.camera.imageIntrinsics
+        val dims = intr.imageDimensions; val focal = intr.focalLength
+        val dx = (imageXy[2 * HandLandmarks.INDEX_MCP] - imageXy[2 * HandLandmarks.PINKY_MCP]) * dims[0]
+        val dy = (imageXy[2 * HandLandmarks.INDEX_MCP + 1] - imageXy[2 * HandLandmarks.PINKY_MCP + 1]) * dims[1]
+        val palmPx = sqrt(dx * dx + dy * dy)
+        val distance = if (palmPx > 1f) (focal[0] * 0.075f / palmPx).coerceIn(0.2f, 3f) else 0.5f
+        val hit = try { frame.hitTestInstantPlacement(x, y, distance).firstOrNull() } catch (_: Exception) { null } ?: return
+        if (!fitsPlayArea(hit.hitPose)) { onPlacementBlocked(); return }
+        setAnchor(hit.createAnchor())
     }
 
     /** Clockwise degrees the CPU camera image must turn to look upright on screen. */

@@ -232,6 +232,11 @@ fun SettingsScreen(
             Text("Floats in front of you and points to the falling piece when it's out of view", color = dim(), fontSize = 11.sp)
         } }
 
+        item { Card {
+            Toggle("Place the well with your hand", s.handPlace) { v -> onChange { it.copy(handPlace = v) } }
+            Text("Hold your hand flat on the table or floor for 3 seconds and the well appears there", color = dim(), fontSize = 11.sp)
+        } }
+
         item { Lbl("Experimental") }
         item { Card {
             Toggle("Hands (beta)", s.hands) { v -> onChange { it.copy(hands = v) } }

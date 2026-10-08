@@ -145,8 +145,19 @@ fun ArBoardView(
     arrow: Boolean = true,
     /** Show detected surfaces as a mesh while placing. */
     floorMesh: Boolean = true,
-    /** Hands (beta): pinch the piece in front of the camera. */
-    hands: Boolean = false,
+    /** Run the hand tracker (Hands on, Hand setup, or placing the well by hand). */
+    handTracking: Boolean = false,
+    /** Hand gestures move the piece (the Hands setting). */
+    handGestures: Boolean = false,
+    /** Hold a hand still on a surface for 3 s to place the well there. */
+    handPlace: Boolean = true,
+    /** The player's pinch thresholds (Hand setup). */
+    pinchOn: Float = HandGesture.PINCH_ON,
+    pinchOff: Float = HandGesture.PINCH_OFF,
+    /** DOTS, STICKS or MESH. */
+    handDisplay: String = "STICKS",
+    /** Every tracked hand frame (Hand setup reads the pinch ratio from it). */
+    onHandFrame: (HandFrame?) -> Unit = {},
     onPlacementBlocked: () -> Unit = {}
 ) {
     val latestStatus by rememberUpdatedState(onStatus)
@@ -167,11 +178,15 @@ fun ArBoardView(
     LaunchedEffect(replaceKey) { if (replaceKey > 0) rendererRef.value?.requestReplace() }
     LaunchedEffect(insideKey) { if (insideKey > 0) rendererRef.value?.requestInside() }
     LaunchedEffect(arrow) { rendererRef.value?.arrowEnabled = arrow }
-    // Hands (beta): the tracker only exists while the setting is on
-    var handOverlay by remember { mutableStateOf<FloatArray?>(null) }
-    DisposableEffect(hands, rendererRef.value) {
+    // The hand tracker only exists while something needs it (it costs battery and heat)
+    var handOverlay by remember { mutableStateOf<HandFrame?>(null) }
+    val latestHandFrame by rememberUpdatedState(onHandFrame)
+    LaunchedEffect(handGestures, handPlace, pinchOn, pinchOff, rendererRef.value) {
+        rendererRef.value?.let { it.handGesturesEnabled = handGestures; it.handPlaceEnabled = handPlace; it.setPinchThresholds(pinchOn, pinchOff) }
+    }
+    DisposableEffect(handTracking, rendererRef.value) {
         val renderer = rendererRef.value
-        val tracker = if (hands && renderer != null) HandTracker(context) { renderer.onHandResult(it) } else null
+        val tracker = if (handTracking && renderer != null) HandTracker(context) { renderer.onHandResult(it) } else null
         renderer?.handTracker = tracker
         onDispose {
             renderer?.handTracker = null
@@ -244,7 +259,7 @@ fun ArBoardView(
                 renderer.onHandDrag = { x, z -> view.post { latestDrag(x, z) } }
                 renderer.onHandSpin = { view.post { latestTap() } }
                 renderer.onHandDrop = { view.post { latestHardDrop() } }
-                renderer.onHandOverlay = { o -> view.post { handOverlay = o } }
+                renderer.onHandOverlay = { o -> view.post { handOverlay = o; latestHandFrame(o) } }
                 renderer.floorMeshEnabled = floorMesh
                 view.preserveEGLContextOnPause = true
                 view.setEGLContextClientVersion(2)
@@ -266,25 +281,73 @@ fun ArBoardView(
         modifier = Modifier.fillMaxSize(),
         update = { }
     )
-    if (hands) HandOverlay(handOverlay)
+    if (handTracking) HandOverlay(handOverlay, handDisplay)
     }
 }
 
-/** Fingertip markers for Hands (beta): two dots, joined and ringed while pinching. */
+/**
+ * The tracked hand on screen: DOTS (thumb + index tips), STICKS (the 21-point skeleton) or
+ * MESH (a filled, see-through hand). Pink while pinching; a ring fills while the hand is held
+ * still to place the well.
+ */
 @Composable
-private fun HandOverlay(o: FloatArray?) {
+private fun HandOverlay(f: HandFrame?, display: String) {
     androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
-        if (o == null) return@Canvas
-        val thumb = androidx.compose.ui.geometry.Offset(o[0], o[1])
-        val index = androidx.compose.ui.geometry.Offset(o[2], o[3])
-        val pinching = o[4] > 0.5f
+        if (f == null) return@Canvas
+        val p = f.pts
+        fun pt(i: Int) = androidx.compose.ui.geometry.Offset(p[2 * i], p[2 * i + 1])
         val cyan = androidx.compose.ui.graphics.Color(0xFF22D3EE)
         val pink = androidx.compose.ui.graphics.Color(0xFFF472B6)
-        val c = if (pinching) pink else cyan
-        drawLine(c.copy(alpha = 0.7f), thumb, index, 6f)
+        val lime = androidx.compose.ui.graphics.Color(0xFFA3E635)
+        val c = if (f.pinching) pink else cyan
+        val handSize = (pt(HandLandmarks.MIDDLE_MCP) - pt(HandLandmarks.WRIST)).getDistance()
+        val bone = (handSize * 0.07f).coerceIn(4f, 18f)
+        when (display) {
+            "MESH" -> {
+                val palm = androidx.compose.ui.graphics.Path().apply {
+                    HandLandmarks.PALM.forEachIndexed { k, i -> if (k == 0) moveTo(p[2 * i], p[2 * i + 1]) else lineTo(p[2 * i], p[2 * i + 1]) }
+                    close()
+                }
+                drawPath(palm, c.copy(alpha = 0.28f))
+                // Fingers as thick rounded strokes, then a thin skeleton on top
+                var k = 0
+                while (k < HandLandmarks.BONES.size) {
+                    drawLine(c.copy(alpha = 0.28f), pt(HandLandmarks.BONES[k]), pt(HandLandmarks.BONES[k + 1]), bone * 3.2f,
+                        cap = androidx.compose.ui.graphics.StrokeCap.Round)
+                    k += 2
+                }
+                k = 0
+                while (k < HandLandmarks.BONES.size) { drawLine(c.copy(alpha = 0.8f), pt(HandLandmarks.BONES[k]), pt(HandLandmarks.BONES[k + 1]), 3f); k += 2 }
+            }
+            "STICKS" -> {
+                var k = 0
+                while (k < HandLandmarks.BONES.size) {
+                    drawLine(c.copy(alpha = 0.85f), pt(HandLandmarks.BONES[k]), pt(HandLandmarks.BONES[k + 1]), bone * 0.6f,
+                        cap = androidx.compose.ui.graphics.StrokeCap.Round)
+                    k += 2
+                }
+                for (i in 0 until 21) drawCircle(androidx.compose.ui.graphics.Color.White, bone * 0.55f, pt(i))
+            }
+            else -> {}
+        }
+        // Thumb + index tips always shown; joined while pinching
+        val thumb = pt(HandLandmarks.THUMB_TIP); val index = pt(HandLandmarks.INDEX_TIP)
+        if (f.pinching) {
+            drawLine(pink, thumb, index, 6f)
+            drawCircle(pink, 46f, (thumb + index) / 2f, style = androidx.compose.ui.graphics.drawscope.Stroke(6f))
+        }
         drawCircle(c, 14f, thumb)
         drawCircle(c, 14f, index)
-        if (pinching) drawCircle(pink, 46f, (thumb + index) / 2f, style = androidx.compose.ui.graphics.drawscope.Stroke(6f))
+        // Hold-to-place ring around the palm
+        if (f.holdProgress > 0.02f) {
+            val centre = (pt(HandLandmarks.WRIST) + pt(HandLandmarks.MIDDLE_MCP)) / 2f
+            val r = handSize * 0.9f
+            drawCircle(lime.copy(alpha = 0.25f), r, centre, style = androidx.compose.ui.graphics.drawscope.Stroke(10f))
+            drawArc(lime, -90f, 360f * f.holdProgress, false,
+                topLeft = centre - androidx.compose.ui.geometry.Offset(r, r),
+                size = androidx.compose.ui.geometry.Size(2 * r, 2 * r),
+                style = androidx.compose.ui.graphics.drawscope.Stroke(10f, cap = androidx.compose.ui.graphics.StrokeCap.Round))
+        }
     }
 }
 

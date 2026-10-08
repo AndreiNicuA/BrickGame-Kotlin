@@ -73,12 +73,46 @@ class HandGestureTest {
         assertTrue(a.single() is HandGesture.Action.Drag)
     }
 
-    @Test fun `losing the hand releases`() {
+    @Test fun `losing the hand releases after a grace period`() {
         val h = g
         h.update(hand(500f, 1000f, gap = 20f), 0)
-        h.update(null, 200)
-        assertTrue(h.pinching)
         h.update(null, 500)
+        assertTrue(h.pinching)
+        h.update(null, 800)
         assertFalse(h.pinching)
+    }
+
+    @Test fun `per-player thresholds`() {
+        val h = g
+        h.pinchOn = 0.6f; h.pinchOff = 0.8f
+        h.update(hand(500f, 1000f, gap = 100f), 0)      // 0.5 < 0.6: pinched for this player
+        assertTrue(h.pinching)
+        assertEquals(0.5f, h.lastRatio, 1e-3f)
+    }
+
+    @Test fun `holding still completes after three seconds`() {
+        val s = HoldStill(holdMs = 3000L)
+        assertFalse(s.update(500f, 500f, 1000f, 0))
+        assertFalse(s.update(510f, 505f, 1000f, 1500))
+        assertEquals(0.5f, s.progress, 0.01f)
+        assertTrue(s.update(505f, 500f, 1000f, 3000))
+    }
+
+    @Test fun `moving restarts the hold`() {
+        val s = HoldStill(holdMs = 3000L)
+        s.update(500f, 500f, 1000f, 0)
+        s.update(700f, 500f, 1000f, 2000)              // moved 200 px > 5% of 1000
+        assertEquals(0f, s.progress, 0.001f)
+        assertFalse(s.update(700f, 500f, 1000f, 4000))
+        assertTrue(s.update(700f, 500f, 1000f, 5000))
+    }
+
+    @Test fun `one-euro smooths jitter but follows real moves`() {
+        val f = OneEuro()
+        var v = 0f
+        for (i in 0 until 30) v = f.filter(if (i % 2 == 0) 100f else 104f, i * 33L)
+        assertTrue(v in 100.5f..103.5f)                 // jitter averaged out
+        for (i in 30 until 60) v = f.filter(300f, i * 33L)
+        assertEquals(300f, v, 5f)                       // a real move is followed
     }
 }
