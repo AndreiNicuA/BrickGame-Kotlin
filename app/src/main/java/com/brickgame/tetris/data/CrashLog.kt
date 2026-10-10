@@ -39,10 +39,24 @@ object CrashLog {
         }
     }
 
-    /** The report from the last crash, removed once read (so it shows only once). */
+    private const val KEPT = "last_crash_kept.txt"
+
+    /**
+     * The report from the last crash, shown once at launch. A copy is kept for
+     * Settings → About so it can still be shared later.
+     */
     fun takeLast(context: Context): String? {
         val file = File(context.filesDir, FILE)
         if (!file.exists()) return null
-        return try { file.readText().also { file.delete() } } catch (_: Exception) { null }
+        return try {
+            file.readText().also { text ->
+                File(context.filesDir, KEPT).writeText(text)
+                file.delete()
+            }
+        } catch (_: Exception) { null }
     }
+
+    /** The most recent crash report (kept until the next crash replaces it), or null. */
+    fun kept(context: Context): String? =
+        File(context.filesDir, KEPT).takeIf { it.exists() }?.let { try { it.readText() } catch (_: Exception) { null } }
 }

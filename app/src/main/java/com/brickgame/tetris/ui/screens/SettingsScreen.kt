@@ -759,6 +759,27 @@ fun SettingsScreen(
         item { Card { Text("BRICKWELL", color = acc(), fontSize = 24.sp, fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace); Text("Retro · Neon · 3D", color = tx(), fontSize = 14.sp) } }
         item { Card { Info("Version", com.brickgame.tetris.BuildConfig.VERSION_NAME); Info("Build", com.brickgame.tetris.BuildConfig.VERSION_CODE.toString()); Info("Platform", "Android 8.0+"); Info("Engine", "Compose + OpenGL ES") } }
         item { Card { Text("Developer", color = dim(), fontSize = 12.sp); Text("Andrei Anton", color = tx(), fontSize = 16.sp, fontWeight = FontWeight.Bold) } }
+        item {
+            // The last crash report (if any), shareable any time
+            val context = androidx.compose.ui.platform.LocalContext.current
+            val report = remember { com.brickgame.tetris.data.CrashLog.kept(context) }
+            if (report != null) Card {
+                Text("Last crash report", color = tx(), fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                Text(report.lineSequence().take(2).joinToString(" · "), color = dim(), fontSize = 11.sp)
+                Spacer(Modifier.height(8.dp))
+                Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(acc().copy(0.15f))
+                    .clickable {
+                        val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                            type = "text/plain"
+                            putExtra(android.content.Intent.EXTRA_SUBJECT, "Brickwell crash report")
+                            putExtra(android.content.Intent.EXTRA_TEXT, report)
+                        }
+                        context.startActivity(android.content.Intent.createChooser(send, "Share crash report"))
+                    }.padding(12.dp), contentAlignment = Alignment.Center) {
+                    Text("Share last crash report", color = acc(), fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
         item { Lbl("Features") }
         item { Card {
             Text("3D mode with OpenGL ES rendering", color = tx(), fontSize = 12.sp)
