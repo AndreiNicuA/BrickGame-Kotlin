@@ -170,6 +170,11 @@ class BoardRenderer(private val context: Context) : GLSurfaceView.Renderer {
             }
         }
 
+        // Layer clear: glowing shards burst out of each cleared cell
+        if (state.clearingLayers.isNotEmpty() && state.clearAnimProgress > 0.02f && state.board.isNotEmpty()) {
+            drawClearBurst(state)
+        }
+
         // Ghost piece (transparent)
         if (showGhost && piece != null && state.ghostY < piece.y) {
             GLES20.glEnable(GLES20.GL_BLEND)
@@ -180,6 +185,51 @@ class BoardRenderer(private val context: Context) : GLSurfaceView.Renderer {
             GLES20.glDepthMask(true)
             GLES20.glDisable(GLES20.GL_BLEND)
         }
+    }
+
+    // ===== Layer clear burst =====
+    // Shard paths are a pure function of the animation progress (seeded per cell), so the burst
+    // needs no extra state and looks the same however often frames are drawn.
+    private fun drawClearBurst(state: Game3DState) {
+        val p = state.clearAnimProgress.coerceIn(0f, 1f)
+        val size = 0.42f * (1f - p) + 0.05f
+        val glow = (1f - p).coerceIn(0f, 1f)
+        for (y in state.clearingLayers) {
+            if (y !in state.board.indices) continue
+            val layer = state.board[y]
+            for (z in layer.indices) for (x in layer[z].indices) {
+                val ci = layer[z][x]
+                if (ci <= 0) continue
+                val rgb = pieceColorRGB(ci)
+                val bright = floatArrayOf((rgb[0] * 1.3f).coerceAtMost(1f), (rgb[1] * 1.3f).coerceAtMost(1f), (rgb[2] * 1.3f).coerceAtMost(1f))
+                for (k in 0 until 2) {
+                    // Deterministic pseudo-random direction per (cell, shard)
+                    var h = (x * 73856093) xor (y * 19349663) xor (z * 83492791) xor (k * 2654435761L.toInt())
+                    h = h xor (h ushr 13); h *= 0x5bd1e995; h = h xor (h ushr 15)
+                    val a1 = ((h and 0xFFFF) / 65535f) * 6.2832f
+                    val outward = 1.2f + ((h ushr 16) and 0xFF) / 255f * 1.6f
+                    val dx = kotlin.math.cos(a1) * outward
+                    val dz = kotlin.math.sin(a1) * outward
+                    // Up, then falling back down (a small arc)
+                    val lift = 2.2f * p - 2.8f * p * p
+                    drawShard(x + 0.5f + dx * p, y + 0.5f + lift, z + 0.5f + dz * p, size, bright, glow)
+                }
+            }
+        }
+    }
+
+    private fun drawShard(cx: Float, cy: Float, cz: Float, s: Float, rgb: FloatArray, glow: Float) {
+        Matrix.setIdentityM(cellMatrix, 0)
+        Matrix.translateM(cellMatrix, 0, cx - s / 2f, cy - s / 2f, cz - s / 2f)
+        Matrix.scaleM(cellMatrix, 0, s, s, s)
+        Matrix.multiplyMM(modelMatrix, 0, baseMatrix, 0, cellMatrix, 0)
+        Matrix.multiplyMM(mvpMatrix, 0, vpMatrix, 0, modelMatrix, 0)
+        cubeShader.setUniformMatrix4fv("uMVPMatrix", mvpMatrix)
+        cubeShader.setUniformMatrix4fv("uModelMatrix", modelMatrix)
+        cubeShader.setUniform3f("uBaseColor", rgb[0], rgb[1], rgb[2])
+        cubeShader.setUniform1f("uAlpha", 1f)
+        cubeShader.setUniform1f("uClearFlash", glow * 0.8f)
+        cube.draw(cubeShader)
     }
 
     // ===== Drop guides: a line from each falling column down to where it will land =====

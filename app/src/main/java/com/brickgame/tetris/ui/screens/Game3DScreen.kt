@@ -897,6 +897,12 @@ private fun BoxScope.PlayAreaLayer(
             Text("Step back inside the lines. The game is paused.", style = BwType.Small)
         }
     }
+    if (boundary.wellOutside && !outOfArea) {
+        Text("The well goes past your play area. Pinch it smaller or move it.",
+            style = BwType.Small.copy(color = Bw.Ground),
+            modifier = Modifier.align(Alignment.TopCenter).padding(top = 96.dp, start = 16.dp, end = 16.dp)
+                .clip(RoundedCornerShape(12.dp)).background(Bw.Amber).padding(horizontal = 12.dp, vertical = 8.dp))
+    }
     if (boundary.findingFloor) {
         Text("Point at the floor around your feet to set your ${areaLabel ?: ""} play area",
             style = BwType.Small.copy(color = Bw.Text),

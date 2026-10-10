@@ -34,7 +34,9 @@ class HandFrame(val pts: FloatArray, val pinching: Boolean, val ratio: Float, va
 data class BoundaryInfo(
     val drawing: Boolean = false, val corners: Int = 0, val set: Boolean = false, val distance: Float? = null,
     /** A preset area is waiting for the floor under the player to be found. */
-    val findingFloor: Boolean = false
+    val findingFloor: Boolean = false,
+    /** The placed well (after resizing / turning) sticks out of the play area. */
+    val wellOutside: Boolean = false
 )
 
 /** What the AR view is doing, for the on-screen hints. */
@@ -87,6 +89,8 @@ class ArBoardRenderer(
     @Volatile var boundaryDrawing = false
         private set
     private var lastBoundaryReport = 0L
+    /** Last check of the placed well against the play area (resizing / turning can push it out). */
+    private var wellOutside = false
     private var lastBoundaryInfo: BoundaryInfo? = null
     private val boundaryMatrix = FloatArray(16)
     private val boundaryInv = FloatArray(16)
@@ -212,12 +216,12 @@ class ArBoardRenderer(
     /** Forget the play area. */
     fun clearBoundary() = commands.offer {
         boundaryAnchor?.detach(); boundaryAnchor = null
-        bxs.clear(); bzs.clear(); playArea = null; boundaryDrawing = false; presetPending = null
+        bxs.clear(); bzs.clear(); playArea = null; boundaryDrawing = false; presetPending = null; wellOutside = false
         pushBoundaryInfo(null)
     }
 
     private fun pushBoundaryInfo(distance: Float?) {
-        val info = BoundaryInfo(boundaryDrawing, bxs.size, playArea != null, distance, presetPending != null)
+        val info = BoundaryInfo(boundaryDrawing, bxs.size, playArea != null, distance, presetPending != null, wellOutside)
         if (info != lastBoundaryInfo) { lastBoundaryInfo = info; onBoundary(info) }
     }
 
@@ -433,6 +437,8 @@ class ArBoardRenderer(
                     )
                 }
                 reportPieceOnScreen()
+                val outside = playArea != null && !fitsPlayArea(a.pose)
+                if (outside != wellOutside) { wellOutside = outside; pushBoundaryInfo(lastBoundaryInfo?.distance) }
             }
         }
     }
