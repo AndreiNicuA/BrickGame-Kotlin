@@ -507,6 +507,8 @@ private fun PlayScreen(
             onHandProfile = vm::updateHandProfile,
             arGuideSeen = vm.players.collectAsState().value.active?.arGuideSeen ?: false,
             onArGuideSeen = vm::markArGuideSeen,
+            // Versus starts from the 3-2-1 countdown instead of the Get ready screen
+            showReadyPanel = !versusRound.active,
             onMotionView = vm::setMotionView,
             state = game3DState,
             onMoveX = vm::move3DX,

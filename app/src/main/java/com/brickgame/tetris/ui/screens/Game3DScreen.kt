@@ -99,7 +99,9 @@ fun Game3DScreen(
     handProfile: com.brickgame.tetris.data.HandProfile = com.brickgame.tetris.data.HandProfile(),
     onHandProfile: ((com.brickgame.tetris.data.HandProfile) -> com.brickgame.tetris.data.HandProfile) -> Unit = {},
     arGuideSeen: Boolean = true,
-    onArGuideSeen: () -> Unit = {}
+    onArGuideSeen: () -> Unit = {},
+    /** Show the "Get ready" screen before play (not in Versus, where the countdown starts it). */
+    showReadyPanel: Boolean = true
 ) {
     val theme = LocalGameTheme.current
 
@@ -135,6 +137,10 @@ fun Game3DScreen(
     var boundary by remember { mutableStateOf(BoundaryInfo()) }
     var outOfArea by remember { mutableStateOf(false) }
     var showAreaMenu by remember { mutableStateOf(false) }
+    var showMenu by remember { mutableStateOf(false) }
+    var showReady by remember { mutableStateOf(showReadyPanel) }
+    var wellLocked by remember { mutableStateOf(true) }
+    var hintClosed by remember { mutableStateOf(false) }
     // AR guide (first time per player, or the Guide chip) and Hand setup
     var showArGuide by remember { mutableStateOf(false) }
     var setupStep by remember { mutableStateOf<HandSetupStep?>(null) }
@@ -161,8 +167,8 @@ fun Game3DScreen(
     val heatLimit by rememberUpdatedState(arHeatLimit.coerceAtMost(AR_HARD_LIMIT_C - 1))
 
     /** Leave AR when the phone is too warm: the player's limit, or the safety net that always applies. */
-    /** The game was put on hold by AR itself (placing, tracking lost, outside the area) — no pause screen. */
-    var arAutoPaused by remember { mutableStateOf(false) }
+    /** The game is on hold by the screen itself (getting ready, menu open, AR placing / lost) — no pause screen. */
+    var autoHeld by remember { mutableStateOf(false) }
 
     fun onHeatInfo(h: ArHeatInfo) {
         arHeat = h
@@ -174,7 +180,7 @@ fun Game3DScreen(
         val hardStop = systemCritical || (t != null && t >= AR_HARD_LIMIT_C)
         val userStop = t != null && t >= heatLimit
         if (hardStop || userStop) {
-            arAutoPaused = false
+            autoHeld = false
             arSession = null
             if (state.status == GameStatus.PLAYING) onPause()
             arMessage = when {
@@ -229,10 +235,12 @@ fun Game3DScreen(
     }
     // AR holds the game while it can't be played (no well yet, tracking lost, setting up the area,
     // stepped outside it) and lets it run again by itself once everything is ready
-    val arReady = arOn && arStatus == ArStatus.PLACED && !boundary.drawing && !boundary.findingFloor && !outOfArea &&
-        !showArGuide && setupStep == null
-    // The guide opens by itself the first time this player starts AR
-    LaunchedEffect(arOn) { if (arOn && !arGuideSeen) showArGuide = true }
+    // The game only runs when nothing needs the player's attention: not getting ready, no menu,
+    // no guide / setup, and (in AR) the well placed, tracked and the player inside the area
+    val canPlay = !showReady && !showMenu && !showArGuide && setupStep == null && !showAreaMenu &&
+        (!arOn || (arStatus == ArStatus.PLACED && !boundary.drawing && !boundary.findingFloor && !outOfArea))
+    // The AR guide opens by itself the first time this player starts AR (after Get ready)
+    LaunchedEffect(arOn, showReady) { if (arOn && !showReady && !arGuideSeen) showArGuide = true }
     // Hand setup: measure the open hand, then the pinch (2 s each), then pick how the hand is drawn
     LaunchedEffect(setupStep) {
         val step = setupStep
@@ -257,11 +265,10 @@ fun Game3DScreen(
             }
         }
     }
-    LaunchedEffect(arOn, arReady, state.status) {
+    LaunchedEffect(canPlay, state.status) {
         when {
-            !arOn -> { if (arAutoPaused && state.status == GameStatus.PAUSED) onPause(); arAutoPaused = false }
-            !arReady && state.status == GameStatus.PLAYING -> { arAutoPaused = true; onPause() }
-            arReady && arAutoPaused && state.status == GameStatus.PAUSED -> { arAutoPaused = false; onPause() }
+            !canPlay && state.status == GameStatus.PLAYING -> { autoHeld = true; onPause() }
+            canPlay && autoHeld && state.status == GameStatus.PAUSED -> { autoHeld = false; onPause() }
         }
     }
 
@@ -367,28 +374,22 @@ fun Game3DScreen(
                 }
     }
     val pauseButton: @Composable () -> Unit = {
+              Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Box(Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(if (showMenu) Bw.Cyan else Bw.Surface)
+                    .border(1.dp, Bw.Line, RoundedCornerShape(14.dp))
+                    .clickable(onClickLabel = "Menu") { showMenu = !showMenu }, contentAlignment = Alignment.Center) {
+                    Text("☰", fontSize = 20.sp, color = if (showMenu) Bw.Ground else Bw.Text)
+                }
                 Box(Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(Bw.Surface)
                     .border(1.dp, Bw.Line, RoundedCornerShape(14.dp))
                     // While AR holds the game, the pause button just shows the pause screen
-                    .clickable(onClickLabel = "Pause") { if (arAutoPaused) arAutoPaused = false else onPause() }, contentAlignment = Alignment.Center) {
+                    .clickable(onClickLabel = "Pause") { if (autoHeld) autoHeld = false else onPause() }, contentAlignment = Alignment.Center) {
                     GlyphIcon(Glyph.PAUSE, Bw.Text, 18.dp)
                 }
+              }
     }
-    // View & mode chips
-    val chipsRow: @Composable () -> Unit = {
-            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 2.dp),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                if (arSupport == ArSupport.SUPPORTED) ModeChip("AR", arOn, Bw.Cyan) { toggleAr() }
-                if (arOn) ModeChip("Guide", showArGuide, Bw.Violet) { showArGuide = !showArGuide }
-                if (arOn) ModeChip(if (boundary.set) "Play area ✓" else "Play area", boundary.drawing || boundary.set || showAreaMenu, Bw.Lime) {
-                    showAreaMenu = !showAreaMenu
-                }
-                if (hasMotionSensor && !arOn) ModeChip("Motion view", motionView, Bw.Violet) { setMotionView(!motionView) }
-                if (!arOn) ModeChip("Camera", showCamSettings, Bw.Amber) { showCamSettings = !showCamSettings }
-                ModeChip("Freeze gravity", !state.autoGravity, Color(0xFF38BDF8)) { onToggleGravity() }
-                if (!arOn) ModeChip("Flat view", starWars, Bw.Lime) { starWars = !starWars }
-            }
-    }
+    // Everything that used to be a row of chips lives in the ☰ menu now
+    val chipsRow: @Composable () -> Unit = { Box(Modifier) }
 
             // 3D Board
     val boardArea: @Composable (Modifier, Boolean) -> Unit = { mod, chipsInside ->
@@ -413,6 +414,7 @@ fun Game3DScreen(
                         onHeat = { onHeatInfo(it) },
                         modifier = Modifier.fillMaxSize(),
                         controller = arController,
+                        wellLocked = wellLocked,
                         arrow = arSettings.arrow,
                         floorMesh = arSettings.floorMesh,
                         // Hand tracking rests while Android says the phone is hot
@@ -459,32 +461,23 @@ fun Game3DScreen(
                 if (arOn) {
                     Column(Modifier.align(Alignment.TopCenter).padding(top = 10.dp),
                         horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        // Once placed: Move + sizes on one line. Inside = the well on the floor around you.
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                            ArStatusBar(arStatus, Modifier) { arInside = false; arReplace++ }
-                            if (arStatus == ArStatus.PLACED) {
-                                listOf("Table" to 0.03f, "Big" to 0.08f, "Room" to 0.2f).forEach { (label, cell) ->
-                                    ArChip(label, !arInside && kotlin.math.abs(arCell - cell) < 0.004f) { arCell = cell }
-                                }
-                                ArChip("Inside", arInside) {
-                                    arCell = INSIDE_CELL; arInside = true; arInsideKey++
-                                    if (!boundary.set) arMessage = "Tip: set a Play area first (chip below) so you're warned before you walk into furniture."
-                                }
-                            }
-                        }
+                        // Only what needs attention: placing / tracking messages (sizes live in the ☰ menu)
+                        if (arStatus != ArStatus.PLACED) ArStatusBar(arStatus, Modifier) { }
+                        if (!wellLocked) ArChip("Adjusting the well: two fingers resize, turn, move  ·  Done ✓", true) { wellLocked = true }
                         // Gesture help: shown for a few seconds after placing, then out of the way
                         var hint by remember { mutableStateOf(false) }
                         LaunchedEffect(arStatus == ArStatus.PLACED, arInside) {
-                            hint = arStatus == ArStatus.PLACED
+                            hint = arStatus == ArStatus.PLACED && !hintClosed
                             if (hint) { kotlinx.coroutines.delay(7000); hint = false }
                         }
                         if (hint) {
                             Text(if (arSettings.hands) "Hands on: hold your hand in front of the camera and pinch the piece (thumb + index). Move to steer · twist to spin · flick down to drop"
                                  else if (arInside) "You're inside! Look up for the falling piece — the pink arrow points to it. Drag to move · tap to spin · flick down to drop"
-                                 else "Drag the piece · tap to spin · flick down to drop · two fingers: size, turn, move",
+                                 else "Drag the piece · tap to spin · flick down to drop",
                                 color = Color.White.copy(0.9f), fontSize = 11.sp,
                                 modifier = Modifier.padding(horizontal = 12.dp)
-                                    .background(Color(0xB3141A2E), RoundedCornerShape(8.dp)).padding(horizontal = 10.dp, vertical = 4.dp))
+                                    .background(Color(0xB3141A2E), RoundedCornerShape(8.dp))
+                                    .clickable { hint = false; hintClosed = true }.padding(horizontal = 10.dp, vertical = 4.dp))
                         }
                         arHeat?.let { h -> HeatChip(h, heatLimit) { onArHeatLimit(nextHeatLimit(heatLimit)) } }
                     }
@@ -525,7 +518,10 @@ fun Game3DScreen(
                         if (arSettings.areaSize() != null) {
                             ArChip("Re-centre here", false) { applyPlayArea(arSettings.playArea) }
                         }
-                        Text("Custom size: Settings → 3D & AR", style = BwType.Small.copy(fontSize = 11.sp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("Custom size: Settings → 3D & AR", style = BwType.Small.copy(fontSize = 11.sp), modifier = Modifier.weight(1f))
+                            ArChip("Done ✓", true) { showAreaMenu = false }
+                        }
                     }
                 }
                 if (arOn) PlayAreaLayer(
@@ -535,7 +531,7 @@ fun Game3DScreen(
                     onCancel = arController::clearBoundary
                 )
                 arMessage?.let { msg ->
-                    Text(msg, color = Color.White, fontSize = 13.sp,
+                    Text("$msg   ✕", color = Color.White, fontSize = 13.sp,
                         modifier = Modifier.align(Alignment.TopCenter).padding(top = 10.dp)
                             .background(Color(0xE6141A2E), RoundedCornerShape(12.dp))
                             .clickable { arMessage = null }.padding(horizontal = 14.dp, vertical = 8.dp))
@@ -565,11 +561,11 @@ fun Game3DScreen(
                             ActionButton("SETTINGS", onOpenSettings, width = 140.dp, height = 38.dp)
                         }
                     }
-                    GameStatus.PAUSED -> if (!arAutoPaused) BwPauseOverlay(onResume = { onPause() }, onSettings = onOpenSettings, onQuit = onQuit)
+                    GameStatus.PAUSED -> if (!autoHeld) BwPauseOverlay(onResume = { onPause() }, onSettings = onOpenSettings, onQuit = onQuit)
                     GameStatus.GAME_OVER -> BwGameOverOverlay(
                         score = state.score, level = state.level, lines = state.layers, highScore = Int.MAX_VALUE,
                         maxCombo = 0, backToBack = 0, elapsedMs = 0L,
-                        onAgain = onStart, onLeave = onQuit, linesLabel = "LAYERS"
+                        onAgain = { showReady = showReadyPanel; onStart() }, onLeave = onQuit, linesLabel = "LAYERS"
                     )
                     else -> {}
                 }
@@ -611,7 +607,53 @@ fun Game3DScreen(
                         }
                     }
                 }
-                if (chipsInside) Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(bottom = 6.dp)) { chipsRow() }
+                // ☰ menu and Get ready sit on top of everything in the board area
+                if (showMenu) GameMenu3D(
+                    arSupported = arSupport == ArSupport.SUPPORTED, arOn = arOn, onAr = { toggleAr() },
+                    motionAvailable = hasMotionSensor, motionView = motionView, onMotionView = { setMotionView(!motionView) },
+                    cameraPanel = showCamSettings, onCameraPanel = { showCamSettings = !showCamSettings; showMenu = false },
+                    flat = starWars, onFlat = { starWars = !starWars },
+                    frozen = !state.autoGravity, onFrozen = onToggleGravity,
+                    arSize = if (arInside) "INSIDE" else when { arCell < 0.05f -> "TABLE"; arCell < 0.12f -> "BIG"; else -> "ROOM" },
+                    onArSize = { id ->
+                        when (id) {
+                            "TABLE" -> { arInside = false; arCell = 0.03f }
+                            "BIG" -> { arInside = false; arCell = 0.08f }
+                            "ROOM" -> { arInside = false; arCell = 0.2f }
+                            "INSIDE" -> { arCell = INSIDE_CELL; arInside = true; arInsideKey++ }
+                        }
+                    },
+                    onAdjustWell = { wellLocked = false; showMenu = false },
+                    onReplaceWell = { arInside = false; arReplace++; showMenu = false },
+                    playAreaLabel = if (boundary.set) (arSettings.areaSize()?.let { (w, d) -> "%.1f × %.1f m".format(w, d) } ?: "drawn") else "off",
+                    onPlayArea = { showAreaMenu = true; showMenu = false },
+                    hands = arSettings.hands, onHands = { onArSettings { it.copy(hands = !it.hands) } },
+                    handsCalibrated = handProfile.calibrated,
+                    onHandSetup = {
+                        showMenu = false
+                        if (!arOn) toggleAr()
+                        setupMessage = null; setupStep = HandSetupStep.OPEN
+                    },
+                    onGuide = { showMenu = false; if (!arOn) toggleAr(); showArGuide = true },
+                    onClose = { showMenu = false }
+                )
+                if (showReady) GetReady3D(
+                    arSupport = arSupport, arOn = arOn, onAr = { want -> if (want != arOn) toggleAr() },
+                    frozen = !state.autoGravity, onFrozen = { want -> if (want == state.autoGravity) onToggleGravity() },
+                    arSize = arSettings.defaultSize, onArSize = { id -> onArSettings { it.copy(defaultSize = id) } },
+                    playAreaLabel = arSettings.areaSize()?.let { (w, d) -> "%.1f × %.1f m".format(w, d) } ?: if (arSettings.playArea == "CORNERS") "draw it" else "off",
+                    hands = arSettings.hands, onHands = { onArSettings { it.copy(hands = !it.hands) } },
+                    onStart = {
+                        showReady = false
+                        // Apply the chosen AR size now (the session may already be running)
+                        if (arOn) {
+                            val st = arSettings
+                            arCell = st.defaultCell(); arInside = false
+                            if (st.defaultSize == "INSIDE") { arInside = true; arInsideKey++ }
+                        }
+                    },
+                    onMenu = onQuit
+                )
             }
     }
 
@@ -936,6 +978,148 @@ private fun BoxScope.PlayAreaLayer(
                 if (boundary.corners >= 3) ArChip("Done", true, onDone)
             }
         }
+    }
+}
+
+// ===== ☰ menu and Get ready =====
+
+@Composable private fun MenuSection(title: String, color: Color) {
+    Text(title, style = BwType.Overline.copy(color = color), modifier = Modifier.padding(top = 10.dp, bottom = 2.dp))
+}
+
+/** A menu row: label (+ optional value) and an on/off pill or an arrow. */
+@Composable private fun MenuRow(label: String, value: String? = null, on: Boolean? = null, enabled: Boolean = true, onClick: () -> Unit) {
+    Row(Modifier.fillMaxWidth().heightIn(min = 46.dp).clip(RoundedCornerShape(12.dp))
+        .clickable(enabled = enabled, onClick = onClick).padding(horizontal = 10.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text(label, style = BwType.Label.copy(color = if (enabled) Bw.Text else Bw.TextMuted, fontSize = 14.sp))
+            value?.let { Text(it, style = BwType.Small.copy(fontSize = 11.sp)) }
+        }
+        when (on) {
+            null -> Text("›", fontSize = 20.sp, color = Bw.TextMuted)
+            else -> Box(Modifier.size(44.dp, 26.dp).clip(RoundedCornerShape(13.dp)).background(if (on) Bw.Cyan else Bw.Surface)
+                .border(1.dp, if (on) Bw.Cyan else Bw.Line, RoundedCornerShape(13.dp)),
+                contentAlignment = if (on) Alignment.CenterEnd else Alignment.CenterStart) {
+                Box(Modifier.padding(3.dp).size(20.dp).clip(CircleShape).background(if (on) Bw.Ground else Bw.TextMuted))
+            }
+        }
+    }
+}
+
+/** The 3D ☰ menu: view, AR, game and one-time setup, sliding in from the right. */
+@Composable
+private fun BoxScope.GameMenu3D(
+    arSupported: Boolean, arOn: Boolean, onAr: () -> Unit,
+    motionAvailable: Boolean, motionView: Boolean, onMotionView: () -> Unit,
+    cameraPanel: Boolean, onCameraPanel: () -> Unit,
+    flat: Boolean, onFlat: () -> Unit,
+    frozen: Boolean, onFrozen: () -> Unit,
+    arSize: String, onArSize: (String) -> Unit,
+    onAdjustWell: () -> Unit, onReplaceWell: () -> Unit,
+    playAreaLabel: String, onPlayArea: () -> Unit,
+    hands: Boolean, onHands: () -> Unit, handsCalibrated: Boolean, onHandSetup: () -> Unit,
+    onGuide: () -> Unit, onClose: () -> Unit
+) {
+    // Tap outside closes
+    Box(Modifier.matchParentSize().background(Bw.Ground.copy(alpha = 0.45f)).clickable(onClick = onClose))
+    Column(Modifier.align(Alignment.TopEnd).fillMaxHeight().widthIn(max = 320.dp).fillMaxWidth(0.86f)
+        .clip(RoundedCornerShape(topStart = 20.dp, bottomStart = 20.dp)).background(Bw.Ground)
+        .border(1.dp, Bw.Line, RoundedCornerShape(topStart = 20.dp, bottomStart = 20.dp))
+        .clickable(enabled = false) {}.verticalScroll(rememberScrollState()).padding(14.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("3D options", style = BwType.Title.copy(fontSize = 20.sp), modifier = Modifier.weight(1f))
+            Box(Modifier.size(40.dp).clip(CircleShape).background(Bw.Surface).clickable(onClickLabel = "Close menu", onClick = onClose),
+                contentAlignment = Alignment.Center) { Text("✕", color = Bw.Text, fontSize = 16.sp) }
+        }
+        MenuSection("VIEW", Bw.Cyan)
+        if (arSupported) MenuRow("AR — play in your room", if (arOn) "Camera on" else "Off", on = arOn, onClick = onAr)
+        if (!arOn) {
+            if (motionAvailable) MenuRow("Motion view", "Tilt the phone to look around", on = motionView, onClick = onMotionView)
+            MenuRow("Camera controls", "Orbit, tilt, zoom, presets", on = cameraPanel, onClick = onCameraPanel)
+            MenuRow("Flat view", "Classic top-down perspective", on = flat, onClick = onFlat)
+        }
+        if (arOn) {
+            MenuSection("AR WELL", Bw.Lime)
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp)) {
+                listOf("TABLE" to "Table", "BIG" to "Big", "ROOM" to "Room", "INSIDE" to "Inside").forEach { (id, label) ->
+                    ArChip(label, arSize == id) { onArSize(id) }
+                }
+            }
+            MenuRow("Adjust the well", "Resize, turn and move it with two fingers", onClick = onAdjustWell)
+            MenuRow("Place it somewhere else", onClick = onReplaceWell)
+            MenuRow("Play area", playAreaLabel, onClick = onPlayArea)
+            MenuRow("Hands (beta)", if (handsCalibrated) "Pinch the piece with your fingers" else "Run hand setup first for best results", on = hands, onClick = onHands)
+        }
+        MenuSection("GAME", Bw.Pink)
+        MenuRow("Freeze gravity", "Pieces wait until you drop them", on = frozen, onClick = onFrozen)
+        if (arSupported) {
+            MenuSection("SET UP ONCE", Bw.Violet)
+            MenuRow("How to play in AR", "Room, light, placing, playing", onClick = onGuide)
+            MenuRow("Set up the play area", "Size, or draw your space", onClick = onPlayArea)
+            MenuRow("Set up hand tracking", if (handsCalibrated) "Done — run again to retune" else "Learns your hand in 10 seconds", onClick = onHandSetup)
+        }
+    }
+}
+
+/** Before every 3D game: choose screen or AR, gravity, and AR basics. START begins the game. */
+@Composable
+private fun BoxScope.GetReady3D(
+    arSupport: ArSupport, arOn: Boolean, onAr: (Boolean) -> Unit,
+    frozen: Boolean, onFrozen: (Boolean) -> Unit,
+    arSize: String, onArSize: (String) -> Unit,
+    playAreaLabel: String,
+    hands: Boolean, onHands: () -> Unit,
+    onStart: () -> Unit, onMenu: () -> Unit
+) {
+    Column(Modifier.matchParentSize().background(Bw.Ground.copy(alpha = if (arOn) 0.82f else 0.96f))
+        .clickable(enabled = false) {}.verticalScroll(rememberScrollState()).padding(18.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text("GET READY", style = BwType.Overline.copy(color = Bw.Cyan))
+        Text("3D Well", style = BwType.Title.copy(fontSize = 26.sp))
+
+        Text("WHERE TO PLAY", style = BwType.Overline)
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            ReadyOption("Screen", "Classic 3D on the phone", !arOn, Modifier.weight(1f)) { onAr(false) }
+            ReadyOption("AR", when (arSupport) {
+                ArSupport.SUPPORTED -> "The well in your room"
+                ArSupport.CHECKING -> "Checking this phone…"
+                ArSupport.UNSUPPORTED -> "Not available on this phone"
+            }, arOn, Modifier.weight(1f), enabled = arSupport == ArSupport.SUPPORTED) { onAr(true) }
+        }
+        if (arOn) {
+            Text("WELL SIZE", style = BwType.Overline)
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                listOf("TABLE" to "Table", "BIG" to "Big", "ROOM" to "Room", "INSIDE" to "Inside").forEach { (id, label) ->
+                    ArChip(label, arSize == id) { onArSize(id) }
+                }
+            }
+            Text("Play area: $playAreaLabel  ·  Hands: ${if (hands) "on" else "off"}  (change in ☰)", style = BwType.Small)
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) { ArChip(if (hands) "Hands on" else "Hands off", hands, onHands) }
+        }
+
+        Text("GRAVITY", style = BwType.Overline)
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            ReadyOption("Normal", "Pieces fall by themselves", !frozen, Modifier.weight(1f)) { onFrozen(false) }
+            ReadyOption("Frozen", "Pieces wait — take your time", frozen, Modifier.weight(1f)) { onFrozen(true) }
+        }
+        Spacer(Modifier.height(4.dp))
+        com.brickgame.tetris.ui.brand.BwPrimaryButton("START", onStart, Modifier.fillMaxWidth(), height = 58.dp)
+        com.brickgame.tetris.ui.brand.BwSecondaryButton("Menu", onMenu, Modifier.fillMaxWidth())
+        if (arOn) Text("After START, place the well: tap the surface, or hold your hand on it for 3 seconds. The game waits until it's placed.",
+            style = BwType.Small)
+    }
+}
+
+@Composable
+private fun ReadyOption(title: String, subtitle: String, selected: Boolean, modifier: Modifier, enabled: Boolean = true, onClick: () -> Unit) {
+    Column(modifier.heightIn(min = 76.dp).clip(RoundedCornerShape(16.dp))
+        .background(if (selected) Bw.Cyan.copy(alpha = 0.16f) else Bw.Surface)
+        .border(if (selected) 2.dp else 1.dp, if (selected) Bw.Cyan else Bw.Line, RoundedCornerShape(16.dp))
+        .clickable(enabled = enabled, onClick = onClick).padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(title, style = BwType.Label.copy(color = if (enabled) Bw.Text else Bw.TextMuted, fontSize = 16.sp))
+        Text(subtitle, style = BwType.Small.copy(fontSize = 11.sp))
     }
 }
 

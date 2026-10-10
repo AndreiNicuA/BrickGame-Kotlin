@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -153,6 +154,8 @@ fun ArBoardView(
     handGestures: Boolean = false,
     /** Hold a hand still on a surface for 3 s to place the well there. */
     handPlace: Boolean = true,
+    /** Placed well can't be moved / resized / turned with two fingers (unlock to adjust it). */
+    wellLocked: Boolean = true,
     /** Hands wanted but paused because the phone is hot (shown in the status chip). */
     handsResting: Boolean = false,
     /** The player's pinch thresholds (Hand setup). */
@@ -182,6 +185,7 @@ fun ArBoardView(
     LaunchedEffect(replaceKey) { if (replaceKey > 0) rendererRef.value?.requestReplace() }
     LaunchedEffect(insideKey) { if (insideKey > 0) rendererRef.value?.requestInside() }
     LaunchedEffect(arrow) { rendererRef.value?.arrowEnabled = arrow }
+    val latestLocked by rememberUpdatedState(wellLocked)
     // The hand tracker only exists while something needs it (it costs battery and heat)
     var handOverlay by remember { mutableStateOf<HandFrame?>(null) }
     var trackerRef by remember { mutableStateOf<HandTracker?>(null) }
@@ -274,7 +278,7 @@ fun ArBoardView(
                 view.setEGLConfigChooser(8, 8, 8, 8, 16, 0)
                 view.setRenderer(renderer)
                 view.renderMode = GLSurfaceView.RENDERMODE_CONTINUOUSLY  // paced by the 30 fps camera
-                view.setOnTouchListener(ArTouch(renderer,
+                view.setOnTouchListener(ArTouch(renderer, locked = { latestLocked },
                     pieceHeight = {
                         latestState.currentPiece?.let { p -> p.y + p.blocks.map { it.y }.average().toFloat() + 0.5f }
                     },
@@ -299,18 +303,20 @@ fun ArBoardView(
                 t == null -> null
                 t.unavailable -> "✋ Hand tracking isn't available on this phone"
                 !t.loaded() -> "✋ Starting hand tracking…"
-                System.currentTimeMillis() - t.lastHandMs < 1000 -> "✋ Tracking your hand"
+                System.currentTimeMillis() - t.lastHandMs < 1500 -> null      // all good: stay out of the way
                 else -> "✋ Show your whole hand to the camera"
             }
             kotlinx.coroutines.delay(400)
         }
     }
-    handStatus?.let {
-        androidx.compose.material3.Text(it, color = androidx.compose.ui.graphics.Color.White,
+    var dismissedStatus by remember { mutableStateOf<String?>(null) }
+    handStatus?.takeIf { it != dismissedStatus }?.let {
+        androidx.compose.material3.Text("$it   ✕", color = androidx.compose.ui.graphics.Color.White,
             fontSize = androidx.compose.ui.unit.TextUnit(12f, androidx.compose.ui.unit.TextUnitType.Sp),
             modifier = Modifier.align(androidx.compose.ui.Alignment.BottomEnd)
                 .padding(androidx.compose.ui.unit.Dp(10f))
                 .background(androidx.compose.ui.graphics.Color(0xD9141A2E), androidx.compose.foundation.shape.RoundedCornerShape(androidx.compose.ui.unit.Dp(10f)))
+                .clickable { dismissedStatus = it }
                 .padding(horizontal = androidx.compose.ui.unit.Dp(10f), vertical = androidx.compose.ui.unit.Dp(6f)))
     }
     }
@@ -385,6 +391,7 @@ private fun HandOverlay(f: HandFrame?, display: String) {
 /** Touch handling for the AR view (see [ArBoardView] for the gestures). Runs on the UI thread. */
 private class ArTouch(
     private val renderer: ArBoardRenderer,
+    private val locked: () -> Boolean,
     private val pieceHeight: () -> Float?,
     private val onDrag: (Float, Float) -> Unit,
     private val onTap: () -> Unit,
@@ -407,7 +414,7 @@ private class ArTouch(
                 downX = e.x; downY = e.y; downTime = e.eventTime
                 dragging = false; multi = false; moving = false
             }
-            MotionEvent.ACTION_POINTER_DOWN -> if (e.pointerCount == 2 && renderer.isPlaced && !renderer.boundaryDrawing) {
+            MotionEvent.ACTION_POINTER_DOWN -> if (e.pointerCount == 2 && renderer.isPlaced && !renderer.boundaryDrawing && !locked()) {
                 multi = true; dragging = false; moving = false
                 startSpan = span(e); startAngle = angle(e)
                 startCell = renderer.cellMeters; startYaw = renderer.yawDegrees
