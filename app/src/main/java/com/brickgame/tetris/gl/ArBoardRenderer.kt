@@ -597,7 +597,8 @@ class ArBoardRenderer(
     /** Feed the tracker a camera frame now and then, and turn new results into game actions. */
     private fun updateHands(frame: com.google.ar.core.Frame, tracker: HandTracker) {
         val now = System.currentTimeMillis()
-        if (now - lastHandSubmit >= 66 && tracker.ready()) {
+        // ~10 checks a second: enough to follow a hand, and much less heat than every frame
+        if (now - lastHandSubmit >= 100 && tracker.ready()) {
             lastHandSubmit = now
             try {
                 frame.acquireCameraImage().use { img ->

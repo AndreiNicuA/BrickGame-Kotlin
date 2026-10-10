@@ -9,6 +9,8 @@ import android.os.PowerManager
 import android.view.MotionEvent
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.background
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -151,6 +153,8 @@ fun ArBoardView(
     handGestures: Boolean = false,
     /** Hold a hand still on a surface for 3 s to place the well there. */
     handPlace: Boolean = true,
+    /** Hands wanted but paused because the phone is hot (shown in the status chip). */
+    handsResting: Boolean = false,
     /** The player's pinch thresholds (Hand setup). */
     pinchOn: Float = HandGesture.PINCH_ON,
     pinchOff: Float = HandGesture.PINCH_OFF,
@@ -180,6 +184,8 @@ fun ArBoardView(
     LaunchedEffect(arrow) { rendererRef.value?.arrowEnabled = arrow }
     // The hand tracker only exists while something needs it (it costs battery and heat)
     var handOverlay by remember { mutableStateOf<HandFrame?>(null) }
+    var trackerRef by remember { mutableStateOf<HandTracker?>(null) }
+    var handStatus by remember { mutableStateOf<String?>(null) }
     val latestHandFrame by rememberUpdatedState(onHandFrame)
     LaunchedEffect(handGestures, handPlace, pinchOn, pinchOff, rendererRef.value) {
         rendererRef.value?.let { it.handGesturesEnabled = handGestures; it.handPlaceEnabled = handPlace; it.setPinchThresholds(pinchOn, pinchOff) }
@@ -188,7 +194,9 @@ fun ArBoardView(
         val renderer = rendererRef.value
         val tracker = if (handTracking && renderer != null) HandTracker(context) { renderer.onHandResult(it) } else null
         renderer?.handTracker = tracker
+        trackerRef = tracker
         onDispose {
+            trackerRef = null
             renderer?.handTracker = null
             tracker?.close()
             handOverlay = null
@@ -282,6 +290,29 @@ fun ArBoardView(
         update = { }
     )
     if (handTracking) HandOverlay(handOverlay, handDisplay)
+    // What the hand tracker is doing, so "nothing happens" is never a mystery
+    LaunchedEffect(trackerRef, handsResting) {
+        while (true) {
+            val t = trackerRef
+            handStatus = when {
+                handsResting -> "✋ Hands resting: the phone is hot"
+                t == null -> null
+                t.unavailable -> "✋ Hand tracking isn't available on this phone"
+                !t.loaded() -> "✋ Starting hand tracking…"
+                System.currentTimeMillis() - t.lastHandMs < 1000 -> "✋ Tracking your hand"
+                else -> "✋ Show your whole hand to the camera"
+            }
+            kotlinx.coroutines.delay(400)
+        }
+    }
+    handStatus?.let {
+        androidx.compose.material3.Text(it, color = androidx.compose.ui.graphics.Color.White,
+            fontSize = androidx.compose.ui.unit.TextUnit(12f, androidx.compose.ui.unit.TextUnitType.Sp),
+            modifier = Modifier.align(androidx.compose.ui.Alignment.BottomEnd)
+                .padding(androidx.compose.ui.unit.Dp(10f))
+                .background(androidx.compose.ui.graphics.Color(0xD9141A2E), androidx.compose.foundation.shape.RoundedCornerShape(androidx.compose.ui.unit.Dp(10f)))
+                .padding(horizontal = androidx.compose.ui.unit.Dp(10f), vertical = androidx.compose.ui.unit.Dp(6f)))
+    }
     }
 }
 

@@ -35,8 +35,14 @@ class HandTracker(context: Context, private val onHand: (HandPoints?) -> Unit) {
     @Volatile private var closed = false
     @Volatile private var landmarker: HandLandmarker? = null
     private val appContext: Context = context.applicationContext
-    @Volatile private var usingGpu = false
-    private var gpuErrors = 0
+
+    /** For the on-screen status: the model failed to load (hand tracking can't run here). */
+    @Volatile var unavailable = false
+        private set
+    /** When a hand was last seen (ms), 0 = never. */
+    @Volatile var lastHandMs = 0L
+        private set
+    fun loaded(): Boolean = landmarker != null
 
     // Reused buffers (only one frame is ever in flight)
     private var yBuf = ByteArray(0); private var uBuf = ByteArray(0); private var vBuf = ByteArray(0)
@@ -47,22 +53,13 @@ class HandTracker(context: Context, private val onHand: (HandPoints?) -> Unit) {
 
     init {
         executor.execute {
-            // GPU first (faster = steadier tracking, less CPU heat); CPU if this phone can't
-            landmarker = create(appContext, Delegate.GPU)?.also { usingGpu = true } ?: create(appContext, Delegate.CPU)
-            if (landmarker == null) Log.e(TAG, "Hand tracking unavailable")
+            // CPU: the GPU path returned no hands on some phones without reporting an error
+            landmarker = create(appContext, Delegate.CPU)
+            if (landmarker == null) { unavailable = true; Log.e(TAG, "Hand tracking unavailable") }
         }
     }
 
-    /** The GPU path failing at run time (some phones): switch to the CPU once. */
-    private fun onDetectError() {
-        busy.set(false)
-        if (!usingGpu || ++gpuErrors < 3) return
-        usingGpu = false
-        executor.execute {
-            try { landmarker?.close() } catch (_: Exception) {}
-            landmarker = create(appContext, Delegate.CPU)
-        }
-    }
+    private fun onDetectError() { busy.set(false) }
 
     private fun create(appContext: Context, delegate: Delegate): HandLandmarker? =
             try {
@@ -78,6 +75,7 @@ class HandTracker(context: Context, private val onHand: (HandPoints?) -> Unit) {
                         val hands = result.landmarks()
                         if (hands.isEmpty()) onHand(null)
                         else {
+                            lastHandMs = System.currentTimeMillis()
                             val lm = hands[0]
                             val out = FloatArray(lm.size * 2)
                             for (i in lm.indices) {
@@ -137,9 +135,9 @@ class HandTracker(context: Context, private val onHand: (HandPoints?) -> Unit) {
         return out
     }
 
-    /** YUV → ARGB at full camera resolution, turned [rotation]° clockwise so the hand is upright. */
+    /** YUV → ARGB at half resolution (plenty for the hand model, a quarter of the work), upright. */
     private fun toUprightBitmap(w: Int, h: Int, yRow: Int, uvRow: Int, uvPixel: Int, rotation: Int): Bitmap {
-        val w0 = w; val h0 = h
+        val w0 = w / 2; val h0 = h / 2
         val sideways = rotation == 90 || rotation == 270
         val bw = if (sideways) h0 else w0
         val bh = if (sideways) w0 else h0
@@ -156,7 +154,7 @@ class HandTracker(context: Context, private val onHand: (HandPoints?) -> Unit) {
                     270 -> { sx = w0 - 1 - bv; sy = bu }
                     else -> { sx = bu; sy = bv }
                 }
-                val col = sx; val row = sy
+                val col = sx * 2; val row = sy * 2
                 val yv = (yBuf[row * yRow + col].toInt() and 0xFF).toFloat()
                 val uvIdx = (row / 2) * uvRow + (col / 2) * uvPixel
                 val u = ((if (uvIdx < uBuf.size) uBuf[uvIdx].toInt() else 128) and 0xFF) - 128

@@ -196,6 +196,15 @@ fun Game3DScreen(
         if (dz != 0) onMoveZ(if (dz > 0) 1 else -1)
     }
     val arOn = arSession != null
+    // AR's camera gives 30 pictures a second, so a 120 Hz screen only adds heat: ask for 60 Hz
+    DisposableEffect(arOn) {
+        val window = (context as? Activity)?.window
+        if (arOn && window != null) {
+            val before = window.attributes.preferredRefreshRate
+            window.attributes = window.attributes.also { it.preferredRefreshRate = 60f }
+            onDispose { window.attributes = window.attributes.also { it.preferredRefreshRate = before } }
+        } else onDispose { }
+    }
     // A fresh AR session starts at the player's chosen size, with their play area around them
     val latestArSettings by rememberUpdatedState(arSettings)
     LaunchedEffect(arSession) {
@@ -410,6 +419,7 @@ fun Game3DScreen(
                         handTracking = (arHeat?.thermal ?: ArHeat.NORMAL) < ArHeat.HOT && (arSettings.hands || setupStep != null ||
                             (arSettings.handPlace && arStatus != ArStatus.PLACED)),
                         handGestures = arSettings.hands && setupStep == null,
+                        handsResting = (arHeat?.thermal ?: ArHeat.NORMAL) >= ArHeat.HOT && (arSettings.hands || setupStep != null),
                         handPlace = arSettings.handPlace,
                         pinchOn = handProfile.pinchOn,
                         pinchOff = handProfile.pinchOff,
