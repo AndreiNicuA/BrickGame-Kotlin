@@ -405,7 +405,17 @@ fun Game3DScreen(
                         insideKey = arInsideKey,
                         cellMeters = arCell,
                         onCellMeters = { arCell = it },
-                        onStatus = { arStatus = it },
+                        onStatus = { st ->
+                            arStatus = st
+                            if (st == ArStatus.FAILED) {
+                                // AR hit an error: switch it off and keep playing in 3D instead of closing
+                                val err = arController.renderer?.failure
+                                arSession = null
+                                arMessage = "AR stopped because of an error" +
+                                    (err?.let { " (${it.javaClass.simpleName}: ${it.message?.take(120) ?: ""})" } ?: "") +
+                                    ". Your game continues in 3D. Please send us a screenshot of this message."
+                            }
+                        },
                         // Walking around the well turns the D-pad with you
                         onViewAngle = { az, el -> azimuth = az; elevation = el },
                         onPieceDrag = { bx, bz -> dragPieceTo(bx, bz) },
@@ -418,7 +428,7 @@ fun Game3DScreen(
                         arrow = arSettings.arrow,
                         floorMesh = arSettings.floorMesh,
                         // Hand tracking rests while Android says the phone is hot
-                        handTracking = (arHeat?.thermal ?: ArHeat.NORMAL) < ArHeat.HOT && (arSettings.hands || setupStep != null ||
+                        handTracking = !showReady && !showMenu && (arHeat?.thermal ?: ArHeat.NORMAL) < ArHeat.HOT && (arSettings.hands || setupStep != null ||
                             (arSettings.handPlace && arStatus != ArStatus.PLACED)),
                         handGestures = arSettings.hands && setupStep == null,
                         handsResting = (arHeat?.thermal ?: ArHeat.NORMAL) >= ArHeat.HOT && (arSettings.hands || setupStep != null),
@@ -458,7 +468,9 @@ fun Game3DScreen(
                     )
                 }
 
-                if (arOn) {
+                // While Get ready or the menu is open, AR shows just the camera: no messages or chips
+                val arQuiet = showReady || showMenu
+                if (arOn && !arQuiet) {
                     Column(Modifier.align(Alignment.TopCenter).padding(top = 10.dp),
                         horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         // Only what needs attention: placing / tracking messages (sizes live in the ☰ menu)
@@ -524,13 +536,13 @@ fun Game3DScreen(
                         }
                     }
                 }
-                if (arOn) PlayAreaLayer(
+                if (arOn && !arQuiet) PlayAreaLayer(
                     boundary = boundary, outOfArea = outOfArea, areaLabel = arSettings.areaSize()?.let { (w, d) -> "%.1f × %.1f m".format(w, d) },
                     onUndo = arController::undoBoundaryCorner,
                     onDone = arController::finishBoundary,
                     onCancel = arController::clearBoundary
                 )
-                arMessage?.let { msg ->
+                if (!arQuiet) arMessage?.let { msg ->
                     Text("$msg   ✕", color = Color.White, fontSize = 13.sp,
                         modifier = Modifier.align(Alignment.TopCenter).padding(top = 10.dp)
                             .background(Color(0xE6141A2E), RoundedCornerShape(12.dp))

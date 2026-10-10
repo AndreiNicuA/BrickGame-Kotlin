@@ -293,7 +293,23 @@ class ArBoardRenderer(
         }
     }
 
+    /** Set when a frame failed; the view reports it and AR switches off instead of the app closing. */
+    @Volatile var failure: Throwable? = null
+        private set
+
     override fun onDrawFrame(gl: GL10?) {
+        // An exception on the GL thread would close the whole app: catch it, report, stop drawing AR
+        if (failure != null) { GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT); return }
+        try {
+            drawFrame()
+        } catch (t: Throwable) {
+            Log.e(TAG, "AR frame failed", t)
+            failure = t
+            report(ArStatus.FAILED)
+        }
+    }
+
+    private fun drawFrame() {
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT or GLES20.GL_DEPTH_BUFFER_BIT)
         val bg = background ?: return
         if (viewportChanged) {

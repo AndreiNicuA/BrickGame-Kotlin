@@ -407,7 +407,10 @@ private class ArTouch(
     private var startMidX = 0f; private var startMidY = 0f
     private var moving = false
 
-    override fun onTouch(v: android.view.View, e: MotionEvent): Boolean {
+    override fun onTouch(v: android.view.View, e: MotionEvent): Boolean =
+        try { handle(v, e) } catch (t: Throwable) { android.util.Log.e("ArTouch", "touch failed", t); true }
+
+    private fun handle(v: android.view.View, e: MotionEvent): Boolean {
         val slop = 12f * v.resources.displayMetrics.density
         when (e.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
