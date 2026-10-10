@@ -26,7 +26,7 @@ object HandLandmarks {
  * One-Euro filter (Casiez et al.): smooths jitter when the hand is still, follows quickly when
  * it moves. One instance per coordinate.
  */
-class OneEuro(private val minCutoff: Float = 1.2f, private val beta: Float = 0.015f, private val dCutoff: Float = 1f) {
+class OneEuro(private val minCutoff: Float = 2.0f, private val beta: Float = 0.03f, private val dCutoff: Float = 1f) {
     private var x = Float.NaN
     private var dx = 0f
     private var t = 0L

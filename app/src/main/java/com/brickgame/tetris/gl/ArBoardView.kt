@@ -156,6 +156,8 @@ fun ArBoardView(
     handPlace: Boolean = true,
     /** Placed well can't be moved / resized / turned with two fingers (unlock to adjust it). */
     wellLocked: Boolean = true,
+    /** Space under the AR view taken by floating controls (immersive AR): the status chip sits above it. */
+    bottomInset: androidx.compose.ui.unit.Dp = androidx.compose.ui.unit.Dp(0f),
     /** Hands wanted but paused because the phone is hot (shown in the status chip). */
     handsResting: Boolean = false,
     /** The player's pinch thresholds (Hand setup). */
@@ -314,7 +316,8 @@ fun ArBoardView(
         androidx.compose.material3.Text("$it   ✕", color = androidx.compose.ui.graphics.Color.White,
             fontSize = androidx.compose.ui.unit.TextUnit(12f, androidx.compose.ui.unit.TextUnitType.Sp),
             modifier = Modifier.align(androidx.compose.ui.Alignment.BottomEnd)
-                .padding(androidx.compose.ui.unit.Dp(10f))
+                .padding(start = androidx.compose.ui.unit.Dp(10f), end = androidx.compose.ui.unit.Dp(10f), top = androidx.compose.ui.unit.Dp(10f),
+                    bottom = bottomInset + androidx.compose.ui.unit.Dp(10f))
                 .background(androidx.compose.ui.graphics.Color(0xD9141A2E), androidx.compose.foundation.shape.RoundedCornerShape(androidx.compose.ui.unit.Dp(10f)))
                 .clickable { dismissedStatus = it }
                 .padding(horizontal = androidx.compose.ui.unit.Dp(10f), vertical = androidx.compose.ui.unit.Dp(6f)))

@@ -202,6 +202,9 @@ fun Game3DScreen(
         if (dz != 0) onMoveZ(if (dz > 0) 1 else -1)
     }
     val arOn = arSession != null
+    // Hand tracking rests 2 °C before the player's AR limit, or when Android says it's critical
+    // (some phones report Android's "severe" level already around 38 °C, so that alone doesn't stop it)
+    val handsTooHot = arHeat?.let { h -> h.thermal == ArHeat.CRITICAL || (h.batteryC != null && h.batteryC >= heatLimit - 2) } ?: false
     // AR's camera gives 30 pictures a second, so a 120 Hz screen only adds heat: ask for 60 Hz
     DisposableEffect(arOn) {
         val window = (context as? Activity)?.window
@@ -218,7 +221,8 @@ fun Game3DScreen(
         val st = latestArSettings
         arCell = st.defaultCell()
         arInside = false
-        st.areaSize()?.let { (w, d) -> arController.setPresetArea(w, d) }
+        // A play area only matters when you walk around: Room and Inside sizes
+        if (st.defaultSize == "ROOM" || st.defaultSize == "INSIDE") st.areaSize()?.let { (w, d) -> arController.setPresetArea(w, d) }
         if (st.defaultSize == "INSIDE") { arInside = true; arInsideKey++ }
     }
     LaunchedEffect(arOn) { if (!arOn) { boundary = BoundaryInfo(); outOfArea = false } }
@@ -351,42 +355,44 @@ fun Game3DScreen(
     }
 
     // ===== Screen pieces (arranged differently in portrait and landscape) =====
+    // In AR the camera fills the screen and the bars float over it on see-through glass
+    val glass = arOn
+    val padFill = if (glass) Bw.Raised.copy(alpha = 0.55f) else Bw.Raised
+    val squareBtn: @Composable (String, Boolean, () -> Unit, @Composable () -> Unit) -> Unit = { label, on, click, icon ->
+        Box(Modifier.size(48.dp).clip(RoundedCornerShape(14.dp))
+            .background(if (on) Bw.Cyan else if (glass) Bw.Ground.copy(alpha = 0.45f) else Bw.Surface)
+            .border(1.dp, Bw.Line, RoundedCornerShape(14.dp))
+            .clickable(onClickLabel = label) { click() }, contentAlignment = Alignment.Center) { icon() }
+    }
+    // Symmetric bar: ☰ · HOLD · SCORE · NEXT · ⏸
     val holdBox: @Composable () -> Unit = {
-                Hud3DBox(Modifier.width(58.dp)) {
-                    Text("HOLD", style = BwType.Overline.copy(fontSize = 10.sp, letterSpacing = 1.sp))
-                    Mini3DPiecePreview(state.holdPiece, Modifier.size(34.dp), Bw.Cyan, if (state.holdUsed) 0.3f else 1f)
-                }
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+            squareBtn("Menu", showMenu, { showMenu = !showMenu }) { Text("☰", fontSize = 20.sp, color = if (showMenu) Bw.Ground else Bw.Text) }
+            Hud3DBox(Modifier.width(70.dp), glass) {
+                Text("HOLD", style = BwType.Overline.copy(fontSize = 10.sp, letterSpacing = 1.sp))
+                Mini3DPiecePreview(state.holdPiece, Modifier.size(34.dp), Bw.Cyan, if (state.holdUsed) 0.3f else 1f)
+            }
+        }
     }
     val scoreBox: @Composable (Modifier) -> Unit = { mod ->
-                Hud3DBox(mod) {
-                    BwRollingScore(state.score)
-                    Text("LV ${state.level}  ·  ${state.layers} LAYERS", style = BwType.Small.copy(fontSize = 11.sp))
-                }
+        Hud3DBox(mod, glass) {
+            BwRollingScore(state.score)
+            Text("LV ${state.level}  ·  ${state.layers} LAYERS", style = BwType.Small.copy(fontSize = 11.sp))
+        }
     }
     val nextBox: @Composable () -> Unit = {
-                Hud3DBox(Modifier.width(88.dp)) {
-                    Text("NEXT", style = BwType.Overline.copy(fontSize = 10.sp, letterSpacing = 1.sp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                        state.nextPieces.take(2).forEachIndexed { i, type ->
-                            Mini3DPiecePreview(type, Modifier.size(if (i == 0) 38.dp else 26.dp), Bw.Cyan, if (i == 0) 1f else 0.6f)
-                        }
-                    }
+        Hud3DBox(Modifier.width(70.dp), glass) {
+            Text("NEXT", style = BwType.Overline.copy(fontSize = 10.sp, letterSpacing = 1.sp))
+            Row(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
+                state.nextPieces.take(2).forEachIndexed { i, type ->
+                    Mini3DPiecePreview(type, Modifier.size(if (i == 0) 34.dp else 20.dp), Bw.Cyan, if (i == 0) 1f else 0.6f)
                 }
+            }
+        }
     }
     val pauseButton: @Composable () -> Unit = {
-              Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Box(Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(if (showMenu) Bw.Cyan else Bw.Surface)
-                    .border(1.dp, Bw.Line, RoundedCornerShape(14.dp))
-                    .clickable(onClickLabel = "Menu") { showMenu = !showMenu }, contentAlignment = Alignment.Center) {
-                    Text("☰", fontSize = 20.sp, color = if (showMenu) Bw.Ground else Bw.Text)
-                }
-                Box(Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(Bw.Surface)
-                    .border(1.dp, Bw.Line, RoundedCornerShape(14.dp))
-                    // While AR holds the game, the pause button just shows the pause screen
-                    .clickable(onClickLabel = "Pause") { if (autoHeld) autoHeld = false else onPause() }, contentAlignment = Alignment.Center) {
-                    GlyphIcon(Glyph.PAUSE, Bw.Text, 18.dp)
-                }
-              }
+        // While the game is held by the screen, pause just shows the pause screen
+        squareBtn("Pause", false, { if (autoHeld) autoHeld = false else onPause() }) { GlyphIcon(Glyph.PAUSE, Bw.Text, 18.dp) }
     }
     // Everything that used to be a row of chips lives in the ☰ menu now
     val chipsRow: @Composable () -> Unit = { Box(Modifier) }
@@ -428,10 +434,11 @@ fun Game3DScreen(
                         arrow = arSettings.arrow,
                         floorMesh = arSettings.floorMesh,
                         // Hand tracking rests while Android says the phone is hot
-                        handTracking = !showReady && !showMenu && (arHeat?.thermal ?: ArHeat.NORMAL) < ArHeat.HOT && (arSettings.hands || setupStep != null ||
+                        handTracking = !showReady && !showMenu && !handsTooHot && (arSettings.hands || setupStep != null ||
                             (arSettings.handPlace && arStatus != ArStatus.PLACED)),
                         handGestures = arSettings.hands && setupStep == null,
-                        handsResting = (arHeat?.thermal ?: ArHeat.NORMAL) >= ArHeat.HOT && (arSettings.hands || setupStep != null),
+                        handsResting = handsTooHot && (arSettings.hands || setupStep != null),
+                        bottomInset = if (arOn && !chipsInside) IMMERSIVE_BOTTOM else 0.dp,
                         handPlace = arSettings.handPlace,
                         pinchOn = handProfile.pinchOn,
                         pinchOff = handProfile.pinchOff,
@@ -468,8 +475,13 @@ fun Game3DScreen(
                     )
                 }
 
-                // While Get ready or the menu is open, AR shows just the camera: no messages or chips
-                val arQuiet = showReady || showMenu
+                // Immersive AR (portrait): the camera runs behind the bars, so messages and panels keep
+                // clear of them by sitting in this inset box
+                val immersive = arOn && !chipsInside
+                Box(Modifier.fillMaxSize().padding(top = if (immersive) IMMERSIVE_TOP else 0.dp,
+                    bottom = if (immersive) IMMERSIVE_BOTTOM else 0.dp), contentAlignment = Alignment.Center) {
+                // While Get ready, the menu or the guide is open, AR shows just the camera: no messages or chips
+                val arQuiet = showReady || showMenu || showArGuide
                 if (arOn && !arQuiet) {
                     Column(Modifier.align(Alignment.TopCenter).padding(top = 10.dp),
                         horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -538,6 +550,10 @@ fun Game3DScreen(
                 }
                 if (arOn && !arQuiet) PlayAreaLayer(
                     boundary = boundary, outOfArea = outOfArea, areaLabel = arSettings.areaSize()?.let { (w, d) -> "%.1f × %.1f m".format(w, d) },
+                    onCancelFloor = {
+                        arController.clearBoundary()
+                        arMessage = "Play area skipped. Set it from ☰ → Play area when you're standing on the floor."
+                    },
                     onUndo = arController::undoBoundaryCorner,
                     onDone = arController::finishBoundary,
                     onCancel = arController::clearBoundary
@@ -666,6 +682,7 @@ fun Game3DScreen(
                     },
                     onMenu = onQuit
                 )
+                } // inset box
             }
     }
 
@@ -675,11 +692,11 @@ fun Game3DScreen(
                     val padShape = RoundedCornerShape(16.dp)
                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         Spacer(Modifier.size(52.dp))
-                        BwPadButton("Move away", Modifier.size(52.dp), padShape, Bw.Raised, Bw.LineStrong, { moveCameraRelative(0, 1) }) { GlyphIcon(Glyph.UP, Bw.Cyan, 22.dp) }
+                        BwPadButton("Move away", Modifier.size(52.dp), padShape, padFill, Bw.LineStrong, { moveCameraRelative(0, 1) }) { GlyphIcon(Glyph.UP, Bw.Cyan, 22.dp) }
                         Spacer(Modifier.size(52.dp))
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
-                        BwPadButton("Move left", Modifier.size(52.dp), padShape, Bw.Raised, Bw.LineStrong, { moveCameraRelative(-1, 0) }) { GlyphIcon(Glyph.LEFT, Bw.Cyan, 22.dp) }
+                        BwPadButton("Move left", Modifier.size(52.dp), padShape, padFill, Bw.LineStrong, { moveCameraRelative(-1, 0) }) { GlyphIcon(Glyph.LEFT, Bw.Cyan, 22.dp) }
                         // Compass: which way "away" points
                         Canvas(Modifier.size(52.dp)) {
                             val rad = Math.toRadians(-azimuth.toDouble()).toFloat()
@@ -688,11 +705,11 @@ fun Game3DScreen(
                             drawLine(Bw.TextMuted, Offset(cx, cy), Offset(cx + sin(rad) * r, cy - cos(rad) * r), 3f)
                             drawCircle(Bw.Cyan, 4f, Offset(cx + sin(rad) * r, cy - cos(rad) * r))
                         }
-                        BwPadButton("Move right", Modifier.size(52.dp), padShape, Bw.Raised, Bw.LineStrong, { moveCameraRelative(1, 0) }) { GlyphIcon(Glyph.RIGHT, Bw.Cyan, 22.dp) }
+                        BwPadButton("Move right", Modifier.size(52.dp), padShape, padFill, Bw.LineStrong, { moveCameraRelative(1, 0) }) { GlyphIcon(Glyph.RIGHT, Bw.Cyan, 22.dp) }
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         Spacer(Modifier.size(52.dp))
-                        BwPadButton("Move closer", Modifier.size(52.dp), padShape, Bw.Raised, Bw.LineStrong, { moveCameraRelative(0, -1) }) { GlyphIcon(Glyph.DOWN, Bw.Cyan, 22.dp) }
+                        BwPadButton("Move closer", Modifier.size(52.dp), padShape, padFill, Bw.LineStrong, { moveCameraRelative(0, -1) }) { GlyphIcon(Glyph.DOWN, Bw.Cyan, 22.dp) }
                         Spacer(Modifier.size(52.dp))
                     }
                 }
@@ -701,14 +718,14 @@ fun Game3DScreen(
                 // Right: hold, spin, tilt, drops
                 Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Bottom) {
-                        BwPadButton("Hold piece", Modifier.size(52.dp), RoundedCornerShape(16.dp), Bw.Raised, Bw.LineStrong, onHold) {
+                        BwPadButton("Hold piece", Modifier.size(52.dp), RoundedCornerShape(16.dp), padFill, Bw.LineStrong, onHold) {
                             Text("HOLD", style = BwType.Overline.copy(color = Bw.Text, fontSize = 10.sp, letterSpacing = 1.sp))
                         }
                         RoundAction("Spin", Glyph.ROTATE, Bw.Cyan, onRotateXZ)
                         RoundAction("Tilt", Glyph.TILT, Bw.Violet, onRotateXY)
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        BwPadButton("Soft drop", Modifier.size(64.dp, 48.dp), RoundedCornerShape(16.dp), Bw.Raised, Bw.LineStrong, { onSoftDrop() }) {
+                        BwPadButton("Soft drop", Modifier.size(64.dp, 48.dp), RoundedCornerShape(16.dp), padFill, Bw.LineStrong, { onSoftDrop() }) {
                             GlyphIcon(Glyph.DOWN, Bw.Cyan, 22.dp)
                         }
                         BwPadButton("Hard drop", Modifier.size(120.dp, 48.dp), RoundedCornerShape(16.dp), Bw.Pink, null, onHardDrop) {
@@ -771,14 +788,16 @@ fun Game3DScreen(
                 val ctrlH = maxOf(dpadP.height, act.height) + 2 * gap
                 val boardY = topH + 2 * topPad
                 val boardH = (h - boardY - chips.height - ctrlH - 2.dp.roundToPx()).coerceAtLeast(0)
-                val board = m[4].measure(Constraints.fixed(w, boardH))
+                val board = if (arOn) m[4].measure(Constraints.fixed(w, h)) else m[4].measure(Constraints.fixed(w, boardH))
                 layout(w, h) {
+                    // AR: the camera fills the whole screen and is placed first, so it's drawn behind the bars
+                    if (arOn) board.place(0, 0)
                     var x = pad
                     hold.place(x, topPad + (topH - hold.height) / 2); x += hold.width + gap
                     score.place(x, topPad + (topH - score.height) / 2); x += score.width + gap
                     next.place(x, topPad + (topH - next.height) / 2); x += next.width + gap
                     pause.place(x, topPad + (topH - pause.height) / 2)
-                    board.place(0, boardY)
+                    if (!arOn) board.place(0, boardY)
                     chips.place(0, boardY + boardH)
                     val ctrlY = boardY + boardH + chips.height
                     dpadP.place(pad, ctrlY + (ctrlH - dpadP.height) / 2)
@@ -938,7 +957,7 @@ private const val AR_HARD_LIMIT_C = 46
  */
 @Composable
 private fun BoxScope.PlayAreaLayer(
-    boundary: BoundaryInfo, outOfArea: Boolean, areaLabel: String?,
+    boundary: BoundaryInfo, outOfArea: Boolean, areaLabel: String?, onCancelFloor: () -> Unit,
     onUndo: () -> Unit, onDone: () -> Unit, onCancel: () -> Unit
 ) {
     val d = boundary.distance
@@ -968,10 +987,13 @@ private fun BoxScope.PlayAreaLayer(
                 .clip(RoundedCornerShape(12.dp)).background(Bw.Amber).padding(horizontal = 12.dp, vertical = 8.dp))
     }
     if (boundary.findingFloor) {
-        Text("Point at the floor around your feet to set your ${areaLabel ?: ""} play area",
+        // Gives up by itself after 15 s (e.g. sitting at a table, no floor in view)
+        LaunchedEffect(Unit) { kotlinx.coroutines.delay(15_000); onCancelFloor() }
+        Text("Point at the floor around your feet to set your ${areaLabel ?: ""} play area   ✕",
             style = BwType.Small.copy(color = Bw.Text),
             modifier = Modifier.align(Alignment.BottomCenter).padding(start = 12.dp, end = 12.dp, bottom = 56.dp)
-                .clip(RoundedCornerShape(14.dp)).background(Bw.Ground.copy(alpha = 0.9f)).padding(horizontal = 14.dp, vertical = 10.dp))
+                .clip(RoundedCornerShape(14.dp)).background(Bw.Ground.copy(alpha = 0.9f))
+                .clickable(onClickLabel = "Skip the play area", onClick = onCancelFloor).padding(horizontal = 14.dp, vertical = 10.dp))
     }
     if (boundary.drawing) {
         Column(Modifier.align(Alignment.BottomCenter).padding(start = 12.dp, end = 12.dp, bottom = 56.dp).fillMaxWidth()
@@ -1223,6 +1245,10 @@ private fun GuideSection(title: String, color: Color, lines: List<String>) {
     }
 }
 
+/** In immersive AR the camera runs under the top bar and the controls; overlays keep clear of both. */
+private val IMMERSIVE_TOP = 84.dp
+private val IMMERSIVE_BOTTOM = 196.dp
+
 /** Cube size for stand-inside mode: a 1.2 m square well, 2.8 m tall, centred on the player. */
 private const val INSIDE_CELL = 0.2f
 
@@ -1256,7 +1282,7 @@ private fun HeatChip(h: ArHeatInfo, limit: Int, onCycleLimit: () -> Unit) {
             if (h.charging) append("  ·  charging")
         } else if (h.charging) append(" ⚡")
         // Battery °C lags behind the chip's real heat; Android's own state shows what's coming
-        when (h.thermal) { ArHeat.WARM -> append(" · warm"); ArHeat.HOT, ArHeat.CRITICAL -> append(" · hot, hands resting"); else -> {} }
+        when (h.thermal) { ArHeat.WARM -> append(" · warm"); ArHeat.HOT -> append(" · hot"); ArHeat.CRITICAL -> append(" · critical"); else -> {} }
     }
     Text(text, color = Bw.Ground, fontSize = 12.sp, fontWeight = FontWeight.Bold,
         modifier = Modifier.background(color, RoundedCornerShape(10.dp))
@@ -1265,8 +1291,8 @@ private fun HeatChip(h: ArHeatInfo, limit: Int, onCycleLimit: () -> Unit) {
 }
 
 @Composable
-private fun Hud3DBox(modifier: Modifier, content: @Composable ColumnScope.() -> Unit) {
-    Column(modifier.heightIn(min = 60.dp).clip(RoundedCornerShape(14.dp)).background(Bw.Surface)
+private fun Hud3DBox(modifier: Modifier, glass: Boolean = false, content: @Composable ColumnScope.() -> Unit) {
+    Column(modifier.heightIn(min = 60.dp).clip(RoundedCornerShape(14.dp)).background(if (glass) Bw.Ground.copy(alpha = 0.45f) else Bw.Surface)
         .border(1.dp, Bw.Line, RoundedCornerShape(14.dp)).padding(6.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(3.dp, Alignment.CenterVertically), content = content)
