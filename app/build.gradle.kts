@@ -15,8 +15,10 @@ android {
         applicationId = "com.andreinicua.brickgame"
         minSdk = 26
         targetSdk = 35
-        versionCode = 17
-        versionName = "3.6.0"
+        // Every CI build gets its own number (4.0.<build>), so the phone always shows which one it is
+        val ciBuild = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull()
+        versionCode = ciBuild ?: 18
+        versionName = if (ciBuild != null) "4.0.$ciBuild" else "4.0.0-dev"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }

@@ -167,10 +167,11 @@ fun Game3DScreen(
     fun onHeatInfo(h: ArHeatInfo) {
         arHeat = h
         val t = h.batteryC
-        // Android's own "severe" warning comes before Samsung closes the camera by itself, so leave
-        // AR at that point even when the battery still reads below the player's limit
-        val systemHot = h.thermal >= ArHeat.HOT
-        val hardStop = systemHot || (t != null && t >= AR_HARD_LIMIT_C)
+        // Stop at the player's limit, the 46 °C net, or Android's "critical" level. Android's
+        // "severe" warning alone doesn't stop AR (some phones report it at ~40 °C); it only pauses
+        // hand tracking, the biggest extra heat, until the phone cools down.
+        val systemCritical = h.thermal == ArHeat.CRITICAL
+        val hardStop = systemCritical || (t != null && t >= AR_HARD_LIMIT_C)
         val userStop = t != null && t >= heatLimit
         if (hardStop || userStop) {
             arAutoPaused = false
@@ -178,7 +179,7 @@ fun Game3DScreen(
             if (state.status == GameStatus.PLAYING) onPause()
             arMessage = when {
                 userStop -> "AR paused at %.1f°C (your limit is $heatLimit°C)".format(t)
-                systemHot -> "AR paused — Android reports the phone is getting hot inside" + (if (t != null) " (battery %.1f°C)".format(t) else "")
+                systemCritical -> "AR paused — Android reports the phone is critically hot" + (if (t != null) " (battery %.1f°C)".format(t) else "")
                 else -> "AR paused at %.1f°C to protect your phone".format(t)
             } + (if (h.charging) ". Charging adds heat." else ".") + " Your game waits in 3D view; tap AR again when it has cooled."
         }
@@ -405,8 +406,9 @@ fun Game3DScreen(
                         controller = arController,
                         arrow = arSettings.arrow,
                         floorMesh = arSettings.floorMesh,
-                        handTracking = arSettings.hands || setupStep != null ||
-                            (arSettings.handPlace && arStatus != ArStatus.PLACED),
+                        // Hand tracking rests while Android says the phone is hot
+                        handTracking = (arHeat?.thermal ?: ArHeat.NORMAL) < ArHeat.HOT && (arSettings.hands || setupStep != null ||
+                            (arSettings.handPlace && arStatus != ArStatus.PLACED)),
                         handGestures = arSettings.hands && setupStep == null,
                         handPlace = arSettings.handPlace,
                         pinchOn = handProfile.pinchOn,
@@ -1042,7 +1044,7 @@ private fun HeatChip(h: ArHeatInfo, limit: Int, onCycleLimit: () -> Unit) {
             if (h.charging) append("  ·  charging")
         } else if (h.charging) append(" ⚡")
         // Battery °C lags behind the chip's real heat; Android's own state shows what's coming
-        when (h.thermal) { ArHeat.WARM -> append(" · warm"); ArHeat.HOT, ArHeat.CRITICAL -> append(" · hot"); else -> {} }
+        when (h.thermal) { ArHeat.WARM -> append(" · warm"); ArHeat.HOT, ArHeat.CRITICAL -> append(" · hot, hands resting"); else -> {} }
     }
     Text(text, color = Bw.Ground, fontSize = 12.sp, fontWeight = FontWeight.Bold,
         modifier = Modifier.background(color, RoundedCornerShape(10.dp))

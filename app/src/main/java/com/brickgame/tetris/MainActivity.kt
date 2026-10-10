@@ -17,6 +17,8 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.Text
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -111,6 +113,8 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        com.brickgame.tetris.data.CrashLog.install(this)
+        val lastCrash = com.brickgame.tetris.data.CrashLog.takeLast(this)
         // System splash (icon) stays only until settings have loaded — typically a few frames.
         // Must be installed before super.onCreate().
         installSplashScreen().setKeepOnScreenCondition { !vm.dataLoaded.value }
@@ -140,6 +144,33 @@ class MainActivity : ComponentActivity() {
         }
         super.onCreate(savedInstanceState)
         setContent {
+            // The app crashed last time: show what happened once, with a Share button
+            var crashReport by remember { mutableStateOf(lastCrash) }
+            crashReport?.let { report ->
+                androidx.compose.material3.AlertDialog(
+                    onDismissRequest = { crashReport = null },
+                    title = { Text("Brickwell closed unexpectedly last time") },
+                    text = {
+                        Column(Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState())) {
+                            Text("Sharing this report helps us fix it. It stays on your phone unless you share it.", fontSize = 13.sp)
+                            Spacer(Modifier.height(8.dp))
+                            Text(report, fontSize = 10.sp, fontFamily = FontFamily.Monospace)
+                        }
+                    },
+                    confirmButton = {
+                        androidx.compose.material3.TextButton(onClick = {
+                            val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                                type = "text/plain"
+                                putExtra(android.content.Intent.EXTRA_SUBJECT, "Brickwell crash report")
+                                putExtra(android.content.Intent.EXTRA_TEXT, report)
+                            }
+                            startActivity(android.content.Intent.createChooser(send, "Share crash report"))
+                            crashReport = null
+                        }) { Text("Share") }
+                    },
+                    dismissButton = { androidx.compose.material3.TextButton(onClick = { crashReport = null }) { Text("Close") } }
+                )
+            }
 
             // Wire gamepad controller to game actions
             LaunchedEffect(Unit) {
