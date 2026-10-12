@@ -1,13 +1,20 @@
 name: Android CI
+# Builds run on main (and PRs into it) or by hand ("Run workflow"). Work-in-progress branches are
+# built and tested in the Claude session, which sends the APK directly.
 on:
   push:
-    branches: [ main, 'claude/**' ]
+    branches: [ main ]
   pull_request:
     branches: [ main ]
   workflow_dispatch:
+# Several quick pushes build once: an older run of the same branch is cancelled by a newer one
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - name: Set up JDK 17

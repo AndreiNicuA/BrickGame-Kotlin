@@ -1,0 +1,10 @@
+# Build output and local tooling (never committed)
+build/
+app/build/
+.gradle/
+.kotlin/
+local.properties
+*.iml
+.idea/
+captures/
+.DS_Store
