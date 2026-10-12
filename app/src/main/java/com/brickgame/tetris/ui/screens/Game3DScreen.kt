@@ -355,8 +355,11 @@ fun Game3DScreen(
     }
 
     // ===== Screen pieces (arranged differently in portrait and landscape) =====
-    // In AR the camera fills the screen and the bars float over it on see-through glass
-    val glass = arOn
+    // While playing in AR the camera fills the screen and the bars float over it on see-through
+    // glass. Get ready, pause and game over keep the normal solid layout (panels need the room).
+    val userPaused = state.status == GameStatus.PAUSED && !autoHeld
+    val immersiveNow = arOn && !showReady && !userPaused && state.status != GameStatus.GAME_OVER
+    val glass = immersiveNow
     val padFill = if (glass) Bw.Raised.copy(alpha = 0.55f) else Bw.Raised
     val squareBtn: @Composable (String, Boolean, () -> Unit, @Composable () -> Unit) -> Unit = { label, on, click, icon ->
         Box(Modifier.size(48.dp).clip(RoundedCornerShape(14.dp))
@@ -438,7 +441,7 @@ fun Game3DScreen(
                             (arSettings.handPlace && arStatus != ArStatus.PLACED)),
                         handGestures = arSettings.hands && setupStep == null,
                         handsResting = handsTooHot && (arSettings.hands || setupStep != null),
-                        bottomInset = if (arOn && !chipsInside) IMMERSIVE_BOTTOM else 0.dp,
+                        bottomInset = if (immersiveNow && !chipsInside) IMMERSIVE_BOTTOM else 0.dp,
                         handPlace = arSettings.handPlace,
                         pinchOn = handProfile.pinchOn,
                         pinchOff = handProfile.pinchOff,
@@ -477,11 +480,11 @@ fun Game3DScreen(
 
                 // Immersive AR (portrait): the camera runs behind the bars, so messages and panels keep
                 // clear of them by sitting in this inset box
-                val immersive = arOn && !chipsInside
+                val immersive = immersiveNow && !chipsInside
                 Box(Modifier.fillMaxSize().padding(top = if (immersive) IMMERSIVE_TOP else 0.dp,
                     bottom = if (immersive) IMMERSIVE_BOTTOM else 0.dp), contentAlignment = Alignment.Center) {
                 // While Get ready, the menu or the guide is open, AR shows just the camera: no messages or chips
-                val arQuiet = showReady || showMenu || showArGuide
+                val arQuiet = showReady || showMenu || showArGuide || userPaused || state.status == GameStatus.GAME_OVER
                 if (arOn && !arQuiet) {
                     Column(Modifier.align(Alignment.TopCenter).padding(top = 10.dp),
                         horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -788,16 +791,16 @@ fun Game3DScreen(
                 val ctrlH = maxOf(dpadP.height, act.height) + 2 * gap
                 val boardY = topH + 2 * topPad
                 val boardH = (h - boardY - chips.height - ctrlH - 2.dp.roundToPx()).coerceAtLeast(0)
-                val board = if (arOn) m[4].measure(Constraints.fixed(w, h)) else m[4].measure(Constraints.fixed(w, boardH))
+                val board = if (immersiveNow) m[4].measure(Constraints.fixed(w, h)) else m[4].measure(Constraints.fixed(w, boardH))
                 layout(w, h) {
                     // AR: the camera fills the whole screen and is placed first, so it's drawn behind the bars
-                    if (arOn) board.place(0, 0)
+                    if (immersiveNow) board.place(0, 0)
                     var x = pad
                     hold.place(x, topPad + (topH - hold.height) / 2); x += hold.width + gap
                     score.place(x, topPad + (topH - score.height) / 2); x += score.width + gap
                     next.place(x, topPad + (topH - next.height) / 2); x += next.width + gap
                     pause.place(x, topPad + (topH - pause.height) / 2)
-                    if (!arOn) board.place(0, boardY)
+                    if (!immersiveNow) board.place(0, boardY)
                     chips.place(0, boardY + boardH)
                     val ctrlY = boardY + boardH + chips.height
                     dpadP.place(pad, ctrlY + (ctrlH - dpadP.height) / 2)
@@ -1223,7 +1226,8 @@ private fun BoxScope.ArGuideOverlay(handsOn: Boolean, onHandSetup: () -> Unit, o
             (if (handsOn) emptyList() else listOf("Hands is off right now.")))
         GuideSection("5  Stay safe and cool", Bw.Amber, listOf(
             "The play area warns you near its edge and pauses the game if you step out.",
-            "AR switches itself off before the phone gets too hot. Charging adds heat."))
+            "AR switches itself off before the phone gets too hot.",
+            "To keep it cooler: turn Hands off (hand recognition is the biggest extra load), don't charge while playing, and take the phone out of a thick case."))
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             com.brickgame.tetris.ui.brand.BwSecondaryButton("Hand setup", onHandSetup, Modifier.weight(1f))
             com.brickgame.tetris.ui.brand.BwPrimaryButton("GOT IT", onClose, Modifier.weight(1f), height = 52.dp)
