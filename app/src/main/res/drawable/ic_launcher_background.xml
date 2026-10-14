@@ -1,12 +1,21 @@
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
 
-    <!-- Pure black background -->
-    <path
-        android:fillColor="#0A0A0A"
-        android:pathData="M0,0h108v108h-108z"/>
+    <!-- Deep navy, lit slightly from above (the app's Raised → Ground colours) -->
+    <path android:pathData="M0,0h108v108h-108z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="radial"
+                android:centerX="54"
+                android:centerY="41"
+                android:gradientRadius="81"
+                android:startColor="#1B2340"
+                android:endColor="#0B0E1A"/>
+        </aapt:attr>
+    </path>
 
 </vector>
