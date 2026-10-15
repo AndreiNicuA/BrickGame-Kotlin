@@ -5,17 +5,27 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
 
-    <!-- Deep navy, lit slightly from above (the app's Raised → Ground colours) -->
-    <path android:pathData="M0,0h108v108h-108z">
+    <!-- Four quarters, one per mode:
+         top left Classic 2D (LCD green), top right Modern 2D (neon dark),
+         bottom left 3D (navy), bottom right AR (room tone, like a camera image). -->
+    <path android:fillColor="#9DB38A" android:pathData="M0,0h54v54h-54z"/>
+    <path android:fillColor="#0B0E1A" android:pathData="M54,0h54v54h-54z"/>
+    <path android:fillColor="#1B2340" android:pathData="M0,54h54v54h-54z"/>
+    <path android:pathData="M54,54h54v54h-54z">
         <aapt:attr name="android:fillColor">
             <gradient
-                android:type="radial"
-                android:centerX="54"
-                android:centerY="41"
-                android:gradientRadius="81"
-                android:startColor="#1B2340"
-                android:endColor="#0B0E1A"/>
+                android:type="linear"
+                android:startX="54"
+                android:startY="54"
+                android:endX="108"
+                android:endY="108"
+                android:startColor="#6A5E66"
+                android:endColor="#2C2A33"/>
         </aapt:attr>
     </path>
+
+    <!-- Thin dark cross between the quarters -->
+    <path android:strokeColor="#0B0E1A" android:strokeWidth="2.4"
+        android:pathData="M54,0V108M0,54H108"/>
 
 </vector>

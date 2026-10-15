@@ -4,32 +4,32 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
 
-    <!-- Themed-icon layer: the launcher tints it; only alpha counts. Same shapes as the
-         foreground, with the cube faces told apart by alpha. -->
-    <group
-        android:pivotX="52.5"
-        android:pivotY="48"
-        android:scaleX="0.76"
-        android:scaleY="0.76"
-        android:translateX="1.5"
-        android:translateY="6">
+    <!-- Themed-icon layer (Android 13+): the launcher tints it and only alpha counts.
+         The same four bricks as the foreground, without the coloured quarters. -->
 
-        <!-- Classic: LCD pixel (frame with a cut-out gap, centre dot) -->
-        <path android:fillColor="#FFFFFF" android:fillType="evenOdd" android:pathData="M25.5,61.5v13h13v-13zM23.5,58h17a1.5,1.5 0,0 1,1.5 1.5v17a1.5,1.5 0,0 1,-1.5 1.5h-17a1.5,1.5 0,0 1,-1.5 -1.5v-17a1.5,1.5 0,0 1,1.5 -1.5z"/>
-        <path android:fillColor="#FFFFFF" android:pathData="M29,65h6v6h-6z"/>
+    <!-- Classic 2D: frame with a cut-out gap, centre dot -->
+    <path android:fillColor="#FFFFFF" android:fillType="evenOdd"
+        android:pathData="M31.5,31.5h15v15h-15zM34.05,34.05v9.9h9.9v-9.9z"/>
+    <path android:fillColor="#FFFFFF" android:pathData="M36.6,36.6h4.8v4.8h-4.8z"/>
 
-        <!-- Neon: glowing outline (soft halo strokes under the sharp one) -->
-        <path android:strokeColor="#FFFFFF" android:strokeAlpha="0.12" android:strokeWidth="9"
-            android:pathData="M48,44h13a3,3 0,0 1,3 3v13a3,3 0,0 1,-3 3h-13a3,3 0,0 1,-3 -3v-13a3,3 0,0 1,3 -3z"/>
-        <path android:strokeColor="#FFFFFF" android:strokeAlpha="0.25" android:strokeWidth="6"
-            android:pathData="M48,44h13a3,3 0,0 1,3 3v13a3,3 0,0 1,-3 3h-13a3,3 0,0 1,-3 -3v-13a3,3 0,0 1,3 -3z"/>
-        <path android:strokeColor="#FFFFFF" android:strokeWidth="3"
-            android:pathData="M48,44h13a3,3 0,0 1,3 3v13a3,3 0,0 1,-3 3h-13a3,3 0,0 1,-3 -3v-13a3,3 0,0 1,3 -3z"/>
+    <!-- Modern 2D: outline brick -->
+    <path android:fillColor="#FFFFFF" android:fillAlpha="0.25" android:strokeColor="#FFFFFF" android:strokeWidth="1.95"
+        android:pathData="M64.9,32.5h8.2a2.4,2.4 0,0 1,2.4 2.4v8.2a2.4,2.4 0,0 1,-2.4 2.4h-8.2a2.4,2.4 0,0 1,-2.4 -2.4v-8.2a2.4,2.4 0,0 1,2.4 -2.4z"/>
 
-        <!-- 3D: isometric cube (left, right, top faces) -->
-        <path android:fillColor="#FFFFFF" android:fillAlpha="0.7" android:pathData="M65.04,22.25L75,28L75,39.5L65.04,33.75z"/>
-        <path android:fillColor="#FFFFFF" android:fillAlpha="0.45" android:pathData="M84.96,22.25L75,28L75,39.5L84.96,33.75z"/>
-        <path android:fillColor="#FFFFFF" android:pathData="M75,16.5L84.96,22.25L75,28L65.04,22.25z"/>
-    </group>
+    <!-- 3D -->
+    <path android:strokeColor="#FFFFFF" android:strokeAlpha="0.6" android:strokeWidth="1.3" android:strokeLineJoin="round"
+        android:pathData="M29,77.75H45.5L50.5,72.75H34Z"/>
+    <path android:fillColor="#FFFFFF" android:fillAlpha="0.45" android:pathData="M43.5,63.75L47,60.25L47,72.75L43.5,76.25Z"/>
+    <path android:fillColor="#FFFFFF" android:fillAlpha="0.7" android:pathData="M31,63.75L34.5,60.25L47,60.25L43.5,63.75Z"/>
+    <path android:fillColor="#FFFFFF" android:pathData="M31,63.75h12.5v12.5h-12.5z"/>
+
+    <!-- AR -->
+    <path android:strokeColor="#FFFFFF" android:strokeAlpha="0.6" android:strokeWidth="1.3" android:strokeLineJoin="round"
+        android:pathData="M59,77.75H75.5L80.5,72.75H64Z"/>
+    <path android:fillColor="#FFFFFF" android:fillAlpha="0.45" android:pathData="M73.5,63.75L77,60.25L77,72.75L73.5,76.25Z"/>
+    <path android:fillColor="#FFFFFF" android:fillAlpha="0.7" android:pathData="M61,63.75L64.5,60.25L77,60.25L73.5,63.75Z"/>
+    <path android:fillColor="#FFFFFF" android:pathData="M61,63.75h12.5v12.5h-12.5z"/>
+    <path android:strokeColor="#FFFFFF" android:strokeWidth="2.4" android:strokeLineCap="round" android:strokeLineJoin="round"
+        android:pathData="M57.5,60.25V56.25H61.5M80.5,60.25V56.25H76.5"/>
 
 </vector>
