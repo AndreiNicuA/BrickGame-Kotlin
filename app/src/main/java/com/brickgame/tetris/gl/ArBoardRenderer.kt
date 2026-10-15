@@ -10,6 +10,7 @@ import com.brickgame.tetris.game.Tetris3DGame
 import com.brickgame.tetris.ui.components.PieceMaterial
 import com.google.ar.core.Anchor
 import com.google.ar.core.Config
+import com.google.ar.core.InstantPlacementPoint
 import com.google.ar.core.Plane
 import com.google.ar.core.Session
 import com.google.ar.core.TrackingState
@@ -27,9 +28,11 @@ import kotlin.math.sqrt
  */
 /**
  * What the hand tracker sees, for the UI: all 21 landmarks in view pixels (x, y pairs),
- * whether they pinch, the raw pinch ratio (Hand setup) and the hold-to-place progress (0..1).
+ * whether they pinch, the raw pinch ratio (Hand setup), the hold-to-place progress (0..1) and
+ * the hand shape the gestures read (pinch, tilt, fist).
  */
-class HandFrame(val pts: FloatArray, val pinching: Boolean, val ratio: Float, val holdProgress: Float)
+class HandFrame(val pts: FloatArray, val pinching: Boolean, val ratio: Float, val holdProgress: Float,
+                val shape: HandGesture.Shape = HandGesture.Shape.OPEN)
 
 data class BoundaryInfo(
     val drawing: Boolean = false, val corners: Int = 0, val set: Boolean = false, val distance: Float? = null,
@@ -136,11 +139,17 @@ class ArBoardRenderer(
     fun setPinchThresholds(on: Float, off: Float) { handGesture.pinchOn = on; handGesture.pinchOff = off }
     private val handFilters = Array(42) { OneEuro() }
     private val holdStill = HoldStill(3000L)
+    /** Grabbed piece: moves by how far the pinch travels, a whole cell at a time. */
+    private val stepper = CellStepper()
+    /** After a turn or drop the piece's new centre arrives from the game a moment later: wait before grabbing again. */
+    private var regrabAt = 0L
 
     /** Hand actions, called on the GL thread (the view posts them to the UI). */
     @Volatile var onHandDrag: (Float, Float) -> Unit = { _, _ -> }
     @Volatile var onHandSpin: () -> Unit = {}
+    @Volatile var onHandTilt: () -> Unit = {}
     @Volatile var onHandDrop: () -> Unit = {}
+    @Volatile var onHandSoftDrop: () -> Unit = {}
     /** The tracked hand for drawing / Hand setup; null = no hand. */
     @Volatile var onHandOverlay: (HandFrame?) -> Unit = {}
 
@@ -154,6 +163,14 @@ class ArBoardRenderer(
     private var width = 1
     private var height = 1
     private var anchor: Anchor? = null
+    /**
+     * Set while the well stands on an instant-placement point (placed before a surface was
+     * found). Until ARCore resolves it, the point sits at a guessed distance along the screen ray
+     * and so moves with the device: surface detection stays on, and the well moves onto a real
+     * surface as soon as one shows up under it.
+     */
+    private var instantPoint: InstantPlacementPoint? = null
+    private var lastSettleTry = 0L
     private var lastStatus: ArStatus? = null
     private var lastAngleReport = 0L
     private var planeFinding = true
@@ -330,7 +347,8 @@ class ArBoardRenderer(
 
         while (true) { val c = commands.poll() ?: break; c() }
         camera.getViewMatrix(view, 0)
-        camera.getProjectionMatrix(proj, 0, 0.03f, 50f)
+        // Near plane 5 cm: keeps the depth buffer precise enough that faces don't flicker
+        camera.getProjectionMatrix(proj, 0, 0.05f, 50f)
         Matrix.multiplyMM(viewProj, 0, proj, 0, view, 0)
         if (boundaryDrawing) {
             // Taps add corners instead of placing the well
@@ -345,7 +363,7 @@ class ArBoardRenderer(
         handTracker?.let { updateHands(frame, it) }
 
         if (replaceRequested) {
-            anchor?.detach(); anchor = null; isPlaced = false; insideMode = false; replaceRequested = false
+            anchor?.detach(); anchor = null; isPlaced = false; insideMode = false; replaceRequested = false; instantPoint = null
             setPlaneFinding(true)
         }
         if (insideRequested) {
@@ -405,11 +423,13 @@ class ArBoardRenderer(
         }
         if (a.trackingState != TrackingState.TRACKING) { report(ArStatus.TRACKING_LOST); return }
         report(ArStatus.PLACED)
-        // Placed and not being moved: stop looking for surfaces to save power and heat
-        if (!gestureMoving && !boundaryDrawing && presetPending == null) setPlaneFinding(false)
+        // Placed and not being moved: stop looking for surfaces to save power and heat (but not
+        // while the well still waits for a real surface under it)
+        if (!gestureMoving && !boundaryDrawing && presetPending == null && instantPoint == null) setPlaneFinding(false)
 
         // board → world: anchor × turn × scale × centre the footprint on the anchor
         a.pose.toMatrix(anchorMatrix, 0)
+        if (instantPoint != null) settleInstantWell(frame, a)
         buildBase()
 
         val camPose = camera.pose
@@ -615,7 +635,9 @@ class ArBoardRenderer(
         val now = System.currentTimeMillis()
         // Quick (~15/s) while a hand is in view, slow (~5/s) while searching: responsive when it
         // matters, cooler when it doesn't
-        val interval = if (now - tracker.lastHandMs < 1500) 66L else 200L
+        // On slower devices (some tablets) recognition takes longer: never ask for more than the
+        // processor keeps up with, so the drawing doesn't stutter
+        val interval = maxOf(if (now - tracker.lastHandMs < 1500) 66L else 200L, tracker.detectMs * 3 / 2)
         if (now - lastHandSubmit >= interval && tracker.ready()) {
             lastHandSubmit = now
             try {
@@ -646,12 +668,20 @@ class ArBoardRenderer(
 
         val actions = handGesture.update(pts, now)
         if (handGesturesEnabled && anchor != null) for (action in actions) when (action) {
+            is HandGesture.Action.Grab -> grabAt(action.x, action.y)
             is HandGesture.Action.Drag -> {
+                // The grab may have missed the board (piece just spawned, hand off the well): retry
+                if (!stepper.grabbing) { if (now >= regrabAt) grabAt(action.x, action.y); continue }
                 val h = pieceCenter?.get(1) ?: continue
-                screenToBoard(action.x, action.y, h)?.let { onHandDrag(it[0], it[1]) }
+                val b = screenToBoard(action.x, action.y, h) ?: continue
+                stepper.target(b[0], b[1])?.let { onHandDrag(it[0], it[1]) }
             }
-            HandGesture.Action.Spin -> onHandSpin()
-            HandGesture.Action.Drop -> onHandDrop()
+            HandGesture.Action.Release -> stepper.release()
+            // A turn moves the piece's centre: start counting cells again from where it is now
+            HandGesture.Action.Spin -> { onHandSpin(); stepper.release(); regrabAt = now + 150 }
+            HandGesture.Action.Tilt -> { onHandTilt(); stepper.release(); regrabAt = now + 150 }
+            HandGesture.Action.Drop -> { onHandDrop(); stepper.release(); regrabAt = now + 150 }
+            HandGesture.Action.SoftDrop -> onHandSoftDrop()
         }
 
         // No well yet: a hand held still on a surface for 3 s puts the well right there
@@ -663,7 +693,14 @@ class ArBoardRenderer(
             hold = holdStill.progress
         } else holdStill.reset()
 
-        onHandOverlay(HandFrame(pts, handGesture.pinching, handGesture.lastRatio, hold))
+        onHandOverlay(HandFrame(pts, handGesture.pinching, handGesture.lastRatio, hold, handGesture.shape))
+    }
+
+    /** Start moving the piece with the pinch at screen point (x, y). */
+    private fun grabAt(x: Float, y: Float) {
+        val pc = pieceCenter ?: return
+        val b = screenToBoard(x, y, pc[1]) ?: return
+        stepper.grab(pc[0], pc[2], b[0], b[1])
     }
 
     /**
@@ -683,7 +720,7 @@ class ArBoardRenderer(
         val distance = if (palmPx > 1f) (focal[0] * 0.075f / palmPx).coerceIn(0.2f, 3f) else 0.5f
         val hit = try { frame.hitTestInstantPlacement(x, y, distance).firstOrNull() } catch (_: Exception) { null } ?: return
         if (!fitsPlayArea(hit.hitPose)) { onPlacementBlocked(); return }
-        setAnchor(hit.createAnchor())
+        setAnchor(hit.createAnchor(), hit.trackable as? InstantPlacementPoint)
     }
 
     /** Clockwise degrees the CPU camera image must turn to look upright on screen. */
@@ -782,11 +819,35 @@ class ArBoardRenderer(
         val distance = when { cellMeters < 0.05f -> 0.5f; cellMeters < 0.12f -> 1.0f; else -> 1.8f }
         val hit = try { frame.hitTestInstantPlacement(x, y, distance).firstOrNull() } catch (_: Exception) { null } ?: return
         if (!fitsPlayArea(hit.hitPose)) { onPlacementBlocked(); return }
-        setAnchor(hit.createAnchor())
+        setAnchor(hit.createAnchor(), hit.trackable as? InstantPlacementPoint)
     }
 
-    private fun setAnchor(newAnchor: Anchor) {
+    /**
+     * The well stands on an instant-placement point: a few times a second, look for a detected
+     * surface under it and move the well onto it (it then stays put in the room). Once ARCore has
+     * fully tracked the point itself, it is already fixed in the room and nothing more is needed.
+     */
+    private fun settleInstantWell(frame: com.google.ar.core.Frame, a: Anchor) {
+        val point = instantPoint ?: return
+        if (point.trackingMethod == InstantPlacementPoint.TrackingMethod.FULL_TRACKING) { instantPoint = null; return }
+        val now = System.currentTimeMillis()
+        if (now - lastSettleTry < 200) return
+        lastSettleTry = now
+        setPlaneFinding(true)
+        // Where the well's foot is on screen
+        val c = FloatArray(4)
+        Matrix.multiplyMV(c, 0, viewProj, 0, floatArrayOf(a.pose.tx(), a.pose.ty(), a.pose.tz(), 1f), 0)
+        if (c[3] <= 0f) return
+        val sx = (c[0] / c[3] + 1f) / 2f * width
+        val sy = (1f - c[1] / c[3]) / 2f * height
+        if (sx < 0 || sy < 0 || sx > width || sy > height) return
+        val hit = hitPlane(frame, sx, sy) ?: return
+        if (fitsPlayArea(hit.hitPose)) placeAt(hit)
+    }
+
+    private fun setAnchor(newAnchor: Anchor, instant: InstantPlacementPoint? = null) {
         anchor?.detach()
+        instantPoint = instant
         insideMode = false
         anchor = newAnchor
         isPlaced = true
@@ -799,7 +860,7 @@ class ArBoardRenderer(
 
     /** Release ARCore objects held by the renderer (session is closed by its owner). */
     fun release() {
-        anchor?.detach(); anchor = null; isPlaced = false; insideMode = false
+        anchor?.detach(); anchor = null; isPlaced = false; insideMode = false; instantPoint = null
         boundaryAnchor?.detach(); boundaryAnchor = null
     }
 }

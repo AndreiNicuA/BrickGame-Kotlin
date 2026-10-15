@@ -430,6 +430,8 @@ fun Game3DScreen(
                         onPieceDrag = { bx, bz -> dragPieceTo(bx, bz) },
                         onTap = onRotateXZ,
                         onHardDrop = onHardDrop,
+                        onTilt = onRotateXY,
+                        onSoftDrop = onSoftDrop,
                         onHeat = { onHeatInfo(it) },
                         modifier = Modifier.fillMaxSize(),
                         controller = arController,
@@ -439,7 +441,8 @@ fun Game3DScreen(
                         // Hand tracking rests while Android says the phone is hot
                         handTracking = !showReady && !showMenu && !handsTooHot && (arSettings.hands || setupStep != null ||
                             (arSettings.handPlace && arStatus != ArStatus.PLACED)),
-                        handGestures = arSettings.hands && setupStep == null,
+                        // Only while the game runs: a hand in view behind the pause screen mustn't move the piece
+                        handGestures = arSettings.hands && setupStep == null && state.status == GameStatus.PLAYING,
                         handsResting = handsTooHot && (arSettings.hands || setupStep != null),
                         bottomInset = if (immersiveNow && !chipsInside) IMMERSIVE_BOTTOM else 0.dp,
                         handPlace = arSettings.handPlace,
@@ -498,7 +501,7 @@ fun Game3DScreen(
                             if (hint) { kotlinx.coroutines.delay(7000); hint = false }
                         }
                         if (hint) {
-                            Text(if (arSettings.hands) "Hands on: hold your hand in front of the camera and pinch the piece (thumb + index). Move to steer · twist to spin · flick down to drop"
+                            Text(if (arSettings.hands) "Hands on: pinch (thumb + index) and move to steer · twist to spin · thumb + middle to tilt · fist to drop faster · flick down to drop"
                                  else if (arInside) "You're inside! Look up for the falling piece — the pink arrow points to it. Drag to move · tap to spin · flick down to drop"
                                  else "Drag the piece · tap to spin · flick down to drop",
                                 color = Color.White.copy(0.9f), fontSize = 11.sp,
@@ -1221,8 +1224,12 @@ private fun BoxScope.ArGuideOverlay(handsOn: Boolean, onHandSetup: () -> Unit, o
             "The pink brick arrow points to the piece when it's out of view.",
             "The game waits by itself while the well isn't placed or the camera loses track."))
         GuideSection("4  Hands (beta)", Bw.Violet, listOf(
-            "Turn on in Settings → 3D & AR. Pinch the piece with thumb and index finger, move it, twist to spin, flick down to drop.",
-            "Run Hand setup once so it learns your hand. Keep your whole hand in the picture.") +
+            "Turn on in Settings → 3D & AR, and run Hand setup once so it learns your hand. Keep your whole hand in the picture.",
+            "Move: pinch with thumb and index (the hand turns pink) and move your hand. The piece moves the same way, one cell at a time; your fingers don't have to be on it.",
+            "Spin: keep pinching and twist your wrist.",
+            "Tilt: pinch with thumb and middle finger, index out (the hand turns lime). Once per pinch.",
+            "Drop faster: make a fist (amber) and hold it.",
+            "Drop: while pinching, flick your hand down quickly.") +
             (if (handsOn) emptyList() else listOf("Hands is off right now.")))
         GuideSection("5  Stay safe and cool", Bw.Amber, listOf(
             "The play area warns you near its edge and pauses the game if you step out.",

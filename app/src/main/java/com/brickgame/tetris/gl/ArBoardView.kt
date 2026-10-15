@@ -140,6 +140,10 @@ fun ArBoardView(
     onTap: () -> Unit,
     onHardDrop: () -> Unit,
     onHeat: (ArHeatInfo) -> Unit,
+    /** Hands: thumb + middle pinch tilts the piece. */
+    onTilt: () -> Unit = {},
+    /** Hands: a fist soft-drops the piece. */
+    onSoftDrop: () -> Unit = {},
     modifier: Modifier = Modifier,
     /** Lets the screen drive the play-area setup (start / undo / done / clear). */
     controller: ArBoardController? = null,
@@ -174,6 +178,8 @@ fun ArBoardView(
     val latestDrag by rememberUpdatedState(onPieceDrag)
     val latestTap by rememberUpdatedState(onTap)
     val latestHardDrop by rememberUpdatedState(onHardDrop)
+    val latestTilt by rememberUpdatedState(onTilt)
+    val latestSoftDrop by rememberUpdatedState(onSoftDrop)
     val latestCell by rememberUpdatedState(onCellMeters)
     val latestHeat by rememberUpdatedState(onHeat)
     val latestBoundary by rememberUpdatedState(onBoundary)
@@ -273,11 +279,15 @@ fun ArBoardView(
                 renderer.onHandDrag = { x, z -> view.post { latestDrag(x, z) } }
                 renderer.onHandSpin = { view.post { latestTap() } }
                 renderer.onHandDrop = { view.post { latestHardDrop() } }
+                renderer.onHandTilt = { view.post { latestTilt() } }
+                renderer.onHandSoftDrop = { view.post { latestSoftDrop() } }
                 renderer.onHandOverlay = { o -> view.post { handOverlay = o; latestHandFrame(o) } }
                 renderer.floorMeshEnabled = floorMesh
                 view.preserveEGLContextOnPause = true
                 view.setEGLContextClientVersion(2)
-                view.setEGLConfigChooser(8, 8, 8, 8, 16, 0)
+                // 24-bit depth where the device has it (16-bit made faces flicker on some
+                // tablets), 16-bit otherwise
+                view.setEGLConfigChooser(DepthConfigChooser())
                 view.setRenderer(renderer)
                 view.renderMode = GLSurfaceView.RENDERMODE_CONTINUOUSLY  // paced by the 30 fps camera
                 view.setOnTouchListener(ArTouch(renderer, locked = { latestLocked },
@@ -339,7 +349,14 @@ private fun HandOverlay(f: HandFrame?, display: String) {
         val cyan = androidx.compose.ui.graphics.Color(0xFF22D3EE)
         val pink = androidx.compose.ui.graphics.Color(0xFFF472B6)
         val lime = androidx.compose.ui.graphics.Color(0xFFA3E635)
-        val c = if (f.pinching) pink else cyan
+        val amber = androidx.compose.ui.graphics.Color(0xFFFBBF24)
+        // The hand takes the colour of what it is doing: pinch (grab) pink, tilt lime, fist amber
+        val c = when (f.shape) {
+            HandGesture.Shape.PINCH -> pink
+            HandGesture.Shape.TILT -> lime
+            HandGesture.Shape.FIST -> amber
+            HandGesture.Shape.OPEN -> if (f.pinching) pink else cyan
+        }
         val handSize = (pt(HandLandmarks.MIDDLE_MCP) - pt(HandLandmarks.WRIST)).getDistance()
         val bone = (handSize * 0.07f).coerceIn(4f, 18f)
         when (display) {
@@ -479,4 +496,24 @@ private class ArTouch(
     private fun angle(e: MotionEvent) = atan2(e.getY(1) - e.getY(0), e.getX(1) - e.getX(0))
     private fun midX(e: MotionEvent) = (e.getX(0) + e.getX(1)) / 2f
     private fun midY(e: MotionEvent) = (e.getY(0) + e.getY(1)) / 2f
+}
+
+/** RGBA 8888 with a 24-bit depth buffer when the device offers one, else 16-bit. */
+private class DepthConfigChooser : GLSurfaceView.EGLConfigChooser {
+    override fun chooseConfig(egl: javax.microedition.khronos.egl.EGL10, display: javax.microedition.khronos.egl.EGLDisplay): javax.microedition.khronos.egl.EGLConfig {
+        for (depth in intArrayOf(24, 16)) {
+            val attribs = intArrayOf(
+                javax.microedition.khronos.egl.EGL10.EGL_RED_SIZE, 8,
+                javax.microedition.khronos.egl.EGL10.EGL_GREEN_SIZE, 8,
+                javax.microedition.khronos.egl.EGL10.EGL_BLUE_SIZE, 8,
+                javax.microedition.khronos.egl.EGL10.EGL_ALPHA_SIZE, 8,
+                javax.microedition.khronos.egl.EGL10.EGL_DEPTH_SIZE, depth,
+                javax.microedition.khronos.egl.EGL10.EGL_RENDERABLE_TYPE, 4,   // EGL_OPENGL_ES2_BIT
+                javax.microedition.khronos.egl.EGL10.EGL_NONE)
+            val configs = arrayOfNulls<javax.microedition.khronos.egl.EGLConfig>(1)
+            val count = IntArray(1)
+            if (egl.eglChooseConfig(display, attribs, configs, 1, count) && count[0] > 0) configs[0]?.let { return it }
+        }
+        throw IllegalArgumentException("No suitable EGL config")
+    }
 }

@@ -43,6 +43,10 @@ class HandTracker(context: Context, private val onHand: (HandPoints?) -> Unit) {
     @Volatile var lastHandMs = 0L
         private set
     fun loaded(): Boolean = landmarker != null
+    /** How long the last recognition took (ms, smoothed); the renderer spaces frames by it. */
+    @Volatile var detectMs = 0L
+        private set
+    @Volatile private var submittedAt = 0L
 
     // Reused buffers (only one frame is ever in flight)
     private var yBuf = ByteArray(0); private var uBuf = ByteArray(0); private var vBuf = ByteArray(0)
@@ -72,6 +76,8 @@ class HandTracker(context: Context, private val onHand: (HandPoints?) -> Unit) {
                     .setMinHandPresenceConfidence(0.3f)
                     .setMinTrackingConfidence(0.3f)
                     .setResultListener { result, _ ->
+                        val took = System.currentTimeMillis() - submittedAt
+                        if (submittedAt > 0 && took in 0..2000) detectMs = (detectMs * 3 + took) / 4
                         val hands = result.landmarks()
                         if (hands.isEmpty()) onHand(null)
                         else {
@@ -106,6 +112,7 @@ class HandTracker(context: Context, private val onHand: (HandPoints?) -> Unit) {
         if (!ready() || timestampMs <= lastTimestamp) return
         if (!busy.compareAndSet(false, true)) return
         lastTimestamp = timestampMs
+        submittedAt = System.currentTimeMillis()
         val w = image.width; val h = image.height
         val yp = image.planes[0]; val up = image.planes[1]; val vp = image.planes[2]
         yBuf = copy(yp.buffer, yBuf); uBuf = copy(up.buffer, uBuf); vBuf = copy(vp.buffer, vBuf)
